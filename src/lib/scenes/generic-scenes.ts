@@ -459,9 +459,11 @@ function generateFallbackScene(rng: SeededRandom, w: number, h: number): SVGElem
   const elements: SVGElementData[] = [];
   const groundY = h * 0.52;
 
-  // Rich sky
+  // Rich sky with gradient (defs injected by index.ts)
+  elements.push(createRect(0, 0, w, groundY, 'url(#skyGrad)', { layer: 0, category: 'sky', modifiable: false }));
   elements.push(...richSky(rng, w, h, groundY, '#64B5F6', '#BBDEFB'));
-  // Rich ground
+  // Rich ground with gradient
+  elements.push(createRect(0, groundY - 5, w, h - groundY + 5, 'url(#groundGrad)', { layer: 1, category: 'ground', modifiable: false }));
   elements.push(...richGround(rng, w, h, groundY, '#43A047'));
 
   // Trees - lots

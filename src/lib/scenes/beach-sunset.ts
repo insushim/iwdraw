@@ -2,7 +2,7 @@ import { SVGElementData } from '../engine/types';
 import { SeededRandom } from '../engine/random';
 import {
   createRect, createCircle, createEllipse, createPath, createGroup,
-  createLine, createPolygon, createTree, createBird, createRock,
+  createLine, createPolygon, createBird, createRock,
 } from '../engine/primitives';
 
 let _uid = 0;
@@ -353,7 +353,7 @@ export function generateBeachSunset(rng: SeededRandom, w: number, h: number): { 
     const cw = rng.nextFloat(50, 120);
     const ch = rng.nextFloat(6, 14);
     const cloudColor = rng.pick(['#FF8A65', '#FFAB91', '#FFB74D', '#FFE0B2']);
-    children: elements.push(createEllipse(cx, cy, cw, ch, cloudColor, {
+    elements.push(createEllipse(cx, cy, cw, ch, cloudColor, {
       layer: 0, category: 'cloud', modifiable: false, opacity: rng.nextFloat(0.2, 0.5),
     }));
     // Secondary puff
@@ -568,7 +568,7 @@ export function generateBeachSunset(rng: SeededRandom, w: number, h: number): { 
     for (let i = 0; i < rng.nextInt(4, 7); i++) {
       const fx = fpStartX + i * rng.nextFloat(12, 18) + (i % 2 === 0 ? -3 : 3);
       const fy = fpStartY + i * rng.nextFloat(6, 10);
-      children: elements.push(createEllipse(fx, fy, 3.5, 5, '#C9A85C', {
+      elements.push(createEllipse(fx, fy, 3.5, 5, '#C9A85C', {
         layer: 3, category: 'footprint', modifiable: false, opacity: 0.25, rotation: rng.nextFloat(-15, 15),
       }));
     }
