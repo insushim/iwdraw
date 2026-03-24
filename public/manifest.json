@@ -1,0 +1,22 @@
+{
+  "name": "DiffHunt - 무한 틀린그림찾기",
+  "short_name": "DiffHunt",
+  "description": "무한한 차이를 발견하세요!",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAFAF9",
+  "theme_color": "#6366F1",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
