@@ -1,156 +1,187 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useGameStore } from '@/lib/store/game-store';
 import { SVGRenderer } from '@/lib/engine/svg-renderer';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 
 interface Marker {
   id: string;
-  x: number;
-  y: number;
+  x: number; // percentage 0-100
+  y: number; // percentage 0-100
   type: 'correct' | 'wrong';
   score?: number;
 }
 
-interface HintMarker {
-  x: number;
-  y: number;
-}
-
 export default function GameBoard() {
+  const router = useRouter();
   const { gameState, handleClick, useHint, pauseGame, resumeGame, updateElapsedTime, settings } = useGameStore();
   const [markers, setMarkers] = useState<Marker[]>([]);
-  const [hintMarker, setHintMarker] = useState<HintMarker | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [hintPos, setHintPos] = useState<{ x: number; y: number } | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const scene = gameState?.scene;
 
+  // Memoize SVG strings
+  const originalSvg = useMemo(() => {
+    if (!scene) return '';
+    return SVGRenderer.renderToString(scene.elements, scene.width, scene.height);
+  }, [scene]);
+
+  const modifiedSvg = useMemo(() => {
+    if (!scene) return '';
+    return SVGRenderer.renderModifiedScene(scene.elements, scene.differences, scene.width, scene.height);
+  }, [scene]);
+
   // Timer
   useEffect(() => {
     if (!gameState || gameState.isComplete || gameState.isPaused) return;
-    const start = Date.now() - gameState.elapsedTime * 1000;
+    const startMs = Date.now() - gameState.elapsedTime * 1000;
     timerRef.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - start) / 1000);
+      const elapsed = Math.floor((Date.now() - startMs) / 1000);
       updateElapsedTime(elapsed);
-
       if (scene?.timeLimit && elapsed >= scene.timeLimit) {
         clearInterval(timerRef.current);
         useGameStore.getState().completeGame();
       }
-    }, 200);
+    }, 250);
     return () => clearInterval(timerRef.current);
   }, [gameState?.isPaused, gameState?.isComplete]);
 
-  const onSvgClick = useCallback((e: React.MouseEvent<HTMLDivElement>, side: 'left' | 'right') => {
+  // FIXED: Proper SVG coordinate mapping
+  const onSvgClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!scene || gameState?.isComplete || gameState?.isPaused) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const scaleX = scene.width / rect.width;
-    const scaleY = scene.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    // Since SVG uses preserveAspectRatio="none" and fills 100% of container,
+    // simple proportion mapping works perfectly
+    const svgX = ((e.clientX - rect.left) / rect.width) * scene.width;
+    const svgY = ((e.clientY - rect.top) / rect.height) * scene.height;
 
-    const result = handleClick(x, y, side);
+    const result = handleClick(svgX, svgY, 'left');
+
+    // Show marker at click position (as percentage)
+    const pctX = ((e.clientX - rect.left) / rect.width) * 100;
+    const pctY = ((e.clientY - rect.top) / rect.height) * 100;
     const marker: Marker = {
-      id: `${Date.now()}`,
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      id: `${Date.now()}_${Math.random()}`,
+      x: pctX,
+      y: pctY,
       type: result.hit ? 'correct' : 'wrong',
       score: result.score,
     };
     setMarkers(prev => [...prev, marker]);
-    setTimeout(() => setMarkers(prev => prev.filter(m => m.id !== marker.id)), 1200);
+    setTimeout(() => setMarkers(prev => prev.filter(m => m.id !== marker.id)), 1500);
   }, [scene, gameState, handleClick]);
 
   const onHint = useCallback(() => {
     const hint = useHint();
-    if (hint) {
-      setHintMarker(hint);
-      setTimeout(() => setHintMarker(null), 3000);
+    if (hint && scene) {
+      setHintPos({ x: (hint.x / scene.width) * 100, y: (hint.y / scene.height) * 100 });
+      setTimeout(() => setHintPos(null), 3000);
     }
-  }, [useHint]);
-
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!settings.zoomEnabled) return;
-    e.preventDefault();
-    setZoom(prev => Math.max(1, Math.min(3, prev - e.deltaY * 0.002)));
-  }, [settings.zoomEnabled]);
+  }, [useHint, scene]);
 
   if (!scene || !gameState) return null;
-
-  const originalSvg = SVGRenderer.renderToString(scene.elements, scene.width, scene.height);
-  const modifiedSvg = SVGRenderer.renderModifiedScene(scene.elements, scene.differences, scene.width, scene.height);
 
   const timeStr = formatTime(gameState.elapsedTime);
   const timeLimit = scene.timeLimit;
   const timeWarning = timeLimit ? gameState.elapsedTime > timeLimit - 10 : false;
+  const progress = gameState.foundDifferences.length / scene.differenceCount;
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-bg)]">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[var(--color-surface)] shadow-sm">
-        <div className="flex items-center gap-3">
-          <button onClick={() => gameState.isPaused ? resumeGame() : pauseGame()} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-            {gameState.isPaused ? '▶️' : '⏸️'}
+    <div className="flex flex-col h-screen bg-gray-900 text-white select-none">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-800/90 backdrop-blur-sm z-10">
+        <div className="flex items-center gap-2">
+          <button onClick={() => router.push('/')} className="p-1.5 rounded-lg hover:bg-gray-700 transition text-sm">
+            ←
+          </button>
+          <button onClick={() => gameState.isPaused ? resumeGame() : pauseGame()} className="p-1.5 rounded-lg hover:bg-gray-700 transition">
+            {gameState.isPaused ? '▶' : '⏸'}
           </button>
           {settings.showTimer && (
-            <span className={`font-mono text-lg font-bold ${timeWarning ? 'text-red-500 animate-pulse' : ''}`}>
+            <span className={`font-mono text-base font-bold ${timeWarning ? 'text-red-400 animate-pulse' : 'text-gray-300'}`}>
               {timeStr}{timeLimit ? ` / ${formatTime(timeLimit)}` : ''}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4 text-sm font-medium">
-          <span>🎯 {gameState.foundDifferences.length}/{scene.differenceCount}</span>
-          <span>⭐ {gameState.score.toLocaleString()}</span>
+
+        {/* Center: progress */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            {Array.from({ length: scene.differenceCount }).map((_, i) => (
+              <div key={i} className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                i < gameState.foundDifferences.length ? 'bg-green-400 scale-110' : 'bg-gray-600'
+              }`} />
+            ))}
+          </div>
+          <span className="text-sm font-bold text-gray-400">
+            {gameState.foundDifferences.length}/{scene.differenceCount}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
           {gameState.combo > 1 && (
             <motion.span
               key={gameState.combo}
-              initial={{ scale: 1.5, opacity: 0 }}
+              initial={{ scale: 2, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="text-orange-500 font-bold"
+              className="text-orange-400 font-black text-sm"
             >
-              🔥 {gameState.combo}x
+              x{gameState.combo}
             </motion.span>
           )}
+          <span className="text-sm font-bold text-amber-400">{gameState.score.toLocaleString()}</span>
+          <button
+            onClick={onHint}
+            disabled={gameState.remainingHints <= 0}
+            className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 font-bold text-sm disabled:opacity-20 hover:bg-amber-500/30 transition"
+          >
+            💡{gameState.remainingHints}
+          </button>
         </div>
-        <button
-          onClick={onHint}
-          disabled={gameState.remainingHints <= 0}
-          className="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 font-medium text-sm disabled:opacity-30 hover:bg-amber-200 dark:hover:bg-amber-800 transition"
-        >
-          💡 {gameState.remainingHints}
-        </button>
       </div>
 
-      {/* Game area */}
-      <div ref={containerRef} className="flex-1 flex flex-col md:flex-row gap-2 p-2 overflow-hidden" onWheel={handleWheel}>
+      {/* Progress bar */}
+      <div className="h-1 bg-gray-800">
+        <motion.div
+          className="h-full bg-gradient-to-r from-green-500 to-emerald-400"
+          animate={{ width: `${progress * 100}%` }}
+          transition={{ type: 'spring', stiffness: 200 }}
+        />
+      </div>
+
+      {/* Game area - side by side */}
+      <div className="flex-1 flex flex-col md:flex-row gap-1 p-1 overflow-hidden min-h-0">
         {/* Original */}
-        <div className="flex-1 relative rounded-xl overflow-hidden border-2 border-[var(--color-primary)] shadow-lg cursor-crosshair"
-          onClick={(e) => onSvgClick(e, 'left')}
-          style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
-        >
-          <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: originalSvg }} />
-          <div className="absolute top-2 left-2 bg-black/40 text-white text-xs px-2 py-1 rounded-full">원본</div>
-          <MarkerOverlay markers={markers} side="left" />
-          {hintMarker && <HintCircle x={hintMarker.x} y={hintMarker.y} sceneW={scene.width} sceneH={scene.height} />}
-          <FoundOverlay gameState={gameState} sceneW={scene.width} sceneH={scene.height} />
-        </div>
+        <ImagePanel
+          label="원본"
+          svgHtml={originalSvg}
+          onClick={onSvgClick}
+          markers={markers}
+          hintPos={hintPos}
+          foundDiffs={gameState.foundDifferences}
+          differences={scene.differences}
+          sceneW={scene.width}
+          sceneH={scene.height}
+          borderColor="border-blue-500"
+        />
 
         {/* Modified */}
-        <div className="flex-1 relative rounded-xl overflow-hidden border-2 border-[var(--color-secondary)] shadow-lg cursor-crosshair"
-          onClick={(e) => onSvgClick(e, 'right')}
-          style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
-        >
-          <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: modifiedSvg }} />
-          <div className="absolute top-2 left-2 bg-black/40 text-white text-xs px-2 py-1 rounded-full">변형</div>
-          <MarkerOverlay markers={markers} side="right" />
-          {hintMarker && <HintCircle x={hintMarker.x} y={hintMarker.y} sceneW={scene.width} sceneH={scene.height} />}
-          <FoundOverlay gameState={gameState} sceneW={scene.width} sceneH={scene.height} />
-        </div>
+        <ImagePanel
+          label="변형"
+          svgHtml={modifiedSvg}
+          onClick={onSvgClick}
+          markers={markers}
+          hintPos={hintPos}
+          foundDiffs={gameState.foundDifferences}
+          differences={scene.differences}
+          sceneW={scene.width}
+          sceneH={scene.height}
+          borderColor="border-rose-500"
+        />
       </div>
 
       {/* Pause overlay */}
@@ -160,14 +191,19 @@ export default function GameBoard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-black/60"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
           >
-            <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 text-center shadow-xl">
-              <h2 className="text-2xl font-bold mb-4">⏸️ 일시정지</h2>
-              <button onClick={resumeGame} className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-xl font-bold text-lg hover:opacity-90 transition">
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              className="bg-gray-800 rounded-3xl p-10 text-center shadow-2xl border border-gray-700"
+            >
+              <div className="text-5xl mb-4">⏸</div>
+              <h2 className="text-2xl font-bold mb-6">일시정지</h2>
+              <button onClick={resumeGame} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-500 transition">
                 계속하기
               </button>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -175,65 +211,94 @@ export default function GameBoard() {
   );
 }
 
-function MarkerOverlay({ markers, side }: { markers: Marker[]; side: string }) {
+function ImagePanel({
+  label, svgHtml, onClick, markers, hintPos, foundDiffs, differences, sceneW, sceneH, borderColor,
+}: {
+  label: string;
+  svgHtml: string;
+  onClick: (e: React.MouseEvent<HTMLDivElement>) => void;
+  markers: Marker[];
+  hintPos: { x: number; y: number } | null;
+  foundDiffs: string[];
+  differences: { id: string; hitArea: { x: number; y: number; width: number; height: number } }[];
+  sceneW: number;
+  sceneH: number;
+  borderColor: string;
+}) {
   return (
-    <>
-      <AnimatePresence>
-        {markers.map(m => (
-          <motion.div
-            key={m.id}
-            initial={{ scale: 0, opacity: 1 }}
-            animate={{ scale: 1.5, opacity: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 1 }}
-            className="absolute pointer-events-none"
-            style={{ left: m.x - 20, top: m.y - 20 }}
-          >
-            {m.type === 'correct' ? (
-              <div className="w-10 h-10 rounded-full border-3 border-green-400 flex items-center justify-center">
-                <span className="text-green-400 font-bold text-xs">+{m.score}</span>
-              </div>
-            ) : (
-              <div className="w-10 h-10 flex items-center justify-center text-red-400 text-2xl font-bold">✕</div>
-            )}
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </>
-  );
-}
+    <div
+      className={`flex-1 relative rounded-xl overflow-hidden border-2 ${borderColor} cursor-crosshair bg-gray-800 min-h-0`}
+      onClick={onClick}
+    >
+      {/* SVG fills this container */}
+      <div
+        className="absolute inset-0"
+        dangerouslySetInnerHTML={{ __html: svgHtml }}
+      />
 
-function HintCircle({ x, y, sceneW, sceneH }: { x: number; y: number; sceneW: number; sceneH: number }) {
-  const pctX = (x / sceneW) * 100;
-  const pctY = (y / sceneH) * 100;
-  return (
-    <motion.div
-      initial={{ scale: 0, opacity: 0 }}
-      animate={{ scale: [1, 1.3, 1], opacity: [0.8, 0.4, 0.8] }}
-      transition={{ duration: 1.5, repeat: Infinity }}
-      className="absolute w-12 h-12 rounded-full border-3 border-amber-400 pointer-events-none"
-      style={{ left: `${pctX}%`, top: `${pctY}%`, transform: 'translate(-50%, -50%)' }}
-    />
-  );
-}
+      {/* Label */}
+      <div className="absolute top-2 left-2 z-10 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full font-bold backdrop-blur-sm">
+        {label}
+      </div>
 
-function FoundOverlay({ gameState, sceneW, sceneH }: { gameState: { foundDifferences: string[]; scene: { differences: { id: string; hitArea: { x: number; y: number; width: number; height: number } }[] } }; sceneW: number; sceneH: number }) {
-  return (
-    <>
-      {gameState.scene.differences
-        .filter(d => gameState.foundDifferences.includes(d.id))
+      {/* Found difference markers */}
+      {differences
+        .filter(d => foundDiffs.includes(d.id))
         .map(d => {
           const cx = ((d.hitArea.x + d.hitArea.width / 2) / sceneW) * 100;
           const cy = ((d.hitArea.y + d.hitArea.height / 2) / sceneH) * 100;
           return (
-            <div
+            <motion.div
               key={d.id}
-              className="absolute w-8 h-8 rounded-full border-2 border-green-500 bg-green-500/20 pointer-events-none"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute w-10 h-10 rounded-full border-3 border-green-400 bg-green-400/15 pointer-events-none z-10"
               style={{ left: `${cx}%`, top: `${cy}%`, transform: 'translate(-50%, -50%)' }}
-            />
+            >
+              <div className="absolute inset-0 rounded-full border-2 border-green-400 animate-ping opacity-40" />
+            </motion.div>
           );
         })}
-    </>
+
+      {/* Click markers */}
+      <AnimatePresence>
+        {markers.map(m => (
+          <motion.div
+            key={m.id}
+            initial={{ scale: 0.5, opacity: 1 }}
+            animate={{ scale: 1.8, opacity: 0, y: -30 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2 }}
+            className="absolute pointer-events-none z-20"
+            style={{ left: `${m.x}%`, top: `${m.y}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            {m.type === 'correct' ? (
+              <div className="text-center">
+                <div className="w-10 h-10 rounded-full border-3 border-green-400 bg-green-400/30 flex items-center justify-center">
+                  <span className="text-green-300 font-black text-xs">✓</span>
+                </div>
+                <span className="text-green-400 font-black text-sm mt-1 block">+{m.score}</span>
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-red-500/40 border-2 border-red-400 flex items-center justify-center">
+                <span className="text-red-300 text-sm font-bold">✕</span>
+              </div>
+            )}
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
+      {/* Hint */}
+      {hintPos && (
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: [1, 1.4, 1], opacity: [0.9, 0.4, 0.9] }}
+          transition={{ duration: 1.2, repeat: Infinity }}
+          className="absolute w-16 h-16 rounded-full border-4 border-amber-400 bg-amber-400/10 pointer-events-none z-20"
+          style={{ left: `${hintPos.x}%`, top: `${hintPos.y}%`, transform: 'translate(-50%, -50%)' }}
+        />
+      )}
+    </div>
   );
 }
 

@@ -1,5 +1,18 @@
 import { SVGElementData, Difference, DifferenceType, DifficultyConfig, Scene } from './types';
 import { SeededRandom } from './random';
+import { SVGRenderer } from './svg-renderer';
+
+// Highly contrasting color pairs for easy visibility
+const COLOR_PAIRS: [string, string][] = [
+  ['#FF0000', '#0066FF'],
+  ['#FFD700', '#6B21A8'],
+  ['#00CC00', '#FF4444'],
+  ['#FF6600', '#0099CC'],
+  ['#FF1493', '#00AA00'],
+  ['#4169E1', '#FF8C00'],
+  ['#8B0000', '#00CED1'],
+  ['#228B22', '#DC143C'],
+];
 
 export class DifferenceGenerator {
   private scene: Scene;
@@ -16,15 +29,32 @@ export class DifferenceGenerator {
     const modifiable = this.getAllModifiable(this.scene.elements);
     if (modifiable.length === 0) return [];
 
-    const count = Math.min(this.config.differenceCount, modifiable.length);
-    const shuffled = this.rng.shuffle(modifiable);
+    // Filter to only elements with reasonable visual size
+    const viable = modifiable.filter(el => {
+      const bb = SVGRenderer.getBoundingBox(el);
+      return bb.width > 8 && bb.height > 8;
+    });
+
+    if (viable.length === 0) return [];
+
+    const count = Math.min(this.config.differenceCount, viable.length);
+    const shuffled = this.rng.shuffle(viable);
     const selected = this.selectSpread(shuffled, count);
     const differences: Difference[] = [];
 
     for (let i = 0; i < selected.length; i++) {
       const el = selected[i];
+      // Prefer COLOR_CHANGE and ELEMENT_REMOVED - most visible
+      const preferredTypes = [
+        DifferenceType.COLOR_CHANGE,
+        DifferenceType.COLOR_CHANGE,
+        DifferenceType.ELEMENT_REMOVED,
+        DifferenceType.SIZE_CHANGE,
+        DifferenceType.POSITION_SHIFT,
+      ];
       const availTypes = this.config.differenceTypes;
-      const diffType = this.rng.pick(availTypes);
+      const pool = preferredTypes.filter(t => availTypes.includes(t));
+      const diffType = pool.length > 0 ? this.rng.pick(pool) : this.rng.pick(availTypes);
       const diff = this.createDifference(el, diffType, i);
       if (diff) differences.push(diff);
     }
@@ -46,19 +76,24 @@ export class DifferenceGenerator {
   private selectSpread(elements: SVGElementData[], count: number): SVGElementData[] {
     if (elements.length <= count) return elements;
     const selected: SVGElementData[] = [];
-    const minDist = 60;
+    const minDist = 40; // Reduced to allow more hits
 
     for (const el of elements) {
       if (selected.length >= count) break;
+      const bb = SVGRenderer.getBoundingBox(el);
+      const cx = bb.x + bb.width / 2;
+      const cy = bb.y + bb.height / 2;
       const tooClose = selected.some(s => {
-        const dx = s.x - el.x;
-        const dy = s.y - el.y;
+        const sbb = SVGRenderer.getBoundingBox(s);
+        const scx = sbb.x + sbb.width / 2;
+        const scy = sbb.y + sbb.height / 2;
+        const dx = scx - cx;
+        const dy = scy - cy;
         return Math.sqrt(dx * dx + dy * dy) < minDist;
       });
       if (!tooClose) selected.push(el);
     }
 
-    // Fill remaining if needed
     if (selected.length < count) {
       for (const el of elements) {
         if (selected.length >= count) break;
@@ -69,15 +104,20 @@ export class DifferenceGenerator {
     return selected;
   }
 
+  // FIXED: Compute proper hitArea using bounding box with generous padding
   private getHitArea(el: SVGElementData): { x: number; y: number; width: number; height: number } {
-    const pad = 15;
-    const w = el.width || el.radius ? (el.radius! * 2) : 30;
-    const h = el.height || el.radius ? (el.radius! * 2) : 30;
+    const bb = SVGRenderer.getBoundingBox(el);
+    const pad = 25; // generous padding for easier clicking
+    const minSize = 50; // minimum hit area size
+
+    const w = Math.max(bb.width + pad * 2, minSize);
+    const h = Math.max(bb.height + pad * 2, minSize);
+
     return {
-      x: el.x - pad - (w / 2),
-      y: el.y - pad - (h / 2),
-      width: w + pad * 2,
-      height: h + pad * 2,
+      x: bb.x + bb.width / 2 - w / 2,
+      y: bb.y + bb.height / 2 - h / 2,
+      width: w,
+      height: h,
     };
   }
 
@@ -95,15 +135,10 @@ export class DifferenceGenerator {
 
     switch (type) {
       case DifferenceType.COLOR_CHANGE: {
-        const original = el.fill;
-        let modified: string;
-        if (this.config.colorSimilarity > 0.6) {
-          // Similar color - shift hue slightly
-          const hue = this.rng.nextInt(-30, 30);
-          modified = this.shiftColor(original, hue);
-        } else {
-          modified = this.rng.nextColor();
-        }
+        const original = el.fill || '#888888';
+        // Use highly contrasting colors for visibility
+        const pair = this.rng.pick(COLOR_PAIRS);
+        const modified = original === pair[0] ? pair[1] : pair[this.rng.nextInt(0, 1)];
         return { id, elementId: el.id, type, description: '색상이 변경됨', difficulty, originalValue: original, modifiedValue: modified, hitArea };
       }
 
@@ -111,11 +146,12 @@ export class DifferenceGenerator {
         return { id, elementId: el.id, type, description: '요소가 제거됨', difficulty, originalValue: el, modifiedValue: null, hitArea };
 
       case DifferenceType.ELEMENT_ADDED: {
+        const bb = SVGRenderer.getBoundingBox(el);
         const newEl: Partial<SVGElementData> = {
           type: 'circle',
-          x: el.x + this.rng.nextFloat(-20, 20),
-          y: el.y + this.rng.nextFloat(-20, 20),
-          radius: this.rng.nextFloat(5, 15),
+          x: bb.x + bb.width / 2 + this.rng.nextFloat(-15, 15),
+          y: bb.y + bb.height / 2 + this.rng.nextFloat(-15, 15),
+          radius: this.rng.nextFloat(8, 18),
           fill: this.rng.nextColor(),
         };
         return { id, elementId: el.id, type, description: '새 요소가 추가됨', difficulty, originalValue: null, modifiedValue: newEl, hitArea };
@@ -123,28 +159,34 @@ export class DifferenceGenerator {
 
       case DifferenceType.SIZE_CHANGE: {
         const scale = difficulty === 'easy' || difficulty === 'medium'
-          ? this.rng.nextFloat(1.3, 1.6)
-          : this.rng.nextFloat(1.1, 1.2);
+          ? this.rng.nextFloat(1.4, 1.8)
+          : this.rng.nextFloat(1.15, 1.3);
         return { id, elementId: el.id, type, description: '크기가 변경됨', difficulty, originalValue: 1, modifiedValue: scale, hitArea };
       }
 
       case DifferenceType.POSITION_SHIFT: {
         const shift = difficulty === 'easy' || difficulty === 'medium'
-          ? this.rng.nextFloat(20, 40)
-          : this.rng.nextFloat(8, 18);
+          ? this.rng.nextFloat(25, 45)
+          : this.rng.nextFloat(12, 22);
         const dx = this.rng.chance(0.5) ? shift : -shift;
         const dy = this.rng.chance(0.5) ? shift * 0.5 : -shift * 0.5;
-        return { id, elementId: el.id, type, description: '위치가 이동됨', difficulty, originalValue: { x: 0, y: 0 }, modifiedValue: { x: dx, y: dy }, hitArea: { ...hitArea, x: hitArea.x + dx, y: hitArea.y + dy } };
+        const shiftedHitArea = { ...hitArea };
+        // For position shift, hitArea is at BOTH original and shifted position
+        shiftedHitArea.x = Math.min(hitArea.x, hitArea.x + dx) - 10;
+        shiftedHitArea.y = Math.min(hitArea.y, hitArea.y + dy) - 10;
+        shiftedHitArea.width = hitArea.width + Math.abs(dx) + 20;
+        shiftedHitArea.height = hitArea.height + Math.abs(dy) + 20;
+        return { id, elementId: el.id, type, description: '위치가 이동됨', difficulty, originalValue: { x: 0, y: 0 }, modifiedValue: { x: dx, y: dy }, hitArea: shiftedHitArea };
       }
 
       case DifferenceType.ROTATION_CHANGE: {
-        const angle = this.rng.nextFloat(30, 180);
+        const angle = this.rng.nextFloat(45, 180);
         return { id, elementId: el.id, type, description: '회전됨', difficulty, originalValue: 0, modifiedValue: angle, hitArea };
       }
 
       case DifferenceType.OPACITY_CHANGE: {
         const original = el.opacity ?? 1;
-        const modified = Math.max(0.2, original - this.rng.nextFloat(0.2, 0.5));
+        const modified = Math.max(0.15, original - this.rng.nextFloat(0.3, 0.6));
         return { id, elementId: el.id, type, description: '투명도가 변경됨', difficulty, originalValue: original, modifiedValue: modified, hitArea };
       }
 
@@ -155,25 +197,13 @@ export class DifferenceGenerator {
         return { id, elementId: el.id, type, description: '세부 요소가 제거됨', difficulty, originalValue: el, modifiedValue: null, hitArea };
 
       case DifferenceType.DETAIL_ADDED: {
-        return { id, elementId: el.id, type, description: '세부 요소가 추가됨', difficulty, originalValue: null, modifiedValue: { type: 'circle', radius: 4, fill: this.rng.nextColor() }, hitArea };
+        return { id, elementId: el.id, type, description: '세부 요소가 추가됨', difficulty, originalValue: null, modifiedValue: { type: 'circle', radius: 6, fill: this.rng.nextColor() }, hitArea };
       }
 
       default:
         // Fallback to color change
-        return { id, elementId: el.id, type: DifferenceType.COLOR_CHANGE, description: '색상이 변경됨', difficulty, originalValue: el.fill, modifiedValue: this.rng.nextColor(), hitArea };
+        const pair = this.rng.pick(COLOR_PAIRS);
+        return { id, elementId: el.id, type: DifferenceType.COLOR_CHANGE, description: '색상이 변경됨', difficulty, originalValue: el.fill, modifiedValue: pair[0], hitArea };
     }
-  }
-
-  private shiftColor(color: string, hueShift: number): string {
-    // Simple color shift - generate a new color nearby
-    if (color.startsWith('hsl')) {
-      const match = color.match(/hsl\((\d+)/);
-      if (match) {
-        const h = (parseInt(match[1]) + hueShift + 360) % 360;
-        return color.replace(/hsl\(\d+/, `hsl(${h}`);
-      }
-    }
-    // For hex/named colors, just generate a new random one
-    return this.rng.nextColor();
   }
 }

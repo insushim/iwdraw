@@ -48,15 +48,16 @@ export function generateCityStreet(rng: SeededRandom, w: number, h: number): SVG
     }
   }
 
+  // Sidewalk top
+  elements.push(createRect(0, h * 0.55, w, h * 0.12, '#B0B0B0', { layer: 1, category: 'sidewalk', modifiable: false }));
   // Road
-  elements.push(createRect(0, h * 0.72, w, h * 0.15, '#555', { layer: 1, category: 'road', modifiable: false }));
-  // Road lines
+  elements.push(createRect(0, h * 0.67, w, h * 0.16, '#444', { layer: 1, category: 'road', modifiable: false }));
+  // Road center lines
   for (let lx = 20; lx < w; lx += 50) {
-    elements.push(createRect(lx, h * 0.795, 25, 3, '#FFF', { layer: 1, category: 'roadline', modifiable: false, opacity: 0.8 }));
+    elements.push(createRect(lx, h * 0.748, 25, 3, '#FFD700', { layer: 1, category: 'roadline', modifiable: false, opacity: 0.8 }));
   }
-  // Sidewalk
-  elements.push(createRect(0, h * 0.6, w, h * 0.12, '#C0C0C0', { layer: 1, category: 'sidewalk', modifiable: false }));
-  elements.push(createRect(0, h * 0.87, w, h * 0.13, '#C0C0C0', { layer: 1, category: 'sidewalk', modifiable: false }));
+  // Sidewalk bottom
+  elements.push(createRect(0, h * 0.83, w, h * 0.17, '#B0B0B0', { layer: 1, category: 'sidewalk', modifiable: false }));
 
   // Near buildings
   for (let i = 0; i < rng.nextInt(2, 4); i++) {

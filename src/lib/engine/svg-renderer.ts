@@ -4,7 +4,8 @@ export class SVGRenderer {
   static renderToString(elements: SVGElementData[], width: number, height: number): string {
     const sorted = [...elements].sort((a, b) => a.layer - b.layer);
     const inner = sorted.map(el => this.renderElement(el)).join('\n');
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${inner}</svg>`;
+    // NO fixed width/height - use viewBox only so SVG fills container
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="width:100%;height:100%;display:block">${inner}</svg>`;
   }
 
   static renderElement(el: SVGElementData): string {
@@ -84,7 +85,9 @@ export class SVGRenderer {
 
     switch (diff.type) {
       case DifferenceType.COLOR_CHANGE:
-        if (el) el.fill = diff.modifiedValue as string;
+        if (el) {
+          this.applyColorToElement(el, diff.modifiedValue as string);
+        }
         break;
 
       case DifferenceType.ELEMENT_REMOVED:
@@ -99,7 +102,7 @@ export class SVGRenderer {
             type: (newEl.type as SVGElementData['type']) || 'circle',
             x: newEl.x || diff.hitArea.x + diff.hitArea.width / 2,
             y: newEl.y || diff.hitArea.y + diff.hitArea.height / 2,
-            radius: newEl.radius || 5,
+            radius: newEl.radius || 8,
             fill: newEl.fill || '#FF0000',
             layer: 3,
             category: 'added',
@@ -117,6 +120,13 @@ export class SVGRenderer {
           if (el.radius) el.radius *= scale;
           if (el.rx) el.rx *= scale;
           if (el.ry) el.ry *= scale;
+          if (el.children) {
+            for (const c of el.children) {
+              if (c.width) c.width *= scale;
+              if (c.height) c.height *= scale;
+              if (c.radius) c.radius *= scale;
+            }
+          }
         }
         break;
 
@@ -125,6 +135,12 @@ export class SVGRenderer {
           const shift = diff.modifiedValue as { x: number; y: number };
           el.x += shift.x;
           el.y += shift.y;
+          if (el.children) {
+            for (const c of el.children) {
+              c.x += shift.x;
+              c.y += shift.y;
+            }
+          }
         }
         break;
 
@@ -139,13 +155,12 @@ export class SVGRenderer {
       case DifferenceType.MIRROR_FLIP:
         if (el) {
           const cx = el.x + (el.width ? el.width / 2 : 0);
-          const cy = el.y + (el.height ? el.height / 2 : 0);
-          el.transform = `scale(-1, 1) translate(${-2 * cx}, 0)`;
+          el.transform = `translate(${cx * 2}, 0) scale(-1, 1)`;
         }
         break;
 
       case DifferenceType.DETAIL_REMOVED:
-        if (el && el.children && el.children.length > 0) {
+        if (el && el.children && el.children.length > 1) {
           el.children.pop();
         }
         break;
@@ -157,9 +172,9 @@ export class SVGRenderer {
           el.children.push({
             id: `detail_${diff.id}`,
             type: 'circle',
-            x: el.x + 5,
-            y: el.y - 5,
-            radius: detail?.radius || 4,
+            x: el.x + 10,
+            y: el.y - 10,
+            radius: detail?.radius || 6,
             fill: detail?.fill || '#FF0000',
             layer: el.layer,
             category: 'detail',
@@ -169,11 +184,27 @@ export class SVGRenderer {
         break;
 
       default:
-        if (el) el.fill = diff.modifiedValue as string;
+        if (el) this.applyColorToElement(el, diff.modifiedValue as string);
     }
   }
 
-  private static findElement(elements: SVGElementData[], id: string): SVGElementData | null {
+  // Apply color change recursively to element and its visible children
+  private static applyColorToElement(el: SVGElementData, color: string): void {
+    if (el.fill && el.fill !== 'none') {
+      el.fill = color;
+    }
+    // Also change the first colored child for groups
+    if (el.children && el.children.length > 0) {
+      for (const child of el.children) {
+        if (child.fill && child.fill !== 'none') {
+          child.fill = color;
+          break; // Only change first colored child
+        }
+      }
+    }
+  }
+
+  static findElement(elements: SVGElementData[], id: string): SVGElementData | null {
     for (const el of elements) {
       if (el.id === id) return el;
       if (el.children) {
@@ -195,5 +226,32 @@ export class SVGRenderer {
       }
     }
     return false;
+  }
+
+  // Compute bounding box of element in SVG coordinates
+  static getBoundingBox(el: SVGElementData): { x: number; y: number; width: number; height: number } {
+    if (el.type === 'group' && el.children && el.children.length > 0) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const child of el.children) {
+        const bb = this.getBoundingBox(child);
+        minX = Math.min(minX, bb.x);
+        minY = Math.min(minY, bb.y);
+        maxX = Math.max(maxX, bb.x + bb.width);
+        maxY = Math.max(maxY, bb.y + bb.height);
+      }
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    }
+
+    switch (el.type) {
+      case 'rect':
+        return { x: el.x, y: el.y, width: el.width || 0, height: el.height || 0 };
+      case 'circle':
+        return { x: el.x - (el.radius || 0), y: el.y - (el.radius || 0), width: (el.radius || 0) * 2, height: (el.radius || 0) * 2 };
+      case 'ellipse':
+        return { x: el.x - (el.rx || 0), y: el.y - (el.ry || 0), width: (el.rx || 0) * 2, height: (el.ry || 0) * 2 };
+      default:
+        // For paths, polygons etc, use x/y with estimated size
+        return { x: el.x - 20, y: el.y - 20, width: 40, height: 40 };
+    }
   }
 }
