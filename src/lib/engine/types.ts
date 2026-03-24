@@ -112,6 +112,7 @@ export interface Scene {
   difficulty: 'easy' | 'medium' | 'hard' | 'expert';
   differenceCount: number;
   timeLimit?: number;
+  svgDefs?: string; // SVG <defs> for gradients, filters, patterns
   metadata: {
     title: string;
     description: string;

@@ -26,12 +26,12 @@ export default function GameBoard() {
   // Memoize SVG strings
   const originalSvg = useMemo(() => {
     if (!scene) return '';
-    return SVGRenderer.renderToString(scene.elements, scene.width, scene.height);
+    return SVGRenderer.renderToString(scene.elements, scene.width, scene.height, scene.svgDefs);
   }, [scene]);
 
   const modifiedSvg = useMemo(() => {
     if (!scene) return '';
-    return SVGRenderer.renderModifiedScene(scene.elements, scene.differences, scene.width, scene.height);
+    return SVGRenderer.renderModifiedScene(scene.elements, scene.differences, scene.width, scene.height, scene.svgDefs);
   }, [scene]);
 
   // Timer

@@ -7,16 +7,35 @@ import { generateUnderwaterReef } from './underwater-reef';
 import { generateBeachSunset } from './beach-sunset';
 import { generateGenericScene } from './generic-scenes';
 
-type SceneGeneratorFn = (rng: SeededRandom, w: number, h: number) => SVGElementData[];
+export interface SceneOutput {
+  elements: SVGElementData[];
+  defs?: string;
+}
+
+type SceneGeneratorFn = (rng: SeededRandom, w: number, h: number) => SceneOutput;
+
+// Wrap generators that return plain elements array
+function wrap(fn: (rng: SeededRandom, w: number, h: number) => SVGElementData[]): SceneGeneratorFn {
+  return (rng, w, h) => ({ elements: fn(rng, w, h) });
+}
+
+// Wrap generators that might return either format
+function autoWrap(fn: (rng: SeededRandom, w: number, h: number) => SVGElementData[] | SceneOutput): SceneGeneratorFn {
+  return (rng, w, h) => {
+    const result = fn(rng, w, h);
+    if (Array.isArray(result)) return { elements: result };
+    return result as SceneOutput;
+  };
+}
 
 const generators: Partial<Record<SceneTheme, SceneGeneratorFn>> = {
-  [SceneTheme.CITY_STREET]: generateCityStreet,
-  [SceneTheme.FOREST_CLEARING]: generateForestClearing,
-  [SceneTheme.COZY_LIVING_ROOM]: generateCozyLivingRoom,
-  [SceneTheme.UNDERWATER_REEF]: generateUnderwaterReef,
-  [SceneTheme.BEACH_SUNSET]: generateBeachSunset,
+  [SceneTheme.CITY_STREET]: autoWrap(generateCityStreet as any),
+  [SceneTheme.FOREST_CLEARING]: autoWrap(generateForestClearing as any),
+  [SceneTheme.COZY_LIVING_ROOM]: autoWrap(generateCozyLivingRoom as any),
+  [SceneTheme.UNDERWATER_REEF]: autoWrap(generateUnderwaterReef as any),
+  [SceneTheme.BEACH_SUNSET]: autoWrap(generateBeachSunset as any),
 };
 
 export function getSceneGenerator(theme: SceneTheme): SceneGeneratorFn {
-  return generators[theme] || ((rng, w, h) => generateGenericScene(theme, rng, w, h));
+  return generators[theme] || ((rng, w, h) => ({ elements: generateGenericScene(theme, rng, w, h) }));
 }
