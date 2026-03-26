@@ -52,34 +52,88 @@ export function detailedTree(x: number, y: number, type: 'pine' | 'oak' | 'palm'
 
 function detailedPine(x: number, y: number, s: number, rng: SeededRandom): SVGElementData {
   const ch: SVGElementData[] = [];
-  const th = rng.nextInt(28, 35), ts = rng.nextInt(30, 40), tl = rng.nextInt(18, 25);
-  const trunkW = s * 0.09;
+  const th = rng.nextInt(25, 35), ts = rng.nextInt(30, 45), tl = rng.nextInt(18, 26);
+  const tw = s * 0.08;
 
-  // Trunk with bark texture
-  const tw = trunkW;
-  ch.push(mkPath(x, y, `M${x - tw},${y} L${x - tw * 0.7},${y - s * 0.35} L${x + tw * 0.7},${y - s * 0.35} L${x + tw},${y} Z`, hsl(th, ts, tl)));
-  // Bark lines
-  for (let i = 1; i <= 3; i++) {
-    const by = y - s * 0.35 * i / 4;
-    ch.push(mkLine(x - tw * 0.4, by, x + tw * 0.2, by + s * 0.02, hsl(th, ts, tl - 5), 0.5, { opacity: 0.4 }));
+  // Ground shadow
+  ch.push(mkEllipse(x, y + s * 0.02, s * 0.25, s * 0.04, 'rgba(0,0,0,0.12)', { layer: 1 }));
+
+  // Trunk - tapered with organic shape
+  ch.push(mkPath(x, y,
+    `M${x - tw},${y} ` +
+    `C${x - tw * 0.95},${y - s * 0.1} ${x - tw * 0.85},${y - s * 0.2} ${x - tw * 0.6},${y - s * 0.35} ` +
+    `L${x + tw * 0.6},${y - s * 0.35} ` +
+    `C${x + tw * 0.85},${y - s * 0.2} ${x + tw * 0.95},${y - s * 0.1} ${x + tw},${y} Z`,
+    hsl(th, ts, tl)));
+
+  // Bark texture
+  for (let i = 0; i < 5; i++) {
+    const by = y - s * (0.04 + i * 0.06);
+    const bw = tw * (1 - i * 0.08);
+    ch.push(mkLine(x - bw * 0.5, by, x + bw * 0.3, by + rng.nextFloat(-1, 1),
+      darken(th, ts, tl, 6), rng.nextFloat(0.3, 0.6), { opacity: rng.nextFloat(0.2, 0.4) }));
   }
 
-  // Layered foliage tiers with organic bezier shapes
-  const gh = rng.nextInt(110, 140), gs = rng.nextInt(45, 65), gl = rng.nextInt(25, 38);
-  for (let i = 0; i < 4; i++) {
-    const tierW = s * (0.55 - i * 0.1);
-    const tierY = y - s * 0.2 - i * s * 0.2;
-    const tierH = s * 0.25;
-    const jx = rng.nextFloat(-s * 0.02, s * 0.02);
-    // Main tier shape with organic edges
-    ch.push(mkPath(x, tierY, `M${x + jx},${tierY - tierH} C${x - tierW * 0.3},${tierY - tierH * 0.6} ${x - tierW * 0.6},${tierY + tierH * 0.1} ${x - tierW / 2},${tierY + tierH * 0.15} L${x + tierW / 2},${tierY + tierH * 0.15} C${x + tierW * 0.6},${tierY + tierH * 0.1} ${x + tierW * 0.3},${tierY - tierH * 0.6} ${x + jx},${tierY - tierH} Z`, hsl(gh, gs, gl - i * 2)));
-    // Highlight on left
-    ch.push(mkPath(x, tierY, `M${x + jx - tierW * 0.05},${tierY - tierH * 0.8} C${x - tierW * 0.2},${tierY - tierH * 0.4} ${x - tierW * 0.35},${tierY} ${x - tierW * 0.3},${tierY + tierH * 0.1}`, 'none', { stroke: lighten(gh, gs, gl, 12), strokeWidth: 1, opacity: 0.3 }));
+  // Trunk highlight
+  ch.push(mkPath(x, y,
+    `M${x - tw * 0.7},${y - s * 0.05} C${x - tw * 0.6},${y - s * 0.15} ${x - tw * 0.45},${y - s * 0.25} ${x - tw * 0.35},${y - s * 0.33}`,
+    'none', { stroke: lighten(th, ts, tl, 10), strokeWidth: tw * 0.25, opacity: 0.2 }));
+
+  // Foliage tiers (5 tiers for more fullness)
+  const gh = rng.nextInt(110, 145), gs = rng.nextInt(48, 68), gl = rng.nextInt(22, 36);
+  const tierCount = 5;
+  for (let i = 0; i < tierCount; i++) {
+    const tierW = s * (0.58 - i * 0.09);
+    const tierY = y - s * 0.18 - i * s * 0.17;
+    const tierH = s * 0.22;
+    const jx = rng.nextFloat(-s * 0.015, s * 0.015);
+    const leafGreen = hsl(gh + rng.nextInt(-4, 4), gs, gl - i * 1.5);
+    const darkGreen = darken(gh, gs, gl - i * 1.5, 8);
+
+    // Back shadow sub-tier
+    ch.push(mkPath(x, tierY,
+      `M${x + jx},${tierY - tierH * 0.95} ` +
+      `C${x - tierW * 0.2},${tierY - tierH * 0.5} ${x - tierW * 0.55},${tierY + tierH * 0.08} ${x - tierW * 0.48},${tierY + tierH * 0.18} ` +
+      `L${x + tierW * 0.48},${tierY + tierH * 0.18} ` +
+      `C${x + tierW * 0.55},${tierY + tierH * 0.08} ${x + tierW * 0.2},${tierY - tierH * 0.5} ${x + jx},${tierY - tierH * 0.95} Z`,
+      darkGreen, { opacity: 0.5 }));
+
+    // Main tier shape with drooping branch curves
+    const leftDroop = rng.nextFloat(0.05, 0.12);
+    const rightDroop = rng.nextFloat(0.05, 0.12);
+    ch.push(mkPath(x, tierY,
+      `M${x + jx},${tierY - tierH} ` +
+      `C${x - tierW * 0.15},${tierY - tierH * 0.55} ${x - tierW * 0.45},${tierY - tierH * 0.1} ${x - tierW * 0.5},${tierY + tierH * leftDroop} ` +
+      `Q${x - tierW * 0.35},${tierY + tierH * 0.2} ${x - tierW * 0.2},${tierY + tierH * 0.15} ` +
+      `L${x + tierW * 0.2},${tierY + tierH * 0.15} ` +
+      `Q${x + tierW * 0.35},${tierY + tierH * 0.2} ${x + tierW * 0.5},${tierY + tierH * rightDroop} ` +
+      `C${x + tierW * 0.45},${tierY - tierH * 0.1} ${x + tierW * 0.15},${tierY - tierH * 0.55} ${x + jx},${tierY - tierH} Z`,
+      leafGreen));
+
+    // Highlight on left edge of each tier
+    ch.push(mkPath(x, tierY,
+      `M${x + jx - tierW * 0.03},${tierY - tierH * 0.85} ` +
+      `C${x - tierW * 0.15},${tierY - tierH * 0.4} ${x - tierW * 0.35},${tierY} ${x - tierW * 0.42},${tierY + tierH * 0.08}`,
+      'none', { stroke: lighten(gh, gs, gl, 14), strokeWidth: 1.2, opacity: 0.25 }));
+
+    // Small branch edge bumps
+    for (let b = 0; b < 3; b++) {
+      const side = b % 2 === 0 ? -1 : 1;
+      const bx = x + side * tierW * rng.nextFloat(0.2, 0.45);
+      const by2 = tierY + tierH * rng.nextFloat(-0.1, 0.12);
+      const br = tierH * rng.nextFloat(0.08, 0.14);
+      ch.push(mkPath(bx, by2,
+        `M${bx - br * side},${by2 + br * 0.2} C${bx - br * 0.5 * side},${by2 - br} ${bx + br * 0.5 * side},${by2 - br * 0.8} ${bx + br * side * 0.3},${by2 + br * 0.3}`,
+        hsl(gh + rng.nextInt(-3, 3), gs, gl + rng.nextInt(-2, 4)),
+        { opacity: rng.nextFloat(0.4, 0.7) }));
+    }
   }
 
   // Snow on top (optional)
-  if (rng.chance(0.3)) {
-    ch.push(mkPath(x, y, `M${x - s * 0.08},${y - s * 0.95} Q${x},${y - s * 1.02} ${x + s * 0.08},${y - s * 0.95}`, '#FFFFFF', { opacity: 0.8 }));
+  if (rng.chance(0.25)) {
+    ch.push(mkPath(x, y,
+      `M${x - s * 0.06},${y - s * 0.98} Q${x},${y - s * 1.05} ${x + s * 0.06},${y - s * 0.98} Q${x + s * 0.03},${y - s * 0.96} ${x - s * 0.06},${y - s * 0.98} Z`,
+      '#FFFFFF', { opacity: 0.85 }));
   }
 
   return mkGroup(x, y, ch, { layer: 2, category: 'tree', modifiable: true, id: cuid('pine') });
@@ -89,40 +143,101 @@ function detailedOak(x: number, y: number, s: number, rng: SeededRandom): SVGEle
   const ch: SVGElementData[] = [];
   const th = rng.nextInt(22, 32), ts = rng.nextInt(35, 50), tl = rng.nextInt(20, 28);
 
-  // Trunk with organic shape
-  const tw = s * 0.1;
-  ch.push(mkPath(x, y, `M${x - tw},${y} C${x - tw},${y - s * 0.15} ${x - tw * 1.2},${y - s * 0.25} ${x - tw * 0.6},${y - s * 0.4} L${x + tw * 0.6},${y - s * 0.4} C${x + tw * 1.2},${y - s * 0.25} ${x + tw},${y - s * 0.15} ${x + tw},${y} Z`, hsl(th, ts, tl)));
+  // Ground shadow
+  ch.push(mkEllipse(x, y + s * 0.02, s * 0.38, s * 0.06, 'rgba(0,0,0,0.15)', { layer: 1 }));
 
-  // Main branches
-  ch.push(mkPath(x, y, `M${x - tw * 0.4},${y - s * 0.38} C${x - s * 0.2},${y - s * 0.5} ${x - s * 0.25},${y - s * 0.5} ${x - s * 0.22},${y - s * 0.55}`, 'none', { stroke: hsl(th, ts, tl + 3), strokeWidth: tw * 0.5 }));
-  ch.push(mkPath(x, y, `M${x + tw * 0.4},${y - s * 0.38} C${x + s * 0.15},${y - s * 0.48} ${x + s * 0.2},${y - s * 0.52} ${x + s * 0.18},${y - s * 0.56}`, 'none', { stroke: hsl(th, ts, tl + 3), strokeWidth: tw * 0.4 }));
+  // Trunk - wide base tapering to crown
+  const tw = s * 0.12;
+  ch.push(mkPath(x, y,
+    `M${x - tw},${y} ` +
+    `C${x - tw * 1.05},${y - s * 0.08} ${x - tw * 0.95},${y - s * 0.18} ${x - tw * 0.8},${y - s * 0.26} ` +
+    `C${x - tw * 0.65},${y - s * 0.32} ${x - tw * 0.5},${y - s * 0.36} ${x - tw * 0.35},${y - s * 0.4} ` +
+    `L${x + tw * 0.35},${y - s * 0.4} ` +
+    `C${x + tw * 0.5},${y - s * 0.36} ${x + tw * 0.65},${y - s * 0.32} ${x + tw * 0.8},${y - s * 0.26} ` +
+    `C${x + tw * 0.95},${y - s * 0.18} ${x + tw * 1.05},${y - s * 0.08} ${x + tw},${y} Z`,
+    hsl(th, ts, tl)));
 
-  // Foliage - multiple organic blobs
-  const gh = rng.nextInt(95, 135), gs = rng.nextInt(40, 60), gl = rng.nextInt(28, 42);
-  const crownCx = x, crownCy = y - s * 0.6;
-  const r = s * 0.35;
-  // Back layer (darker)
-  ch.push(mkPath(x, y, `M${crownCx - r},${crownCy + r * 0.3} C${crownCx - r * 1.1},${crownCy - r * 0.3} ${crownCx - r * 0.5},${crownCy - r * 1.1} ${crownCx},${crownCy - r} C${crownCx + r * 0.5},${crownCy - r * 1.1} ${crownCx + r * 1.1},${crownCy - r * 0.3} ${crownCx + r},${crownCy + r * 0.3} C${crownCx + r * 0.7},${crownCy + r * 0.5} ${crownCx - r * 0.7},${crownCy + r * 0.5} ${crownCx - r},${crownCy + r * 0.3} Z`, darken(gh, gs, gl, 5)));
+  // Trunk left highlight
+  ch.push(mkPath(x, y,
+    `M${x - tw * 0.85},${y - s * 0.05} C${x - tw * 0.75},${y - s * 0.18} ${x - tw * 0.55},${y - s * 0.3} ${x - tw * 0.3},${y - s * 0.38}`,
+    'none', { stroke: lighten(th, ts, tl, 12), strokeWidth: tw * 0.25, opacity: 0.25 }));
 
-  // Front layer blobs
-  const blobCount = rng.nextInt(4, 6);
-  for (let i = 0; i < blobCount; i++) {
-    const bx = crownCx + rng.nextFloat(-r * 0.5, r * 0.5);
-    const by = crownCy + rng.nextFloat(-r * 0.4, r * 0.3);
-    const br = r * rng.nextFloat(0.3, 0.5);
-    ch.push(mkPath(bx, by,
-      `M${bx - br},${by} C${bx - br},${by - br * 0.8} ${bx - br * 0.3},${by - br} ${bx},${by - br} C${bx + br * 0.3},${by - br} ${bx + br},${by - br * 0.8} ${bx + br},${by} C${bx + br},${by + br * 0.6} ${bx - br},${by + br * 0.6} ${bx - br},${by} Z`,
-      hsl(gh + rng.nextInt(-5, 5), gs, gl + rng.nextInt(-3, 3)), { opacity: rng.nextFloat(0.7, 0.95) }));
-  }
-  // Highlight spots
-  for (let i = 0; i < 3; i++) {
-    const hx = crownCx + rng.nextFloat(-r * 0.4, r * 0.2);
-    const hy = crownCy + rng.nextFloat(-r * 0.5, -r * 0.1);
-    ch.push(mkCircle(hx, hy, r * 0.08, lighten(gh, gs, gl, 15), { opacity: 0.3 }));
+  // Bark texture lines
+  for (let i = 0; i < 6; i++) {
+    const by = y - s * (0.04 + i * 0.06);
+    const bx1 = x - tw * rng.nextFloat(0.3, 0.7);
+    const bx2 = x + tw * rng.nextFloat(0.1, 0.5);
+    ch.push(mkPath(x, by,
+      `M${bx1},${by} Q${x + rng.nextFloat(-tw * 0.2, tw * 0.2)},${by + rng.nextFloat(-1.5, 1.5)} ${bx2},${by + rng.nextFloat(-1, 1)}`,
+      'none', { stroke: darken(th, ts, tl, 8), strokeWidth: rng.nextFloat(0.4, 0.8), opacity: rng.nextFloat(0.2, 0.4) }));
   }
 
-  // Shadow under tree
-  ch.push(mkEllipse(x, y + s * 0.02, s * 0.3, s * 0.04, 'rgba(0,0,0,0.15)', { layer: 1 }));
+  // Visible branches
+  ch.push(mkPath(x, y,
+    `M${x - tw * 0.3},${y - s * 0.38} C${x - s * 0.15},${y - s * 0.46} ${x - s * 0.22},${y - s * 0.52} ${x - s * 0.26},${y - s * 0.56}`,
+    'none', { stroke: hsl(th, ts, tl + 3), strokeWidth: tw * 0.4 }));
+  ch.push(mkPath(x, y,
+    `M${x + tw * 0.3},${y - s * 0.38} C${x + s * 0.12},${y - s * 0.45} ${x + s * 0.19},${y - s * 0.52} ${x + s * 0.22},${y - s * 0.57}`,
+    'none', { stroke: hsl(th, ts, tl + 3), strokeWidth: tw * 0.35 }));
+  ch.push(mkPath(x, y,
+    `M${x},${y - s * 0.4} C${x + s * 0.02},${y - s * 0.5} ${x - s * 0.01},${y - s * 0.58} ${x},${y - s * 0.65}`,
+    'none', { stroke: hsl(th, ts, tl + 2), strokeWidth: tw * 0.28 }));
+
+  // === FOLIAGE ===
+  const gh = rng.nextInt(95, 135), gs = rng.nextInt(42, 62), gl = rng.nextInt(28, 40);
+  const ccx = x, ccy = y - s * 0.6;
+  const cr = s * 0.38;
+
+  // Back shadow mass (dark, establishing silhouette)
+  ch.push(mkPath(ccx, ccy,
+    `M${ccx - cr * 0.95},${ccy + cr * 0.42} ` +
+    `C${ccx - cr * 1.1},${ccy - cr * 0.15} ${ccx - cr * 0.65},${ccy - cr * 0.95} ${ccx - cr * 0.15},${ccy - cr * 0.92} ` +
+    `C${ccx + cr * 0.15},${ccy - cr * 1.05} ${ccx + cr * 0.65},${ccy - cr * 0.9} ${ccx + cr * 0.9},${ccy - cr * 0.45} ` +
+    `C${ccx + cr * 1.08},${ccy - cr * 0.05} ${ccx + cr * 0.95},${ccy + cr * 0.35} ${ccx + cr * 0.65},${ccy + cr * 0.5} ` +
+    `C${ccx + cr * 0.25},${ccy + cr * 0.6} ${ccx - cr * 0.5},${ccy + cr * 0.55} ${ccx - cr * 0.95},${ccy + cr * 0.42} Z`,
+    darken(gh, gs, gl, 10)));
+
+  // Mid-tone leaf clusters (bumpy blobs creating organic canopy edge)
+  const clusterCount = rng.nextInt(8, 11);
+  for (let i = 0; i < clusterCount; i++) {
+    const angle = (i / clusterCount) * Math.PI * 2 + rng.nextFloat(-0.3, 0.3);
+    const dist = cr * rng.nextFloat(0.35, 0.7);
+    const cx = ccx + Math.cos(angle) * dist;
+    const cy = ccy + Math.sin(angle) * dist * 0.8;
+    const r2 = cr * rng.nextFloat(0.22, 0.38);
+    const j1 = rng.nextFloat(-r2 * 0.15, r2 * 0.15);
+    const j2 = rng.nextFloat(-r2 * 0.15, r2 * 0.15);
+    ch.push(mkPath(cx, cy,
+      `M${cx - r2},${cy + r2 * 0.15} ` +
+      `C${cx - r2},${cy - r2 * 0.65 + j1} ${cx - r2 * 0.25 + j2},${cy - r2 * 1.05} ${cx + j1 * 0.5},${cy - r2 * 0.95} ` +
+      `C${cx + r2 * 0.3 - j2},${cy - r2 * 1.1} ${cx + r2},${cy - r2 * 0.55 + j1} ${cx + r2},${cy + r2 * 0.15} ` +
+      `C${cx + r2},${cy + r2 * 0.55} ${cx - r2},${cy + r2 * 0.55} ${cx - r2},${cy + r2 * 0.15} Z`,
+      hsl(gh + rng.nextInt(-6, 6), gs + rng.nextInt(-4, 4), gl + rng.nextInt(-3, 3)),
+      { opacity: rng.nextFloat(0.78, 0.95) }));
+  }
+
+  // Highlight clusters (sunlit top-left)
+  for (let i = 0; i < 5; i++) {
+    const angle = rng.nextFloat(-2.8, -0.3);
+    const dist = cr * rng.nextFloat(0.25, 0.55);
+    const cx = ccx + Math.cos(angle) * dist;
+    const cy = ccy + Math.sin(angle) * dist * 0.8;
+    const r2 = cr * rng.nextFloat(0.12, 0.22);
+    ch.push(mkPath(cx, cy,
+      `M${cx - r2},${cy} C${cx - r2},${cy - r2 * 0.85} ${cx + r2},${cy - r2 * 0.85} ${cx + r2},${cy} C${cx + r2},${cy + r2 * 0.6} ${cx - r2},${cy + r2 * 0.6} ${cx - r2},${cy} Z`,
+      lighten(gh, gs, gl, 14),
+      { opacity: rng.nextFloat(0.25, 0.45) }));
+  }
+
+  // Light dapple spots
+  for (let i = 0; i < 6; i++) {
+    const sx = ccx + rng.nextFloat(-cr * 0.55, cr * 0.25);
+    const sy = ccy + rng.nextFloat(-cr * 0.6, cr * 0.15);
+    ch.push(mkCircle(sx, sy, cr * rng.nextFloat(0.04, 0.09), lighten(gh, gs, gl, 20), { opacity: rng.nextFloat(0.12, 0.28) }));
+  }
+
+  // Canopy bottom shadow edge
+  ch.push(mkEllipse(ccx + cr * 0.05, ccy + cr * 0.48, cr * 0.65, cr * 0.1, darken(gh, gs, gl, 14), { opacity: 0.2 }));
 
   return mkGroup(x, y, ch, { layer: 2, category: 'tree', modifiable: true, id: cuid('oak') });
 }
@@ -186,34 +301,97 @@ export function detailedPalm(x: number, y: number, s: number, rng: SeededRandom,
 function detailedCherry(x: number, y: number, s: number, rng: SeededRandom): SVGElementData {
   const ch: SVGElementData[] = [];
   const th = rng.nextInt(10, 20), ts = rng.nextInt(30, 45), tl = rng.nextInt(22, 30);
+  const trunkColor = hsl(th, ts, tl);
 
-  // Organic trunk
-  ch.push(mkPath(x, y, `M${x - s * 0.06},${y} C${x - s * 0.07},${y - s * 0.15} ${x - s * 0.04},${y - s * 0.3} ${x - s * 0.03},${y - s * 0.4} L${x + s * 0.03},${y - s * 0.4} C${x + s * 0.04},${y - s * 0.3} ${x + s * 0.07},${y - s * 0.15} ${x + s * 0.06},${y} Z`, hsl(th, ts, tl)));
+  // Ground shadow
+  ch.push(mkEllipse(x, y + s * 0.02, s * 0.32, s * 0.05, 'rgba(0,0,0,0.12)', { layer: 1 }));
 
-  // Branches
-  ch.push(mkPath(x, y, `M${x},${y - s * 0.38} Q${x - s * 0.15},${y - s * 0.5} ${x - s * 0.25},${y - s * 0.48}`, 'none', { stroke: hsl(th, ts, tl + 3), strokeWidth: s * 0.025 }));
-  ch.push(mkPath(x, y, `M${x},${y - s * 0.35} Q${x + s * 0.12},${y - s * 0.48} ${x + s * 0.22},${y - s * 0.45}`, 'none', { stroke: hsl(th, ts, tl + 3), strokeWidth: s * 0.02 }));
+  // Trunk - elegant tapered shape
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.065},${y} ` +
+    `C${x - s * 0.07},${y - s * 0.12} ${x - s * 0.055},${y - s * 0.25} ${x - s * 0.035},${y - s * 0.38} ` +
+    `L${x + s * 0.035},${y - s * 0.38} ` +
+    `C${x + s * 0.055},${y - s * 0.25} ${x + s * 0.07},${y - s * 0.12} ${x + s * 0.065},${y} Z`,
+    trunkColor));
+  // Trunk highlight
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.05},${y - s * 0.05} C${x - s * 0.04},${y - s * 0.18} ${x - s * 0.035},${y - s * 0.3} ${x - s * 0.025},${y - s * 0.36}`,
+    'none', { stroke: lighten(th, ts, tl, 12), strokeWidth: s * 0.015, opacity: 0.25 }));
 
-  // Blossom clouds with soft pink blobs
-  const ph = rng.nextInt(335, 350), ps = rng.nextInt(60, 80), pl = rng.nextInt(75, 85);
+  // Bark texture
+  for (let i = 0; i < 4; i++) {
+    const by = y - s * (0.06 + i * 0.08);
+    ch.push(mkLine(x - s * 0.04, by, x + s * 0.02, by + rng.nextFloat(-0.5, 0.5),
+      darken(th, ts, tl, 8), 0.4, { opacity: 0.25 }));
+  }
+
+  // Branches - graceful curves
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.01},${y - s * 0.36} Q${x - s * 0.12},${y - s * 0.48} ${x - s * 0.26},${y - s * 0.46}`,
+    'none', { stroke: trunkColor, strokeWidth: s * 0.022 }));
+  ch.push(mkPath(x, y,
+    `M${x + s * 0.01},${y - s * 0.34} Q${x + s * 0.1},${y - s * 0.46} ${x + s * 0.23},${y - s * 0.44}`,
+    'none', { stroke: trunkColor, strokeWidth: s * 0.018 }));
+  ch.push(mkPath(x, y,
+    `M${x},${y - s * 0.38} Q${x - s * 0.05},${y - s * 0.55} ${x - s * 0.12},${y - s * 0.6}`,
+    'none', { stroke: trunkColor, strokeWidth: s * 0.015 }));
+  ch.push(mkPath(x, y,
+    `M${x},${y - s * 0.38} Q${x + s * 0.06},${y - s * 0.52} ${x + s * 0.14},${y - s * 0.58}`,
+    'none', { stroke: trunkColor, strokeWidth: s * 0.013 }));
+
+  // === BLOSSOM CANOPY ===
+  const ph = rng.nextInt(335, 352), ps = rng.nextInt(60, 82), pl = rng.nextInt(76, 86);
+  const pinkBase = hsl(ph, ps, pl);
+  const pinkDark = darken(ph, ps, pl, 12);
+
+  // Back shadow blossom mass
   const centers = [
-    { cx: x, cy: y - s * 0.55, r: s * 0.22 },
-    { cx: x - s * 0.2, cy: y - s * 0.45, r: s * 0.16 },
-    { cx: x + s * 0.18, cy: y - s * 0.43, r: s * 0.15 },
-    { cx: x - s * 0.08, cy: y - s * 0.65, r: s * 0.13 },
-    { cx: x + s * 0.1, cy: y - s * 0.62, r: s * 0.12 },
+    { cx: x - s * 0.02, cy: y - s * 0.53, r: s * 0.24 },
+    { cx: x - s * 0.22, cy: y - s * 0.44, r: s * 0.17 },
+    { cx: x + s * 0.2,  cy: y - s * 0.42, r: s * 0.16 },
+    { cx: x - s * 0.1,  cy: y - s * 0.64, r: s * 0.14 },
+    { cx: x + s * 0.12, cy: y - s * 0.61, r: s * 0.13 },
   ];
   for (const c of centers) {
     ch.push(mkPath(c.cx, c.cy,
-      `M${c.cx - c.r},${c.cy} C${c.cx - c.r},${c.cy - c.r * 0.9} ${c.cx + c.r},${c.cy - c.r * 0.9} ${c.cx + c.r},${c.cy} C${c.cx + c.r},${c.cy + c.r * 0.7} ${c.cx - c.r},${c.cy + c.r * 0.7} ${c.cx - c.r},${c.cy} Z`,
-      hsl(ph, ps, pl + rng.nextInt(-3, 3)), { opacity: rng.nextFloat(0.6, 0.85) }));
+      `M${c.cx - c.r},${c.cy} C${c.cx - c.r},${c.cy - c.r * 0.9} ${c.cx + c.r},${c.cy - c.r * 0.9} ${c.cx + c.r},${c.cy} ` +
+      `C${c.cx + c.r},${c.cy + c.r * 0.7} ${c.cx - c.r},${c.cy + c.r * 0.7} ${c.cx - c.r},${c.cy} Z`,
+      pinkDark, { opacity: rng.nextFloat(0.35, 0.55) }));
   }
 
-  // Falling petals
-  for (let i = 0; i < rng.nextInt(5, 10); i++) {
-    const px = x + rng.nextFloat(-s * 0.5, s * 0.5);
-    const py = y + rng.nextFloat(-s * 0.8, s * 0.1);
-    ch.push(mkEllipse(px, py, s * 0.015, s * 0.01, hsl(ph, ps, pl + 5), { layer: 4, opacity: rng.nextFloat(0.3, 0.7), rotation: rng.nextFloat(0, 360) }));
+  // Bright blossom clusters (layered organic blobs)
+  for (let i = 0; i < 8; i++) {
+    const base = centers[rng.nextInt(0, centers.length - 1)];
+    const cx = base.cx + rng.nextFloat(-base.r * 0.4, base.r * 0.4);
+    const cy = base.cy + rng.nextFloat(-base.r * 0.4, base.r * 0.3);
+    const cr = base.r * rng.nextFloat(0.35, 0.6);
+    const j = rng.nextFloat(-cr * 0.1, cr * 0.1);
+    ch.push(mkPath(cx, cy,
+      `M${cx - cr},${cy + cr * 0.1 + j} ` +
+      `C${cx - cr},${cy - cr * 0.7} ${cx - cr * 0.2},${cy - cr * 1.05} ${cx + j},${cy - cr * 0.95} ` +
+      `C${cx + cr * 0.3},${cy - cr * 1.05} ${cx + cr},${cy - cr * 0.7} ${cx + cr},${cy + cr * 0.1} ` +
+      `C${cx + cr},${cy + cr * 0.5} ${cx - cr},${cy + cr * 0.5} ${cx - cr},${cy + cr * 0.1 + j} Z`,
+      hsl(ph + rng.nextInt(-4, 4), ps + rng.nextInt(-5, 5), pl + rng.nextInt(-3, 3)),
+      { opacity: rng.nextFloat(0.55, 0.85) }));
+  }
+
+  // Top highlights (white-pink)
+  for (let i = 0; i < 4; i++) {
+    const hx = x + rng.nextFloat(-s * 0.2, s * 0.15);
+    const hy = y - s * rng.nextFloat(0.5, 0.68);
+    const hr = s * rng.nextFloat(0.06, 0.1);
+    ch.push(mkCircle(hx, hy, hr, lighten(ph, ps, pl, 8), { opacity: rng.nextFloat(0.25, 0.45) }));
+  }
+
+  // Falling petals (more and varied)
+  for (let i = 0; i < rng.nextInt(8, 15); i++) {
+    const px = x + rng.nextFloat(-s * 0.6, s * 0.6);
+    const py = y + rng.nextFloat(-s * 0.85, s * 0.15);
+    const petalSize = s * rng.nextFloat(0.01, 0.02);
+    ch.push(mkPath(px, py,
+      `M${px},${py - petalSize} Q${px + petalSize},${py} ${px},${py + petalSize} Q${px - petalSize * 0.6},${py} ${px},${py - petalSize} Z`,
+      hsl(ph, ps, pl + rng.nextInt(-2, 5)),
+      { layer: 4, opacity: rng.nextFloat(0.25, 0.65), rotation: rng.nextFloat(0, 360) }));
   }
 
   return mkGroup(x, y, ch, { layer: 2, category: 'tree', modifiable: true, id: cuid('cherry') });
@@ -256,27 +434,73 @@ function detailedWillow(x: number, y: number, s: number, rng: SeededRandom): SVG
 export function detailedCloud(x: number, y: number, size: number, rng: SeededRandom): SVGElementData {
   const ch: SVGElementData[] = [];
   const s = size;
-  const color = rng.pick(['#FFFFFF', '#F8F8FF', '#F0F8FF']);
 
-  // Main cloud body with organic bezier shape
-  const w = s * rng.nextFloat(0.8, 1.2);
-  const h = s * rng.nextFloat(0.3, 0.5);
+  const w = s * rng.nextFloat(0.9, 1.3);
+  const h = s * rng.nextFloat(0.35, 0.55);
+
+  // Bottom ambient shadow
+  ch.push(mkEllipse(x + w * 0.05, y + h * 0.12, w * 0.48, h * 0.18, hsl(220, 15, 78), { opacity: 0.2 }));
+
+  // Base layer puffs (slightly blue-gray for bottom shadow feel)
+  const basePuffs = [
+    { cx: x - w * 0.28, cy: y + h * 0.02, rx: w * 0.28, ry: h * 0.42 },
+    { cx: x + w * 0.05,  cy: y + h * 0.04, rx: w * 0.32, ry: h * 0.4 },
+    { cx: x + w * 0.3,   cy: y + h * 0.01, rx: w * 0.24, ry: h * 0.38 },
+  ];
+  for (const p of basePuffs) {
+    const jx = rng.nextFloat(-w * 0.02, w * 0.02);
+    const jy = rng.nextFloat(-h * 0.02, h * 0.02);
+    ch.push(mkPath(p.cx, p.cy,
+      `M${p.cx - p.rx},${p.cy + p.ry * 0.15 + jy} ` +
+      `C${p.cx - p.rx},${p.cy - p.ry * 0.7 + jx} ${p.cx - p.rx * 0.3},${p.cy - p.ry * 1.05} ${p.cx + jx},${p.cy - p.ry} ` +
+      `C${p.cx + p.rx * 0.3},${p.cy - p.ry * 1.05 + jy} ${p.cx + p.rx},${p.cy - p.ry * 0.7} ${p.cx + p.rx},${p.cy + p.ry * 0.15} ` +
+      `C${p.cx + p.rx},${p.cy + p.ry * 0.5} ${p.cx - p.rx},${p.cy + p.ry * 0.5} ${p.cx - p.rx},${p.cy + p.ry * 0.15 + jy} Z`,
+      hsl(215, 8, 90), { opacity: 0.85 }));
+  }
+
+  // Mid layer puffs (white, building volume)
+  const midPuffs = [
+    { cx: x - w * 0.2, cy: y - h * 0.2, rx: w * 0.3, ry: h * 0.5 },
+    { cx: x + w * 0.1,  cy: y - h * 0.18, rx: w * 0.33, ry: h * 0.52 },
+    { cx: x + w * 0.32, cy: y - h * 0.12, rx: w * 0.22, ry: h * 0.42 },
+    { cx: x - w * 0.35, cy: y - h * 0.08, rx: w * 0.2, ry: h * 0.38 },
+  ];
+  for (const p of midPuffs) {
+    const jx = rng.nextFloat(-w * 0.02, w * 0.02);
+    ch.push(mkPath(p.cx, p.cy,
+      `M${p.cx - p.rx},${p.cy + p.ry * 0.1} ` +
+      `C${p.cx - p.rx},${p.cy - p.ry * 0.75 + jx} ${p.cx - p.rx * 0.25},${p.cy - p.ry * 1.1} ${p.cx + jx},${p.cy - p.ry} ` +
+      `C${p.cx + p.rx * 0.25},${p.cy - p.ry * 1.1} ${p.cx + p.rx},${p.cy - p.ry * 0.75} ${p.cx + p.rx},${p.cy + p.ry * 0.1} ` +
+      `C${p.cx + p.rx},${p.cy + p.ry * 0.45} ${p.cx - p.rx},${p.cy + p.ry * 0.45} ${p.cx - p.rx},${p.cy + p.ry * 0.1} Z`,
+      hsl(210, 4, 95), { opacity: 0.9 }));
+  }
+
+  // Top highlight puffs (brightest white)
+  const topPuffs = [
+    { cx: x - w * 0.08, cy: y - h * 0.55, rx: w * 0.24, ry: h * 0.4 },
+    { cx: x + w * 0.15, cy: y - h * 0.48, rx: w * 0.2, ry: h * 0.35 },
+    { cx: x - w * 0.25, cy: y - h * 0.35, rx: w * 0.18, ry: h * 0.3 },
+  ];
+  for (const p of topPuffs) {
+    ch.push(mkPath(p.cx, p.cy,
+      `M${p.cx - p.rx},${p.cy + p.ry * 0.1} ` +
+      `C${p.cx - p.rx},${p.cy - p.ry * 0.8} ${p.cx - p.rx * 0.3},${p.cy - p.ry} ${p.cx},${p.cy - p.ry * 0.95} ` +
+      `C${p.cx + p.rx * 0.3},${p.cy - p.ry} ${p.cx + p.rx},${p.cy - p.ry * 0.8} ${p.cx + p.rx},${p.cy + p.ry * 0.1} ` +
+      `C${p.cx + p.rx},${p.cy + p.ry * 0.4} ${p.cx - p.rx},${p.cy + p.ry * 0.4} ${p.cx - p.rx},${p.cy + p.ry * 0.1} Z`,
+      '#FFFFFF', { opacity: 0.95 }));
+  }
+
+  // Crown highlight streak
   ch.push(mkPath(x, y,
-    `M${x - w / 2},${y} C${x - w / 2},${y - h * 0.8} ${x - w * 0.2},${y - h * 1.3} ${x},${y - h} C${x + w * 0.15},${y - h * 1.5} ${x + w * 0.35},${y - h * 1.1} ${x + w * 0.3},${y - h * 0.7} C${x + w * 0.5},${y - h * 0.9} ${x + w / 2},${y - h * 0.4} ${x + w / 2},${y} Z`,
-    color, { opacity: 0.9 }));
+    `M${x - w * 0.22},${y - h * 0.6} Q${x - w * 0.05},${y - h * 0.8} ${x + w * 0.12},${y - h * 0.55}`,
+    'none', { stroke: '#FFFFFF', strokeWidth: h * 0.12, opacity: 0.3 }));
 
-  // Secondary puff on top
+  // Bottom edge soft shadow
   ch.push(mkPath(x, y,
-    `M${x - w * 0.15},${y - h * 0.8} C${x - w * 0.15},${y - h * 1.4} ${x + w * 0.15},${y - h * 1.4} ${x + w * 0.15},${y - h * 0.8}`,
-    color, { opacity: 0.85 }));
+    `M${x - w * 0.35},${y + h * 0.05} Q${x},${y + h * 0.12} ${x + w * 0.35},${y + h * 0.05}`,
+    'none', { stroke: hsl(220, 12, 82), strokeWidth: h * 0.08, opacity: 0.25 }));
 
-  // Highlight
-  ch.push(mkEllipse(x - w * 0.1, y - h * 0.9, w * 0.15, h * 0.25, '#FFFFFF', { opacity: 0.4 }));
-
-  // Bottom shadow
-  ch.push(mkEllipse(x, y + h * 0.05, w * 0.4, h * 0.1, '#D0D8E8', { opacity: 0.3 }));
-
-  return mkGroup(x, y, ch, { layer: 0, category: 'cloud', modifiable: true, id: cuid('cloud'), opacity: rng.nextFloat(0.7, 0.95) });
+  return mkGroup(x, y, ch, { layer: 0, category: 'cloud', modifiable: true, id: cuid('cloud'), opacity: rng.nextFloat(0.78, 0.95) });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -516,34 +740,140 @@ export function detailedHouse(x: number, y: number, w: number, h: number, rng: S
 export function detailedPerson(x: number, y: number, s: number, rng: SeededRandom): SVGElementData {
   const ch: SVGElementData[] = [];
   const skinH = rng.nextInt(15, 35), skinS = rng.nextInt(40, 65), skinL = rng.nextInt(55, 75);
-  const shirtH = rng.nextInt(0, 360), shirtS = rng.nextInt(40, 70), shirtL = rng.nextInt(40, 60);
-  const pantsH = rng.nextInt(200, 240), pantsS = rng.nextInt(30, 60), pantsL = rng.nextInt(25, 40);
+  const skinColor = hsl(skinH, skinS, skinL);
+  const skinShade = darken(skinH, skinS, skinL, 8);
+  const shirtH = rng.nextInt(0, 360), shirtS = rng.nextInt(50, 75), shirtL = rng.nextInt(45, 65);
+  const shirtColor = hsl(shirtH, shirtS, shirtL);
+  const shirtDark = darken(shirtH, shirtS, shirtL, 12);
+  const pantsH = rng.nextInt(200, 250), pantsS = rng.nextInt(30, 60), pantsL = rng.nextInt(25, 42);
+  const pantsColor = hsl(pantsH, pantsS, pantsL);
+  const pantsDark = darken(pantsH, pantsS, pantsL, 8);
+  const hairColor = rng.pick(['#2C1810', '#4A3728', '#8B6508', '#1A1A1A', '#6B3A2A', '#C67A3B']);
 
-  // Shadow
-  ch.push(mkEllipse(x, y, s * 0.15, s * 0.03, 'rgba(0,0,0,0.12)', { layer: 2 }));
+  // Ground shadow
+  ch.push(mkEllipse(x, y + s * 0.01, s * 0.18, s * 0.035, 'rgba(0,0,0,0.15)', { layer: 2 }));
 
-  // Legs
-  ch.push(mkRect(x - s * 0.06, y - s * 0.3, s * 0.05, s * 0.3, hsl(pantsH, pantsS, pantsL)));
-  ch.push(mkRect(x + s * 0.01, y - s * 0.3, s * 0.05, s * 0.3, hsl(pantsH, pantsS, pantsL)));
-  // Shoes
-  ch.push(mkEllipse(x - s * 0.04, y, s * 0.04, s * 0.02, '#333'));
-  ch.push(mkEllipse(x + s * 0.04, y, s * 0.04, s * 0.02, '#333'));
+  // === LEGS (shaped paths, not rectangles) ===
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.07},${y - s * 0.28} C${x - s * 0.075},${y - s * 0.15} ${x - s * 0.08},${y - s * 0.06} ${x - s * 0.08},${y - s * 0.04} ` +
+    `L${x - s * 0.02},${y - s * 0.04} C${x - s * 0.02},${y - s * 0.06} ${x - s * 0.015},${y - s * 0.15} ${x - s * 0.01},${y - s * 0.28} Z`,
+    pantsColor));
+  ch.push(mkPath(x, y,
+    `M${x + s * 0.01},${y - s * 0.28} C${x + s * 0.015},${y - s * 0.15} ${x + s * 0.02},${y - s * 0.06} ${x + s * 0.02},${y - s * 0.04} ` +
+    `L${x + s * 0.08},${y - s * 0.04} C${x + s * 0.08},${y - s * 0.06} ${x + s * 0.075},${y - s * 0.15} ${x + s * 0.07},${y - s * 0.28} Z`,
+    pantsColor));
+  // Pant leg shadow
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.045},${y - s * 0.26} L${x - s * 0.055},${y - s * 0.06} L${x - s * 0.025},${y - s * 0.06} L${x - s * 0.02},${y - s * 0.26} Z`,
+    pantsDark, { opacity: 0.2 }));
 
-  // Body/torso
-  ch.push(mkPath(x, y, `M${x - s * 0.08},${y - s * 0.3} L${x - s * 0.1},${y - s * 0.55} Q${x},${y - s * 0.58} ${x + s * 0.1},${y - s * 0.55} L${x + s * 0.08},${y - s * 0.3} Z`, hsl(shirtH, shirtS, shirtL)));
+  // === SHOES (rounded, with soles) ===
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.09},${y - s * 0.005} ` +
+    `C${x - s * 0.09},${y - s * 0.035} ${x - s * 0.015},${y - s * 0.04} ${x - s * 0.015},${y - s * 0.02} ` +
+    `L${x - s * 0.015},${y + s * 0.008} ` +
+    `C${x - s * 0.015},${y + s * 0.018} ${x - s * 0.09},${y + s * 0.018} ${x - s * 0.09},${y - s * 0.005} Z`,
+    '#3D2B1F'));
+  ch.push(mkPath(x, y,
+    `M${x + s * 0.015},${y - s * 0.02} ` +
+    `C${x + s * 0.015},${y - s * 0.04} ${x + s * 0.09},${y - s * 0.035} ${x + s * 0.09},${y - s * 0.005} ` +
+    `C${x + s * 0.09},${y + s * 0.018} ${x + s * 0.015},${y + s * 0.018} ${x + s * 0.015},${y + s * 0.008} Z`,
+    '#3D2B1F'));
 
-  // Arms
-  ch.push(mkPath(x, y, `M${x - s * 0.1},${y - s * 0.53} Q${x - s * 0.18},${y - s * 0.4} ${x - s * 0.15},${y - s * 0.32}`, 'none', { stroke: hsl(shirtH, shirtS, shirtL), strokeWidth: s * 0.04 }));
-  ch.push(mkPath(x, y, `M${x + s * 0.1},${y - s * 0.53} Q${x + s * 0.18},${y - s * 0.4} ${x + s * 0.15},${y - s * 0.32}`, 'none', { stroke: hsl(shirtH, shirtS, shirtL), strokeWidth: s * 0.04 }));
+  // === TORSO (organic shaped body) ===
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.1},${y - s * 0.28} ` +
+    `C${x - s * 0.11},${y - s * 0.36} ${x - s * 0.105},${y - s * 0.46} ${x - s * 0.085},${y - s * 0.53} ` +
+    `Q${x},${y - s * 0.57} ${x + s * 0.085},${y - s * 0.53} ` +
+    `C${x + s * 0.105},${y - s * 0.46} ${x + s * 0.11},${y - s * 0.36} ${x + s * 0.1},${y - s * 0.28} Z`,
+    shirtColor));
+  // Shirt shadow (right side)
+  ch.push(mkPath(x, y,
+    `M${x + s * 0.04},${y - s * 0.52} ` +
+    `C${x + s * 0.08},${y - s * 0.46} ${x + s * 0.1},${y - s * 0.37} ${x + s * 0.09},${y - s * 0.3} ` +
+    `L${x + s * 0.06},${y - s * 0.3} ` +
+    `C${x + s * 0.07},${y - s * 0.38} ${x + s * 0.06},${y - s * 0.46} ${x + s * 0.04},${y - s * 0.52} Z`,
+    shirtDark, { opacity: 0.2 }));
+  // Collar V-shape
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.04},${y - s * 0.535} L${x},${y - s * 0.49} L${x + s * 0.04},${y - s * 0.535}`,
+    'none', { stroke: shirtDark, strokeWidth: s * 0.006, opacity: 0.5 }));
+
+  // === ARMS (shaped, not just strokes) ===
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.09},${y - s * 0.52} ` +
+    `C${x - s * 0.13},${y - s * 0.48} ${x - s * 0.16},${y - s * 0.42} ${x - s * 0.155},${y - s * 0.34} ` +
+    `L${x - s * 0.125},${y - s * 0.335} ` +
+    `C${x - s * 0.13},${y - s * 0.41} ${x - s * 0.11},${y - s * 0.46} ${x - s * 0.08},${y - s * 0.5} Z`,
+    shirtColor));
+  ch.push(mkPath(x, y,
+    `M${x + s * 0.09},${y - s * 0.52} ` +
+    `C${x + s * 0.13},${y - s * 0.48} ${x + s * 0.16},${y - s * 0.42} ${x + s * 0.155},${y - s * 0.34} ` +
+    `L${x + s * 0.125},${y - s * 0.335} ` +
+    `C${x + s * 0.13},${y - s * 0.41} ${x + s * 0.11},${y - s * 0.46} ${x + s * 0.08},${y - s * 0.5} Z`,
+    shirtColor));
   // Hands
-  ch.push(mkCircle(x - s * 0.15, y - s * 0.32, s * 0.02, hsl(skinH, skinS, skinL)));
-  ch.push(mkCircle(x + s * 0.15, y - s * 0.32, s * 0.02, hsl(skinH, skinS, skinL)));
+  ch.push(mkCircle(x - s * 0.14, y - s * 0.338, s * 0.022, skinColor));
+  ch.push(mkCircle(x + s * 0.14, y - s * 0.338, s * 0.022, skinColor));
 
-  // Head
-  ch.push(mkCircle(x, y - s * 0.65, s * 0.08, hsl(skinH, skinS, skinL)));
-  // Hair
-  const hairColor = rng.pick(['#2C1810', '#4A3728', '#8B6508', '#1A1A1A', '#6B3A2A']);
-  ch.push(mkPath(x, y, `M${x - s * 0.08},${y - s * 0.67} Q${x - s * 0.09},${y - s * 0.78} ${x},${y - s * 0.78} Q${x + s * 0.09},${y - s * 0.78} ${x + s * 0.08},${y - s * 0.67}`, hairColor));
+  // === NECK ===
+  ch.push(mkRect(x - s * 0.022, y - s * 0.585, s * 0.044, s * 0.055, skinColor));
+
+  // === HEAD (oval face) ===
+  ch.push(mkEllipse(x, y - s * 0.66, s * 0.085, s * 0.095, skinColor));
+  // Face shadow (right side)
+  ch.push(mkPath(x, y,
+    `M${x + s * 0.04},${y - s * 0.72} C${x + s * 0.08},${y - s * 0.68} ${x + s * 0.08},${y - s * 0.62} ${x + s * 0.04},${y - s * 0.59}`,
+    skinShade, { opacity: 0.12 }));
+  // Cheek blush
+  ch.push(mkEllipse(x - s * 0.055, y - s * 0.635, s * 0.022, s * 0.014, '#FFB7A5', { opacity: 0.3 }));
+  ch.push(mkEllipse(x + s * 0.055, y - s * 0.635, s * 0.022, s * 0.014, '#FFB7A5', { opacity: 0.3 }));
+  // Eyes
+  ch.push(mkEllipse(x - s * 0.032, y - s * 0.675, s * 0.016, s * 0.02, '#2C1810'));
+  ch.push(mkEllipse(x + s * 0.032, y - s * 0.675, s * 0.016, s * 0.02, '#2C1810'));
+  // Eye highlights
+  ch.push(mkCircle(x - s * 0.027, y - s * 0.68, s * 0.005, '#FFFFFF'));
+  ch.push(mkCircle(x + s * 0.037, y - s * 0.68, s * 0.005, '#FFFFFF'));
+  // Smile
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.018},${y - s * 0.635} Q${x},${y - s * 0.623} ${x + s * 0.018},${y - s * 0.635}`,
+    'none', { stroke: '#C07060', strokeWidth: s * 0.005 }));
+
+  // === HAIR ===
+  const hairStyle = rng.nextInt(0, 3);
+  if (hairStyle === 0) {
+    // Short neat
+    ch.push(mkPath(x, y,
+      `M${x - s * 0.088},${y - s * 0.69} ` +
+      `C${x - s * 0.1},${y - s * 0.77} ${x - s * 0.05},${y - s * 0.82} ${x},${y - s * 0.81} ` +
+      `C${x + s * 0.05},${y - s * 0.82} ${x + s * 0.1},${y - s * 0.77} ${x + s * 0.088},${y - s * 0.69} ` +
+      `Q${x + s * 0.05},${y - s * 0.72} ${x},${y - s * 0.71} ` +
+      `Q${x - s * 0.05},${y - s * 0.72} ${x - s * 0.088},${y - s * 0.69} Z`,
+      hairColor));
+  } else if (hairStyle === 1) {
+    // Side swept
+    ch.push(mkPath(x, y,
+      `M${x - s * 0.095},${y - s * 0.68} ` +
+      `C${x - s * 0.11},${y - s * 0.78} ${x - s * 0.04},${y - s * 0.83} ${x + s * 0.02},${y - s * 0.82} ` +
+      `C${x + s * 0.08},${y - s * 0.83} ${x + s * 0.11},${y - s * 0.76} ${x + s * 0.095},${y - s * 0.69} ` +
+      `C${x + s * 0.11},${y - s * 0.65} ${x + s * 0.1},${y - s * 0.62} ${x + s * 0.08},${y - s * 0.6} ` +
+      `Q${x},${y - s * 0.7} ${x - s * 0.095},${y - s * 0.68} Z`,
+      hairColor));
+  } else {
+    // Fluffy rounded
+    ch.push(mkPath(x, y,
+      `M${x - s * 0.095},${y - s * 0.67} ` +
+      `C${x - s * 0.115},${y - s * 0.74} ${x - s * 0.1},${y - s * 0.84} ${x - s * 0.03},${y - s * 0.84} ` +
+      `C${x},${y - s * 0.86} ${x + s * 0.03},${y - s * 0.84} ${x + s * 0.03},${y - s * 0.84} ` +
+      `C${x + s * 0.1},${y - s * 0.84} ${x + s * 0.115},${y - s * 0.74} ${x + s * 0.095},${y - s * 0.67} ` +
+      `Q${x + s * 0.05},${y - s * 0.71} ${x},${y - s * 0.72} ` +
+      `Q${x - s * 0.05},${y - s * 0.71} ${x - s * 0.095},${y - s * 0.67} Z`,
+      hairColor));
+  }
+  // Hair highlight
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.04},${y - s * 0.78} Q${x},${y - s * 0.81} ${x + s * 0.03},${y - s * 0.77}`,
+    'none', { stroke: '#FFFFFF', strokeWidth: s * 0.006, opacity: 0.15 }));
 
   return mkGroup(x, y, ch, { layer: 3, category: 'person', modifiable: true, id: cuid('person') });
 }
@@ -793,20 +1123,55 @@ export function detailedBench(x: number, y: number, s: number, rng: SeededRandom
 
 export function detailedFence(x: number, y: number, length: number, s: number, rng: SeededRandom): SVGElementData {
   const ch: SVGElementData[] = [];
-  const color = hsl(rng.nextInt(20, 35), rng.nextInt(25, 40), rng.nextInt(45, 60));
-  const postCount = Math.floor(length / (s * 0.25)) + 1;
+  const wh = rng.nextInt(22, 35), ws = rng.nextInt(28, 42), wl = rng.nextInt(48, 62);
+  const woodColor = hsl(wh, ws, wl);
+  const woodDark = darken(wh, ws, wl, 10);
+  const woodLight = lighten(wh, ws, wl, 8);
+  const postCount = Math.max(2, Math.floor(length / (s * 0.25)) + 1);
   const gap = length / (postCount - 1);
 
-  // Rails
-  ch.push(mkRect(x, y - s * 0.3, length, s * 0.03, color, { layer: 2 }));
-  ch.push(mkRect(x, y - s * 0.15, length, s * 0.03, color, { layer: 2 }));
+  // Ground shadow
+  ch.push(mkEllipse(x + length / 2, y + s * 0.02, length * 0.48, s * 0.025, 'rgba(0,0,0,0.1)', { layer: 1 }));
 
-  // Posts with pointed tops
+  // Rails with depth (front face + top face)
+  const railH = s * 0.035;
+  const railDepth = s * 0.012;
+  // Bottom rail
+  ch.push(mkRect(x, y - s * 0.16, length, railH, woodColor, { layer: 2 }));
+  ch.push(mkRect(x, y - s * 0.16 - railDepth, length, railDepth, woodLight, { layer: 2, opacity: 0.6 }));
+  // Top rail
+  ch.push(mkRect(x, y - s * 0.3, length, railH, woodColor, { layer: 2 }));
+  ch.push(mkRect(x, y - s * 0.3 - railDepth, length, railDepth, woodLight, { layer: 2, opacity: 0.6 }));
+
+  // Posts with pointed tops, wood grain, nails
   for (let i = 0; i < postCount; i++) {
     const px = x + i * gap;
-    ch.push(mkRect(px - s * 0.02, y - s * 0.35, s * 0.04, s * 0.4, color, { layer: 2 }));
+    const pw = s * 0.042;
+    const postLight = hsl(wh, ws, wl + rng.nextInt(-3, 3));
+
+    // Post body
+    ch.push(mkRect(px - pw / 2, y - s * 0.37, pw, s * 0.42, postLight, { layer: 2 }));
+    // Post right shadow
+    ch.push(mkRect(px + pw * 0.15, y - s * 0.37, pw * 0.2, s * 0.42, woodDark, { layer: 2, opacity: 0.2 }));
     // Pointed top
-    ch.push(mkPath(px, y, `M${px - s * 0.025},${y - s * 0.35} L${px},${y - s * 0.42} L${px + s * 0.025},${y - s * 0.35} Z`, color));
+    ch.push(mkPath(px, y,
+      `M${px - pw / 2},${y - s * 0.37} L${px},${y - s * 0.44} L${px + pw / 2},${y - s * 0.37} Z`,
+      postLight));
+    // Point top highlight
+    ch.push(mkPath(px, y,
+      `M${px - pw / 2},${y - s * 0.37} L${px},${y - s * 0.44} L${px - pw * 0.05},${y - s * 0.37} Z`,
+      woodLight, { opacity: 0.35 }));
+
+    // Wood grain lines on post
+    for (let g = 0; g < 3; g++) {
+      const gy = y - s * (0.08 + g * 0.1);
+      ch.push(mkLine(px - pw * 0.35, gy, px + pw * 0.2, gy + rng.nextFloat(-0.5, 0.5),
+        woodDark, 0.4, { opacity: rng.nextFloat(0.15, 0.3) }));
+    }
+
+    // Nail dots at rail intersections
+    ch.push(mkCircle(px, y - s * 0.145, s * 0.006, '#555', { opacity: 0.5 }));
+    ch.push(mkCircle(px, y - s * 0.285, s * 0.006, '#555', { opacity: 0.5 }));
   }
 
   return mkGroup(x, y, ch, { layer: 2, category: 'fence', modifiable: true, id: cuid('fence') });
