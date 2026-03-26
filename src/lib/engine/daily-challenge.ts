@@ -1,7 +1,6 @@
 import { Scene, SceneTheme, DIFFICULTY_CONFIGS } from './types';
 import { SceneGenerator } from './scene-generator';
-
-const ALL_THEMES = Object.values(SceneTheme);
+import { IMPLEMENTED_THEMES } from '../scenes/index';
 
 export class DailyChallenge {
   static getTodaySeed(): number {
@@ -11,7 +10,7 @@ export class DailyChallenge {
 
   static getTodayTheme(): SceneTheme {
     const seed = this.getTodaySeed();
-    return ALL_THEMES[seed % ALL_THEMES.length];
+    return IMPLEMENTED_THEMES[seed % IMPLEMENTED_THEMES.length];
   }
 
   static getTodayDifficulty(): string {

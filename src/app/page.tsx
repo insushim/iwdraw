@@ -3,6 +3,7 @@
 import { useGameStore } from '@/lib/store/game-store';
 import { useTranslation } from '@/lib/i18n';
 import { SceneTheme, THEME_INFO } from '@/lib/engine/types';
+import { IMPLEMENTED_THEMES } from '@/lib/scenes/index';
 import { DailyChallenge } from '@/lib/engine/daily-challenge';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -23,7 +24,7 @@ export default function Home() {
   const todayPlayed = userProfile.dailyChallengeHistory.some(d => d.date === DailyChallenge.getTodayDateString());
 
   const themes = useMemo(() => {
-    return Object.values(SceneTheme)
+    return IMPLEMENTED_THEMES
       .filter(th => selectedCategory === 'all' || THEME_INFO[th].category === selectedCategory);
   }, [selectedCategory]);
 

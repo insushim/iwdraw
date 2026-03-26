@@ -8,6 +8,7 @@ import {
 } from '../engine/types';
 import { SceneGenerator } from '../engine/scene-generator';
 import { DailyChallenge } from '../engine/daily-challenge';
+import { IMPLEMENTED_THEMES } from '../scenes/index';
 import { checkAchievements } from '../engine/achievements';
 import { soundManager, SfxType } from '../audio/sound-manager';
 
@@ -125,8 +126,7 @@ export const useGameStore = create<GameStore>()(
       },
 
       startRandomGame: () => {
-        const themes = Object.values(SceneTheme);
-        const theme = themes[Math.floor(Math.random() * themes.length)];
+        const theme = IMPLEMENTED_THEMES[Math.floor(Math.random() * IMPLEMENTED_THEMES.length)];
         get().startGame(theme, get().settings.difficulty);
       },
 

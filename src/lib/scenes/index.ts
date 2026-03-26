@@ -52,6 +52,9 @@ const generators: Partial<Record<SceneTheme, SceneGeneratorFn>> = {
   [SceneTheme.AUTUMN_PARK]: autoWrap(generateAutumnPark as any),
 };
 
+/** Themes that have dedicated scene generators (not generic fallback) */
+export const IMPLEMENTED_THEMES: SceneTheme[] = Object.keys(generators) as SceneTheme[];
+
 export function getSceneGenerator(theme: SceneTheme): SceneGeneratorFn {
   return generators[theme] || ((rng, w, h) => {
     const els = generateGenericScene(theme, rng, w, h);
