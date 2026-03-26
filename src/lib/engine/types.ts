@@ -126,6 +126,7 @@ export interface DifficultyConfig {
   differenceCount: number;
   timeLimit: number | null;
   hintCount: number;
+  lives: number;
   differenceTypes: DifferenceType[];
   minDifferenceSize: number;
   colorSimilarity: number;
@@ -141,8 +142,11 @@ export interface GameState {
   combo: number;
   maxCombo: number;
   mistakes: number;
+  lives: number;
+  maxLives: number;
   isComplete: boolean;
   isPaused: boolean;
+  gameOverReason?: 'cleared' | 'out_of_lives' | 'time_up';
 }
 
 export interface GameSettings {
@@ -207,6 +211,7 @@ export interface GameResult {
   theme: SceneTheme;
   perfect: boolean;
   grade: 'S' | 'A' | 'B' | 'C' | 'D';
+  gameOverReason: 'cleared' | 'out_of_lives' | 'time_up';
 }
 
 export const DIFFICULTY_CONFIGS: Record<string, DifficultyConfig> = {
@@ -214,6 +219,7 @@ export const DIFFICULTY_CONFIGS: Record<string, DifficultyConfig> = {
     differenceCount: 3,
     timeLimit: null,
     hintCount: 5,
+    lives: 5,
     differenceTypes: [
       DifferenceType.COLOR_CHANGE,
       DifferenceType.ELEMENT_REMOVED,
@@ -226,6 +232,7 @@ export const DIFFICULTY_CONFIGS: Record<string, DifficultyConfig> = {
     differenceCount: 5,
     timeLimit: 120,
     hintCount: 3,
+    lives: 3,
     differenceTypes: [
       DifferenceType.COLOR_CHANGE,
       DifferenceType.ELEMENT_REMOVED,
@@ -241,6 +248,7 @@ export const DIFFICULTY_CONFIGS: Record<string, DifficultyConfig> = {
     differenceCount: 7,
     timeLimit: 90,
     hintCount: 1,
+    lives: 2,
     differenceTypes: [
       DifferenceType.COLOR_CHANGE,
       DifferenceType.ELEMENT_REMOVED,
@@ -261,6 +269,7 @@ export const DIFFICULTY_CONFIGS: Record<string, DifficultyConfig> = {
     differenceCount: 10,
     timeLimit: 60,
     hintCount: 0,
+    lives: 1,
     differenceTypes: Object.values(DifferenceType),
     minDifferenceSize: 10,
     colorSimilarity: 0.85,

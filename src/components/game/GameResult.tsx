@@ -37,6 +37,7 @@ export default function GameResult() {
 
   const r = lastGameResult;
   const gradeClass = gradeColors[r.grade] || gradeColors.C;
+  const isGameOver = r.gameOverReason !== 'cleared';
 
   return (
     <motion.div
@@ -45,19 +46,40 @@ export default function GameResult() {
       className="min-h-screen flex items-center justify-center p-4 bg-[var(--color-bg)]"
     >
       <div className="w-full max-w-md bg-[var(--color-surface)] rounded-3xl shadow-xl p-6 space-y-6">
-        {/* Grade */}
+        {/* Grade or Game Over */}
         <div className="text-center">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1, rotate: [0, 10, -10, 0] }}
-            transition={{ type: 'spring', delay: 0.2 }}
-            className={`inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br ${gradeClass} text-white text-5xl font-black shadow-lg`}
-          >
-            {r.grade}
-          </motion.div>
-          <p className="mt-2 text-lg font-medium text-[var(--color-text-secondary)]">
-            {t.grade_text[r.grade as keyof typeof t.grade_text]}
-          </p>
+          {isGameOver ? (
+            <>
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1, rotate: [0, -5, 5, 0] }}
+                transition={{ type: 'spring', delay: 0.2 }}
+                className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white text-5xl shadow-lg"
+              >
+                💔
+              </motion.div>
+              <p className="mt-2 text-lg font-bold text-red-500">
+                {r.gameOverReason === 'out_of_lives' ? t.game_over : t.time_up}
+              </p>
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                {r.differencesFound}/{r.totalDifferences} {t.differences_found}
+              </p>
+            </>
+          ) : (
+            <>
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1, rotate: [0, 10, -10, 0] }}
+                transition={{ type: 'spring', delay: 0.2 }}
+                className={`inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br ${gradeClass} text-white text-5xl font-black shadow-lg`}
+              >
+                {r.grade}
+              </motion.div>
+              <p className="mt-2 text-lg font-medium text-[var(--color-text-secondary)]">
+                {t.grade_text[r.grade as keyof typeof t.grade_text]}
+              </p>
+            </>
+          )}
         </div>
 
         {/* Score */}

@@ -43,6 +43,10 @@ export default function GameBoard() {
       updateElapsedTime(elapsed);
       if (scene?.timeLimit && elapsed >= scene.timeLimit) {
         clearInterval(timerRef.current);
+        const gs = useGameStore.getState().gameState;
+        if (gs) {
+          useGameStore.setState({ gameState: { ...gs, gameOverReason: 'time_up' } });
+        }
         useGameStore.getState().completeGame();
       }
     }, 250);
@@ -123,6 +127,21 @@ export default function GameBoard() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Lives (hearts) */}
+          <div className="flex items-center gap-0.5">
+            {Array.from({ length: gameState.maxLives }).map((_, i) => (
+              <motion.span
+                key={`heart-${i}`}
+                animate={i === gameState.lives && gameState.lives < gameState.maxLives
+                  ? { scale: [1, 1.4, 0], opacity: [1, 1, 0] }
+                  : {}}
+                className="text-sm"
+              >
+                {i < gameState.lives ? '❤️' : '🖤'}
+              </motion.span>
+            ))}
+          </div>
+          <div className="w-px h-4 bg-gray-600" />
           {gameState.combo > 1 && (
             <motion.span
               key={gameState.combo}

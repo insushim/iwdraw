@@ -85,6 +85,8 @@ export const useGameStore = create<GameStore>()(
             combo: 0,
             maxCombo: 0,
             mistakes: 0,
+            lives: config.lives,
+            maxLives: config.lives,
             isComplete: false,
             isPaused: false,
           },
@@ -113,6 +115,8 @@ export const useGameStore = create<GameStore>()(
             combo: 0,
             maxCombo: 0,
             mistakes: 0,
+            lives: config.lives,
+            maxLives: config.lives,
             isComplete: false,
             isPaused: false,
           },
@@ -163,16 +167,35 @@ export const useGameStore = create<GameStore>()(
           }
         }
 
-        // Miss
+        // Miss - lose a life
+        const newLives = gs.lives - 1;
         soundManager.playSfx(SfxType.CLICK_WRONG);
-        set({
-          gameState: {
-            ...gs,
-            combo: 0,
-            mistakes: gs.mistakes + 1,
-            score: Math.max(0, gs.score - 30),
-          },
-        });
+
+        if (newLives <= 0) {
+          // Out of lives - game over
+          set({
+            gameState: {
+              ...gs,
+              combo: 0,
+              mistakes: gs.mistakes + 1,
+              lives: 0,
+              score: Math.max(0, gs.score - 30),
+              isComplete: true,
+              gameOverReason: 'out_of_lives',
+            },
+          });
+          setTimeout(() => get().completeGame(), 500);
+        } else {
+          set({
+            gameState: {
+              ...gs,
+              combo: 0,
+              mistakes: gs.mistakes + 1,
+              lives: newLives,
+              score: Math.max(0, gs.score - 30),
+            },
+          });
+        }
 
         return { hit: false, score: -30, combo: 0 };
       },
@@ -217,9 +240,15 @@ export const useGameStore = create<GameStore>()(
         const gs = get().gameState;
         if (!gs) return;
 
+        // Determine game over reason
+        const reason: 'cleared' | 'out_of_lives' | 'time_up' =
+          gs.gameOverReason === 'out_of_lives' ? 'out_of_lives'
+          : gs.scene.timeLimit && gs.elapsedTime >= gs.scene.timeLimit ? 'time_up'
+          : 'cleared';
+
         const time = gs.elapsedTime;
-        const perfect = gs.mistakes === 0;
-        const timeBonus = gs.scene.timeLimit ? Math.max(0, (gs.scene.timeLimit - time) * 10) : 0;
+        const perfect = gs.mistakes === 0 && reason === 'cleared';
+        const timeBonus = reason === 'cleared' && gs.scene.timeLimit ? Math.max(0, (gs.scene.timeLimit - time) * 10) : 0;
         const diffMultiplier = gs.scene.difficulty === 'expert' ? 3 : gs.scene.difficulty === 'hard' ? 2 : gs.scene.difficulty === 'medium' ? 1.5 : 1;
         const perfectBonus = perfect ? 500 : 0;
         const totalScore = Math.round((gs.score + timeBonus + perfectBonus) * diffMultiplier);
@@ -238,9 +267,10 @@ export const useGameStore = create<GameStore>()(
           theme: gs.scene.theme,
           perfect,
           grade,
+          gameOverReason: reason,
         };
 
-        soundManager.playSfx(perfect ? SfxType.PERFECT : SfxType.GAME_COMPLETE);
+        soundManager.playSfx(reason !== 'cleared' ? SfxType.CLICK_WRONG : perfect ? SfxType.PERFECT : SfxType.GAME_COMPLETE);
 
         // Update profile
         const profile = { ...get().userProfile };
@@ -275,7 +305,7 @@ export const useGameStore = create<GameStore>()(
         }
 
         set({
-          gameState: { ...gs, isComplete: true, score: totalScore },
+          gameState: { ...gs, isComplete: true, score: totalScore, gameOverReason: reason },
           userProfile: profile,
           lastGameResult: result,
           newAchievements: newAch,

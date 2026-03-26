@@ -401,28 +401,73 @@ function detailedWillow(x: number, y: number, s: number, rng: SeededRandom): SVG
   const ch: SVGElementData[] = [];
   const th = rng.nextInt(25, 35), ts = rng.nextInt(30, 45), tl = rng.nextInt(22, 30);
 
-  // Trunk
-  ch.push(mkPath(x, y, `M${x - s * 0.08},${y} C${x - s * 0.09},${y - s * 0.2} ${x - s * 0.06},${y - s * 0.35} ${x - s * 0.04},${y - s * 0.45} L${x + s * 0.04},${y - s * 0.45} C${x + s * 0.06},${y - s * 0.35} ${x + s * 0.09},${y - s * 0.2} ${x + s * 0.08},${y} Z`, hsl(th, ts, tl)));
+  // Ground shadow
+  ch.push(mkEllipse(x, y + s * 0.02, s * 0.4, s * 0.06, 'rgba(0,0,0,0.12)', { layer: 1 }));
 
-  // Upper crown volume
-  const gh = rng.nextInt(90, 115), gs = rng.nextInt(35, 55), gl = rng.nextInt(30, 42);
-  ch.push(mkEllipse(x, y - s * 0.52, s * 0.2, s * 0.12, hsl(gh, gs, gl), { opacity: 0.5 }));
+  // Trunk - organic tapered
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.085},${y} ` +
+    `C${x - s * 0.09},${y - s * 0.15} ${x - s * 0.065},${y - s * 0.3} ${x - s * 0.04},${y - s * 0.45} ` +
+    `L${x + s * 0.04},${y - s * 0.45} ` +
+    `C${x + s * 0.065},${y - s * 0.3} ${x + s * 0.09},${y - s * 0.15} ${x + s * 0.085},${y} Z`,
+    hsl(th, ts, tl)));
+  // Trunk highlight
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.06},${y - s * 0.05} C${x - s * 0.05},${y - s * 0.2} ${x - s * 0.04},${y - s * 0.35} ${x - s * 0.03},${y - s * 0.43}`,
+    'none', { stroke: lighten(th, ts, tl, 10), strokeWidth: s * 0.015, opacity: 0.2 }));
+  // Bark lines
+  for (let i = 0; i < 4; i++) {
+    const by = y - s * (0.06 + i * 0.09);
+    ch.push(mkLine(x - s * 0.05, by, x + s * 0.02, by + rng.nextFloat(-0.5, 0.5),
+      darken(th, ts, tl, 7), 0.5, { opacity: 0.25 }));
+  }
 
-  // Drooping branches with organic curves
-  const branchCount = rng.nextInt(10, 16);
+  // Main branches from trunk
+  const gh = rng.nextInt(90, 118), gs = rng.nextInt(38, 58), gl = rng.nextInt(28, 40);
+  ch.push(mkPath(x, y,
+    `M${x - s * 0.02},${y - s * 0.44} Q${x - s * 0.12},${y - s * 0.52} ${x - s * 0.2},${y - s * 0.5}`,
+    'none', { stroke: hsl(th, ts, tl + 3), strokeWidth: s * 0.02 }));
+  ch.push(mkPath(x, y,
+    `M${x + s * 0.02},${y - s * 0.44} Q${x + s * 0.1},${y - s * 0.53} ${x + s * 0.18},${y - s * 0.5}`,
+    'none', { stroke: hsl(th, ts, tl + 3), strokeWidth: s * 0.018 }));
+
+  // Upper crown foliage mass
+  ch.push(mkEllipse(x, y - s * 0.52, s * 0.22, s * 0.14, darken(gh, gs, gl, 6), { opacity: 0.4 }));
+  ch.push(mkEllipse(x - s * 0.08, y - s * 0.5, s * 0.14, s * 0.1, hsl(gh, gs, gl), { opacity: 0.5 }));
+  ch.push(mkEllipse(x + s * 0.06, y - s * 0.5, s * 0.13, s * 0.09, hsl(gh, gs, gl + 3), { opacity: 0.45 }));
+
+  // Drooping branches with leaf clusters
+  const branchCount = rng.nextInt(14, 20);
   for (let i = 0; i < branchCount; i++) {
-    const startX = x + rng.nextFloat(-s * 0.15, s * 0.15);
-    const startY = y - s * rng.nextFloat(0.4, 0.5);
-    const endX = startX + rng.nextFloat(-s * 0.25, s * 0.25);
-    const endY = y + rng.nextFloat(-s * 0.05, s * 0.15);
+    const startX = x + rng.nextFloat(-s * 0.18, s * 0.18);
+    const startY = y - s * rng.nextFloat(0.4, 0.52);
+    const endX = startX + rng.nextFloat(-s * 0.28, s * 0.28);
+    const endY = y + rng.nextFloat(-s * 0.08, s * 0.18);
     const cp1x = startX + rng.nextFloat(-s * 0.1, s * 0.1);
     const cp1y = startY + (endY - startY) * 0.3;
     const cp2x = endX + rng.nextFloat(-s * 0.05, s * 0.05);
     const cp2y = endY - (endY - startY) * 0.2;
-    ch.push(mkPath(x, y, `M${startX},${startY} C${cp1x},${cp1y} ${cp2x},${cp2y} ${endX},${endY}`, 'none', {
-      stroke: hsl(gh, gs, gl + rng.nextInt(-5, 5)), strokeWidth: rng.nextFloat(0.5, 1.5), opacity: rng.nextFloat(0.4, 0.7)
-    }));
+    const branchColor = hsl(gh, gs + rng.nextInt(-5, 5), gl + rng.nextInt(-4, 4));
+
+    // Branch line (thicker)
+    ch.push(mkPath(x, y,
+      `M${startX},${startY} C${cp1x},${cp1y} ${cp2x},${cp2y} ${endX},${endY}`,
+      'none', { stroke: branchColor, strokeWidth: rng.nextFloat(0.8, 2), opacity: rng.nextFloat(0.45, 0.75) }));
+
+    // Small leaf clusters along the branch
+    const leafCount = rng.nextInt(2, 4);
+    for (let l = 0; l < leafCount; l++) {
+      const t = rng.nextFloat(0.3, 0.9);
+      const lx = startX + (endX - startX) * t + rng.nextFloat(-s * 0.02, s * 0.02);
+      const ly = startY + (endY - startY) * t + rng.nextFloat(-s * 0.02, s * 0.02);
+      const lr = s * rng.nextFloat(0.02, 0.04);
+      ch.push(mkEllipse(lx, ly, lr, lr * 1.4, hsl(gh + rng.nextInt(-5, 5), gs, gl + rng.nextInt(-3, 3)),
+        { opacity: rng.nextFloat(0.3, 0.55) }));
+    }
   }
+
+  // Highlight at top
+  ch.push(mkEllipse(x - s * 0.05, y - s * 0.55, s * 0.08, s * 0.06, lighten(gh, gs, gl, 14), { opacity: 0.2 }));
 
   return mkGroup(x, y, ch, { layer: 2, category: 'tree', modifiable: true, id: cuid('willow') });
 }
@@ -689,46 +734,88 @@ export function detailedBird(x: number, y: number, distant: boolean, rng: Seeded
 
 export function detailedHouse(x: number, y: number, w: number, h: number, rng: SeededRandom): SVGElementData {
   const ch: SVGElementData[] = [];
-  const wallH = rng.nextInt(0, 20), wallS = rng.nextInt(15, 35), wallL = rng.nextInt(70, 88);
-  const roofH = rng.nextInt(0, 30), roofS = rng.nextInt(40, 65), roofL = rng.nextInt(30, 45);
+  const wallHue = rng.nextInt(0, 20), wallSat = rng.nextInt(15, 35), wallLit = rng.nextInt(72, 88);
+  const wallColor = hsl(wallHue, wallSat, wallLit);
+  const wallDark = darken(wallHue, wallSat, wallLit, 10);
+  const roofHue = rng.nextInt(0, 30), roofSat = rng.nextInt(40, 65), roofLit = rng.nextInt(30, 45);
+  const roofColor = hsl(roofHue, roofSat, roofLit);
+  const roofDark = darken(roofHue, roofSat, roofLit, 10);
+  const roofLight = lighten(roofHue, roofSat, roofLit, 8);
+
+  // Ground shadow
+  ch.push(mkEllipse(x + w / 2, y + 3, w * 0.55, 4, 'rgba(0,0,0,0.12)', { layer: 1 }));
 
   // Wall
-  ch.push(mkRect(x, y - h * 0.6, w, h * 0.6, hsl(wallH, wallS, wallL), { layer: 2 }));
+  ch.push(mkRect(x, y - h * 0.6, w, h * 0.6, wallColor, { layer: 2 }));
+  // Wall shadow (right side)
+  ch.push(mkRect(x + w * 0.7, y - h * 0.6, w * 0.3, h * 0.6, wallDark, { layer: 2, opacity: 0.12 }));
+  // Wall highlight (left edge)
+  ch.push(mkLine(x + 1, y - h * 0.58, x + 1, y - 2, lighten(wallHue, wallSat, wallLit, 6), 1.5, { opacity: 0.3 }));
+  // Foundation line
+  ch.push(mkRect(x - 2, y - h * 0.02, w + 4, h * 0.025, darken(wallHue, wallSat, wallLit, 18), { layer: 2, opacity: 0.5 }));
 
   // Roof with overhang
-  const roofOverhang = w * 0.08;
-  ch.push(mkPath(x, y, `M${x - roofOverhang},${y - h * 0.6} L${x + w / 2},${y - h} L${x + w + roofOverhang},${y - h * 0.6} Z`, hsl(roofH, roofS, roofL), { layer: 2 }));
-  // Roof shadow
-  ch.push(mkPath(x, y, `M${x + w / 2},${y - h} L${x + w + roofOverhang},${y - h * 0.6} L${x + w / 2 + roofOverhang * 0.5},${y - h * 0.6} Z`, hsl(roofH, roofS, roofL - 8), { layer: 2, opacity: 0.5 }));
+  const ro = w * 0.08;
+  ch.push(mkPath(x, y,
+    `M${x - ro},${y - h * 0.6} L${x + w / 2},${y - h} L${x + w + ro},${y - h * 0.6} Z`,
+    roofColor, { layer: 2 }));
+  // Roof shadow (right half)
+  ch.push(mkPath(x, y,
+    `M${x + w / 2},${y - h} L${x + w + ro},${y - h * 0.6} L${x + w / 2 + ro * 0.3},${y - h * 0.6} Z`,
+    roofDark, { layer: 2, opacity: 0.4 }));
+  // Roof ridge line
+  ch.push(mkLine(x + w / 2 - w * 0.02, y - h * 0.99, x + w / 2 + w * 0.02, y - h * 0.99,
+    roofLight, 2, { opacity: 0.5 }));
+  // Roof tile lines
+  for (let i = 1; i <= 3; i++) {
+    const t = i / 4;
+    const ly = y - h * (0.6 + (1 - 0.6) * (1 - t));
+    const lx1 = x - ro + (x + w / 2 - (x - ro)) * t;
+    const lx2 = x + w + ro - (x + w + ro - (x + w / 2)) * t;
+    ch.push(mkLine(lx1, ly, lx2, ly, roofDark, 0.5, { opacity: 0.2 }));
+  }
 
   // Door
   const doorW = w * 0.2, doorH = h * 0.35;
   const doorX = x + w * 0.5 - doorW / 2;
   ch.push(mkRect(doorX, y - doorH, doorW, doorH, hsl(25, 40, 30), { layer: 2 }));
+  // Door panel lines
+  ch.push(mkRect(doorX + doorW * 0.12, y - doorH * 0.9, doorW * 0.32, doorH * 0.38, hsl(25, 35, 26), { layer: 2, opacity: 0.3 }));
+  ch.push(mkRect(doorX + doorW * 0.56, y - doorH * 0.9, doorW * 0.32, doorH * 0.38, hsl(25, 35, 26), { layer: 2, opacity: 0.3 }));
   // Doorknob
-  ch.push(mkCircle(doorX + doorW * 0.8, y - doorH * 0.45, doorW * 0.06, '#C0A870', { layer: 2 }));
+  ch.push(mkCircle(doorX + doorW * 0.82, y - doorH * 0.45, doorW * 0.07, '#C0A870', { layer: 2 }));
+  ch.push(mkCircle(doorX + doorW * 0.8, y - doorH * 0.46, doorW * 0.025, '#E0D0A0', { layer: 2, opacity: 0.5 }));
+  // Door frame
+  ch.push(mkPath(doorX, y, `M${doorX - 2},${y} L${doorX - 2},${y - doorH - 3} L${doorX + doorW + 2},${y - doorH - 3} L${doorX + doorW + 2},${y}`,
+    'none', { stroke: wallDark, strokeWidth: 2, opacity: 0.4 }));
 
-  // Windows
+  // Windows with frames and shutters
   const winW = w * 0.18, winH = h * 0.18;
   for (let i = 0; i < 2; i++) {
     const wx = x + w * (0.15 + i * 0.52);
     const wy = y - h * 0.5;
-    ch.push(mkRect(wx, wy, winW, winH, '#B0D4F1', { layer: 2, stroke: hsl(wallH, wallS, wallL - 20), strokeWidth: 1 }));
-    // Window cross
-    ch.push(mkLine(wx + winW / 2, wy, wx + winW / 2, wy + winH, hsl(wallH, wallS, wallL - 15), 0.8));
-    ch.push(mkLine(wx, wy + winH / 2, wx + winW, wy + winH / 2, hsl(wallH, wallS, wallL - 15), 0.8));
-    // Curtain hints
-    ch.push(mkPath(wx, wy, `M${wx},${wy} Q${wx + winW * 0.15},${wy + winH * 0.3} ${wx},${wy + winH}`, '#F5E6D3', { opacity: 0.4 }));
+    // Window frame
+    ch.push(mkRect(wx - 2, wy - 2, winW + 4, winH + 4, wallDark, { layer: 2, opacity: 0.4 }));
+    // Glass
+    ch.push(mkRect(wx, wy, winW, winH, '#B0D4F1', { layer: 2 }));
+    // Glass reflection
+    ch.push(mkPath(wx, wy,
+      `M${wx + winW * 0.1},${wy + winH * 0.1} L${wx + winW * 0.3},${wy + winH * 0.1} L${wx + winW * 0.15},${wy + winH * 0.4} Z`,
+      '#FFFFFF', { layer: 2, opacity: 0.2 }));
+    // Cross
+    ch.push(mkLine(wx + winW / 2, wy, wx + winW / 2, wy + winH, wallDark, 1));
+    ch.push(mkLine(wx, wy + winH / 2, wx + winW, wy + winH / 2, wallDark, 1));
+    // Window sill
+    ch.push(mkRect(wx - 3, wy + winH, winW + 6, 3, wallDark, { layer: 2, opacity: 0.5 }));
   }
 
   // Chimney
   if (rng.chance(0.6)) {
     const chimX = x + w * 0.75, chimW = w * 0.12, chimH = h * 0.2;
-    ch.push(mkRect(chimX, y - h - chimH * 0.5, chimW, chimH + h * 0.05, hsl(roofH, roofS - 10, roofL - 5), { layer: 2 }));
+    ch.push(mkRect(chimX, y - h - chimH * 0.5, chimW, chimH + h * 0.05, hsl(roofHue, roofSat - 10, roofLit - 5), { layer: 2 }));
+    // Chimney cap
+    ch.push(mkRect(chimX - 2, y - h - chimH * 0.5, chimW + 4, 3, hsl(roofHue, roofSat - 10, roofLit - 10), { layer: 2 }));
   }
-
-  // Shadow
-  ch.push(mkEllipse(x + w / 2, y + 2, w * 0.5, 3, 'rgba(0,0,0,0.1)', { layer: 1 }));
 
   return mkGroup(x, y, ch, { layer: 2, category: 'building', modifiable: true, id: cuid('house') });
 }
