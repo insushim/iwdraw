@@ -1,7 +1,7 @@
 import { SVGElementData } from './types';
 import { SeededRandom } from './random';
 
-type Opts = Partial<Pick<SVGElementData, 'stroke' | 'strokeWidth' | 'opacity' | 'rotation' | 'transform' | 'layer' | 'category' | 'modifiable' | 'id'>>;
+type Opts = Partial<Pick<SVGElementData, 'stroke' | 'strokeWidth' | 'opacity' | 'rotation' | 'transform' | 'layer' | 'category' | 'modifiable' | 'id' | 'filter' | 'clipPath'>>;
 
 let _id = 0;
 function uid(prefix = 'el'): string {
@@ -24,6 +24,8 @@ function base(type: SVGElementData['type'], x: number, y: number, fill: string, 
     opacity: opts.opacity,
     rotation: opts.rotation,
     transform: opts.transform,
+    filter: opts.filter,
+    clipPath: opts.clipPath,
   };
 }
 

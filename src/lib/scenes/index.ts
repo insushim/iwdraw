@@ -1,5 +1,6 @@
 import { SVGElementData, SceneTheme } from '../engine/types';
 import { SeededRandom } from '../engine/random';
+import { combineDefs, daySkyGradient, groundGradient, sunGlowGradient, outdoorDefs } from './svg-effects';
 
 // All dedicated scene imports
 import { generateCityStreet } from './city-street';
@@ -54,16 +55,12 @@ const generators: Partial<Record<SceneTheme, SceneGeneratorFn>> = {
 export function getSceneGenerator(theme: SceneTheme): SceneGeneratorFn {
   return generators[theme] || ((rng, w, h) => {
     const els = generateGenericScene(theme, rng, w, h);
-    const defs = `
-      <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#4A90D9"/><stop offset="100%" stop-color="#B0D4F1"/>
-      </linearGradient>
-      <linearGradient id="groundGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#4CAF50"/><stop offset="100%" stop-color="#2E7D32"/>
-      </linearGradient>
-      <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#FFF9C4" stop-opacity="1"/><stop offset="100%" stop-color="#FFB300" stop-opacity="0"/>
-      </radialGradient>`;
+    const defs = combineDefs(
+      daySkyGradient('skyGrad'),
+      groundGradient('groundGrad'),
+      sunGlowGradient('sunGlow'),
+      outdoorDefs(),
+    );
     return { elements: els, defs };
   });
 }

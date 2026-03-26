@@ -1,54 +1,40 @@
 import { SVGElementData } from '../engine/types';
 import { SeededRandom } from '../engine/random';
 import {
-  createRect, createCircle, createEllipse, createPath, createCloud, createTree, createFlower,
-  createBird, createButterfly, createMushroom, createRock, createMountain, createGroup, createBench, createFence,
+  createRect, createCircle, createEllipse, createPath, createGroup, createLine,
 } from '../engine/primitives';
+import {
+  combineDefs, outdoorDefs, daySkyGradient, groundGradient,
+  sunGlowGradient, linearGradient, waterGradient, grassPattern, waterRipple,
+} from './svg-effects';
+import {
+  detailedTree, detailedCloud, detailedMountain, detailedFlower, detailedRock,
+  detailedBird, detailedButterfly, detailedMushroom, detailedBench, detailedFence,
+  resetComponentId,
+} from './svg-components';
 
 let _uid = 0;
 function uid(p = 'fc') { return `${p}_${++_uid}_${Date.now().toString(36)}`; }
 
 export function generateForestClearing(rng: SeededRandom, w: number, h: number): { elements: SVGElementData[]; defs: string } {
   _uid = 0;
+  resetComponentId();
   const elements: SVGElementData[] = [];
 
-  // === SVG DEFS: Gradients & Filters ===
-  const defs = `
-    <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#4A90D9"/>
-      <stop offset="40%" stop-color="#7BB8F0"/>
-      <stop offset="70%" stop-color="#A8D8EA"/>
-      <stop offset="100%" stop-color="#C9E8F5"/>
-    </linearGradient>
-    <linearGradient id="groundGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#4CAF50"/>
-      <stop offset="30%" stop-color="#43A047"/>
-      <stop offset="60%" stop-color="#388E3C"/>
-      <stop offset="100%" stop-color="#2E7D32"/>
-    </linearGradient>
-    <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#FFFDE7" stop-opacity="1"/>
-      <stop offset="30%" stop-color="#FFD54F" stop-opacity="0.9"/>
-      <stop offset="60%" stop-color="#FFB300" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="#FF8F00" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="streamGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#64B5F6" stop-opacity="0.6"/>
-      <stop offset="50%" stop-color="#90CAF9" stop-opacity="0.8"/>
-      <stop offset="100%" stop-color="#64B5F6" stop-opacity="0.6"/>
-    </linearGradient>
-    <radialGradient id="lightRayGrad" cx="50%" cy="0%" r="90%">
-      <stop offset="0%" stop-color="#FFF9C4" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#FFF9C4" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="sunBlur">
-      <feGaussianBlur stdDeviation="6"/>
-    </filter>
-    <filter id="softGlow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-    </filter>
-  `;
+  // === SVG DEFS ===
+  const defs = combineDefs(
+    outdoorDefs(),
+    daySkyGradient('skyGrad'),
+    groundGradient('groundGrad', '#4CAF50', '#2E7D32'),
+    sunGlowGradient('sunGlow', '#FFFDE7', '#FFB300'),
+    waterGradient('streamGrad', '#64B5F6', '#90CAF9'),
+    linearGradient('lightRayGrad', [
+      { offset: '0%', color: '#FFF9C4', opacity: 0.15 },
+      { offset: '100%', color: '#FFF9C4', opacity: 0 },
+    ]),
+    grassPattern('grassPat', '#3a7d2e'),
+    waterRipple('waterRipple'),
+  );
 
   // ============================
   // === LAYER 0: SKY ===
@@ -58,38 +44,41 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
   // Sun with radial gradient glow
   const sunX = w * rng.nextFloat(0.78, 0.9);
   const sunY = h * rng.nextFloat(0.07, 0.14);
-  // Outer glow
-  elements.push(createCircle(sunX, sunY, 55, 'url(#sunGlow)', { layer: 0, category: 'sun', modifiable: false, opacity: 0.7, id: uid('sun_glow') }));
-  // Inner sun
+  elements.push(createCircle(sunX, sunY, 55, 'url(#sunGlow)', { layer: 0, category: 'sun', modifiable: false, opacity: 0.7, id: uid('sun_glow'), filter: 'url(#glow)' }));
   elements.push(createCircle(sunX, sunY, 26, '#FFD54F', { layer: 0, category: 'sun', modifiable: true, opacity: 0.95, id: uid('sun') }));
 
-  // Clouds (3-5)
-  for (let i = 0; i < rng.nextInt(3, 5); i++) {
-    elements.push(createCloud(rng.nextFloat(30, w - 80), rng.nextFloat(15, h * 0.2), rng.nextFloat(40, 75), rng));
+  // Clouds (4-6) - detailed components with depth blur
+  for (let i = 0; i < rng.nextInt(4, 6); i++) {
+    const cloud = detailedCloud(rng.nextFloat(30, w - 80), rng.nextFloat(15, h * 0.2), rng.nextFloat(40, 75), rng);
+    cloud.filter = 'url(#bgBlur)';
+    elements.push(cloud);
   }
 
   // ============================
   // === LAYER 0: DISTANT MOUNTAINS ===
   // ============================
   for (let i = 0; i < rng.nextInt(2, 4); i++) {
-    elements.push(createMountain(rng.nextFloat(-50, w * 0.7), h * 0.55, rng.nextFloat(200, 350), rng.nextFloat(80, 150), rng));
+    const mtn = detailedMountain(rng.nextFloat(-50, w * 0.7), h * 0.55, rng.nextFloat(200, 350), rng.nextFloat(80, 150), rng);
+    mtn.filter = 'url(#bgBlur)';
+    elements.push(mtn);
   }
 
   // ============================
   // === LAYER 1: GROUND ===
   // ============================
-  // Main ground with wavy top edge
   const groundPath = `M0,${h * 0.55} Q${w * 0.15},${h * 0.52} ${w * 0.3},${h * 0.54} Q${w * 0.45},${h * 0.56} ${w * 0.55},${h * 0.53} Q${w * 0.7},${h * 0.51} ${w * 0.85},${h * 0.54} Q${w * 0.95},${h * 0.56} ${w},${h * 0.53} L${w},${h} L0,${h} Z`;
   elements.push(createPath(0, 0, groundPath, 'url(#groundGrad)', { layer: 1, category: 'ground', modifiable: false, id: uid('ground') }));
 
   // Darker bottom ground layer
   elements.push(createRect(0, h * 0.75, w, h * 0.25, '#2E7D32', { layer: 1, category: 'ground', modifiable: false, opacity: 0.5, id: uid('ground_dark') }));
 
+  // Grass texture overlay using pattern
+  elements.push(createPath(0, 0, groundPath, 'url(#grassPat)', { layer: 1, category: 'ground', modifiable: false, opacity: 0.3, id: uid('grass_overlay') }));
+
   // ============================
-  // === LAYER 1: GRASS TEXTURE ===
+  // === LAYER 1: GRASS TUFTS ===
   // ============================
-  // Dense grass tufts scattered across the ground
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 22; i++) {
     const gx = rng.nextFloat(0, w);
     const gy = rng.nextFloat(h * 0.56, h * 0.98);
     const gh = rng.nextFloat(8, 18);
@@ -108,7 +97,6 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
   // === LAYER 1: WINDING STREAM ===
   // ============================
   const streamStartX = rng.nextFloat(w * 0.15, w * 0.35);
-  // Main stream path winding across the clearing
   const sp1x = streamStartX + rng.nextFloat(20, 60);
   const sp1y = h * 0.62;
   const sp2x = sp1x + rng.nextFloat(-30, 30);
@@ -121,16 +109,16 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
 
   const streamPath = `M${streamStartX},${h * 0.55} Q${sp1x},${sp1y} ${sp2x},${sp2y} Q${sp2x + 20},${sp2y + 10} ${sp3x},${sp3y} Q${sp3x + 15},${sp3y + 8} ${sp4x},${sp4y} Q${sp4x + 10},${sp4y + 5} ${sp5x},${h}`;
 
-  // Stream bank (wider, darker)
+  // Stream bank
   elements.push(createPath(0, 0, streamPath, 'none', { stroke: '#5D4037', strokeWidth: 18, layer: 1, category: 'stream', modifiable: false, opacity: 0.3, id: uid('stream_bank') }));
-  // Main water
-  elements.push(createPath(0, 0, streamPath, 'none', { stroke: 'url(#streamGrad)', strokeWidth: 13, layer: 1, category: 'stream', modifiable: true, opacity: 0.7, id: uid('stream') }));
+  // Main water with ripple filter
+  elements.push(createPath(0, 0, streamPath, 'none', { stroke: 'url(#streamGrad)', strokeWidth: 13, layer: 1, category: 'stream', modifiable: true, opacity: 0.7, id: uid('stream'), filter: 'url(#waterRipple)' }));
   // Water highlights
   elements.push(createPath(0, 0, streamPath, 'none', { stroke: '#BBDEFB', strokeWidth: 4, layer: 2, category: 'stream', modifiable: false, opacity: 0.45, id: uid('stream_hi') }));
 
   // Stream reflections / ripples
-  for (let i = 0; i < 5; i++) {
-    const t = (i + 1) / 6;
+  for (let i = 0; i < 6; i++) {
+    const t = (i + 1) / 7;
     const rx = streamStartX + (sp5x - streamStartX) * t + rng.nextFloat(-10, 10);
     const ry = h * 0.55 + (h - h * 0.55) * t + rng.nextFloat(-5, 5);
     elements.push(createEllipse(rx, ry, rng.nextFloat(6, 12), rng.nextFloat(2, 4), '#BBDEFB', {
@@ -139,15 +127,20 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
   }
 
   // ============================
-  // === LAYER 2: BACKGROUND TREES (8-12) ===
+  // === LAYER 2: BACKGROUND TREES (10-14) ===
   // ============================
-  const treeCount = rng.nextInt(8, 12);
+  const treeCount = rng.nextInt(10, 14);
   for (let i = 0; i < treeCount; i++) {
     const tx = rng.nextFloat(10, w - 30);
     const ty = h * rng.nextFloat(0.52, 0.58);
     const treeType = rng.pick(['pine', 'oak', 'willow', 'cherry'] as const);
     const treeSize = rng.nextFloat(80, 150);
-    elements.push(createTree(tx, ty, treeType, treeSize, rng));
+    const tree = detailedTree(tx, ty, treeType, treeSize, rng);
+    // Background trees get depth-of-field blur
+    if (ty < h * 0.55) {
+      tree.filter = 'url(#bgBlur)';
+    }
+    elements.push(tree);
   }
 
   // ============================
@@ -165,10 +158,12 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
   }
 
   // ============================
-  // === LAYER 2: ROCKS (4-7) ===
+  // === LAYER 2: ROCKS (5-8) ===
   // ============================
-  for (let i = 0; i < rng.nextInt(4, 7); i++) {
-    elements.push(createRock(rng.nextFloat(40, w - 40), rng.nextFloat(h * 0.6, h * 0.88), rng.nextFloat(12, 35), rng));
+  for (let i = 0; i < rng.nextInt(5, 8); i++) {
+    const rock = detailedRock(rng.nextFloat(40, w - 40), rng.nextFloat(h * 0.6, h * 0.88), rng.nextFloat(12, 35), rng);
+    rock.filter = 'url(#softShadow)';
+    elements.push(rock);
   }
 
   // ============================
@@ -178,10 +173,9 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
     const lx = rng.nextFloat(80, w - 200);
     const ly = rng.nextFloat(h * 0.65, h * 0.8);
     const logLen = rng.nextFloat(70, 100);
-    elements.push(createRect(lx, ly, logLen, 14, '#8B6914', { layer: 2, category: 'log', modifiable: true, stroke: '#6B3410', strokeWidth: 1, id: uid('log') }));
+    elements.push(createRect(lx, ly, logLen, 14, '#8B6914', { layer: 2, category: 'log', modifiable: true, stroke: '#6B3410', strokeWidth: 1, id: uid('log'), filter: 'url(#shadow)' }));
     elements.push(createCircle(lx, ly + 7, 7, '#A0522D', { layer: 2, category: 'log', modifiable: false, id: uid('log_end') }));
     elements.push(createCircle(lx + logLen, ly + 7, 7, '#A0522D', { layer: 2, category: 'log', modifiable: false, id: uid('log_end') }));
-    // Bark texture lines
     for (let i = 1; i < 5; i++) {
       const bx = lx + logLen * (i / 5);
       elements.push(createPath(bx, ly, `M${bx},${ly + 2} L${bx},${ly + 12}`, 'none', { stroke: '#6B3410', strokeWidth: 0.8, layer: 2, category: 'log', modifiable: false, opacity: 0.4, id: uid('bark') }));
@@ -192,7 +186,9 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
   // === LAYER 2: BENCH (optional) ===
   // ============================
   if (rng.chance(0.35)) {
-    elements.push(createBench(rng.nextFloat(w * 0.2, w * 0.7), h * rng.nextFloat(0.65, 0.78), rng));
+    const bench = detailedBench(rng.nextFloat(w * 0.2, w * 0.7), h * rng.nextFloat(0.65, 0.78), rng.nextFloat(35, 50), rng);
+    bench.filter = 'url(#shadow)';
+    elements.push(bench);
   }
 
   // ============================
@@ -200,30 +196,14 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
   // ============================
   if (rng.chance(0.3)) {
     const fenceX = rng.nextFloat(10, w * 0.3);
-    elements.push(createFence(fenceX, h * rng.nextFloat(0.6, 0.7), rng.nextFloat(80, 150), rng));
+    const fence = detailedFence(fenceX, h * rng.nextFloat(0.6, 0.7), rng.nextFloat(80, 150), rng.nextFloat(25, 35), rng);
+    fence.filter = 'url(#softShadow)';
+    elements.push(fence);
   }
 
   // ============================
-  // === LAYER 3: FLOWERS (8-12) ===
+  // === LAYER 3: WINDING PATH (optional) ===
   // ============================
-  for (let i = 0; i < rng.nextInt(8, 12); i++) {
-    const fx = rng.nextFloat(20, w - 20);
-    const fy = rng.nextFloat(h * 0.58, h * 0.93);
-    const flowerType = rng.pick(['daisy', 'tulip', 'rose', 'sunflower'] as const);
-    elements.push(createFlower(fx, fy, flowerType, rng.nextFloat(18, 38), rng));
-  }
-
-  // ============================
-  // === LAYER 3: MUSHROOMS (4-7) ===
-  // ============================
-  for (let i = 0; i < rng.nextInt(4, 7); i++) {
-    elements.push(createMushroom(rng.nextFloat(40, w - 40), rng.nextFloat(h * 0.68, h * 0.92), rng.nextFloat(12, 28), rng));
-  }
-
-  // ============================
-  // === LAYER 3: WINDING PATH (optional, if no stream nearby) ===
-  // ============================
-  // A dirt path winding through the clearing
   if (rng.chance(0.5)) {
     const pathStartX = rng.nextFloat(w * 0.55, w * 0.75);
     const pp1y = h * 0.58;
@@ -235,32 +215,50 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
 
     const dirtPath = `M${pathStartX},${h * 0.54} Q${pathStartX - 10},${pp1y} ${pp2x},${pp2y} Q${pp2x + 15},${pp2y + 8} ${pp3x},${pp3y} Q${pp3x + 10},${pp3y + 6} ${pp4x},${h}`;
 
-    // Path edges
     elements.push(createPath(0, 0, dirtPath, 'none', { stroke: '#5D4037', strokeWidth: 22, layer: 1, category: 'path', modifiable: false, opacity: 0.25, id: uid('path_edge') }));
-    // Dirt path
     elements.push(createPath(0, 0, dirtPath, 'none', { stroke: '#8D6E63', strokeWidth: 16, layer: 1, category: 'path', modifiable: true, opacity: 0.45, id: uid('path') }));
-    // Path center highlight
     elements.push(createPath(0, 0, dirtPath, 'none', { stroke: '#A1887F', strokeWidth: 6, layer: 1, category: 'path', modifiable: false, opacity: 0.3, id: uid('path_hi') }));
+  }
+
+  // ============================
+  // === LAYER 3: FLOWERS (10-14) ===
+  // ============================
+  for (let i = 0; i < rng.nextInt(10, 14); i++) {
+    const fx = rng.nextFloat(20, w - 20);
+    const fy = rng.nextFloat(h * 0.58, h * 0.93);
+    const flowerType = rng.pick(['daisy', 'tulip', 'rose', 'sunflower'] as const);
+    const flower = detailedFlower(fx, fy, flowerType, rng.nextFloat(18, 38), rng);
+    flower.filter = 'url(#softShadow)';
+    elements.push(flower);
+  }
+
+  // ============================
+  // === LAYER 3: MUSHROOMS (5-8) ===
+  // ============================
+  for (let i = 0; i < rng.nextInt(5, 8); i++) {
+    const mush = detailedMushroom(rng.nextFloat(40, w - 40), rng.nextFloat(h * 0.68, h * 0.92), rng.nextFloat(12, 28), rng);
+    mush.filter = 'url(#softShadow)';
+    elements.push(mush);
   }
 
   // ============================
   // === LAYER 3: BIRDS (3-5) ===
   // ============================
   for (let i = 0; i < rng.nextInt(3, 5); i++) {
-    elements.push(createBird(rng.nextFloat(40, w - 40), rng.nextFloat(25, h * 0.35), true, rng));
+    elements.push(detailedBird(rng.nextFloat(40, w - 40), rng.nextFloat(25, h * 0.35), true, rng));
   }
 
   // ============================
   // === LAYER 3: BUTTERFLIES (4-6) ===
   // ============================
   for (let i = 0; i < rng.nextInt(4, 6); i++) {
-    elements.push(createButterfly(rng.nextFloat(60, w - 60), rng.nextFloat(h * 0.35, h * 0.75), rng.nextFloat(12, 22), rng));
+    elements.push(detailedButterfly(rng.nextFloat(60, w - 60), rng.nextFloat(h * 0.35, h * 0.75), rng.nextFloat(12, 22), rng));
   }
 
   // ============================
   // === LAYER 4: FOREGROUND GRASS TUFTS ===
   // ============================
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 14; i++) {
     const gx = rng.nextFloat(0, w);
     const gy = rng.nextFloat(h * 0.88, h * 0.99);
     const gh = rng.nextFloat(10, 20);
@@ -275,7 +273,7 @@ export function generateForestClearing(rng: SeededRandom, w: number, h: number):
   }
 
   // ============================
-  // === LAYER 4: DAPPLED LIGHT SPOTS ON GROUND ===
+  // === LAYER 4: DAPPLED LIGHT SPOTS ===
   // ============================
   for (let i = 0; i < rng.nextInt(8, 14); i++) {
     const lx = rng.nextFloat(20, w - 20);

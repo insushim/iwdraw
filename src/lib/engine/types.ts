@@ -28,6 +28,8 @@ export interface SVGElementData {
   y1?: number;
   x2?: number;
   y2?: number;
+  filter?: string;
+  clipPath?: string;
 }
 
 export enum DifferenceType {

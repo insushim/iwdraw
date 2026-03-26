@@ -1,9 +1,16 @@
 import { SVGElementData } from '../engine/types';
 import { SeededRandom } from '../engine/random';
 import {
-  createRect, createCircle, createEllipse, createPath, createTree,
-  createHouse, createLamp, createPerson, createFence, createGroup, createLine, createPolygon,
+  createRect, createCircle, createEllipse, createPath, createGroup, createLine, createPolygon,
 } from '../engine/primitives';
+import {
+  combineDefs, outdoorDefs, snowGradient, linearGradient, radialGradient,
+  lampGlowGradient, dropShadow,
+} from './svg-effects';
+import {
+  detailedTree, detailedHouse, detailedPerson, detailedFence, detailedRock,
+  resetComponentId,
+} from './svg-components';
 
 let _uid = 0;
 function uid(p = 'sv') { return `${p}_${++_uid}_${Date.now().toString(36)}`; }
@@ -58,7 +65,7 @@ function createSnowman(x: number, y: number, size: number, rng: SeededRandom): S
   children.push(createLine(x + s * 0.35, y - s * 0.55, x + s * 0.4, y - s * 0.62, '#5C3317', { strokeWidth: 1.5, layer: 3 }));
   children.push(createLine(x + s * 0.35, y - s * 0.55, x + s * 0.42, y - s * 0.54, '#5C3317', { strokeWidth: 1.5, layer: 3 }));
 
-  return createGroup(x, y, children, { layer: 3, category: 'snowman', modifiable: true, id: uid('snowman') });
+  return createGroup(x, y, children, { layer: 3, category: 'snowman', modifiable: true, id: uid('snowman'), filter: 'url(#shadow)' });
 }
 
 // Smoke trail from chimney
@@ -78,23 +85,16 @@ function createDog(x: number, y: number, size: number, rng: SeededRandom): SVGEl
   const s = size;
   const color = rng.pick(['#8B4513', '#D2691E', '#F5DEB3', '#333']);
   const children: SVGElementData[] = [];
-  // Body
   children.push(createEllipse(x, y - s * 0.2, s * 0.25, s * 0.15, color, { layer: 3 }));
-  // Head
   children.push(createCircle(x + s * 0.2, y - s * 0.35, s * 0.12, color, { layer: 3 }));
-  // Ear
   children.push(createEllipse(x + s * 0.28, y - s * 0.42, s * 0.06, s * 0.08, color, { layer: 3, opacity: 0.8 }));
-  // Eye
   children.push(createCircle(x + s * 0.22, y - s * 0.37, s * 0.02, '#111', { layer: 3 }));
-  // Nose
   children.push(createCircle(x + s * 0.3, y - s * 0.33, s * 0.02, '#111', { layer: 3 }));
-  // Tail
   children.push(createPath(x, y, `M${x - s * 0.2},${y - s * 0.25} Q${x - s * 0.35},${y - s * 0.45} ${x - s * 0.28},${y - s * 0.5}`, 'none', { stroke: color, strokeWidth: s * 0.04, layer: 3 }));
-  // Legs
   children.push(createRect(x + s * 0.1, y - s * 0.08, s * 0.04, s * 0.08, color, { layer: 3 }));
   children.push(createRect(x - s * 0.08, y - s * 0.08, s * 0.04, s * 0.08, color, { layer: 3 }));
 
-  return createGroup(x, y, children, { layer: 3, category: 'animal', modifiable: true, id: uid('dog') });
+  return createGroup(x, y, children, { layer: 3, category: 'animal', modifiable: true, id: uid('dog'), filter: 'url(#shadow)' });
 }
 
 // Sled
@@ -103,58 +103,43 @@ function createSled(x: number, y: number, size: number, rng: SeededRandom): SVGE
   const children: SVGElementData[] = [];
   const woodColor = rng.pick(['#8B4513', '#A0522D', '#6B3410']);
 
-  // Runners (curved)
   children.push(createPath(x, y, `M${x},${y} Q${x + s * 0.1},${y + s * 0.05} ${x + s * 0.5},${y + s * 0.05} L${x + s * 0.55},${y}`, 'none', { stroke: '#555', strokeWidth: 2, layer: 3 }));
   children.push(createPath(x, y, `M${x},${y - s * 0.12} Q${x + s * 0.1},${y - s * 0.07} ${x + s * 0.5},${y - s * 0.07} L${x + s * 0.55},${y - s * 0.12}`, 'none', { stroke: '#555', strokeWidth: 2, layer: 3 }));
 
-  // Seat planks
   for (let i = 0; i < 4; i++) {
     const px = x + s * 0.08 + i * s * 0.1;
     children.push(createRect(px, y - s * 0.15, s * 0.08, s * 0.15, woodColor, { layer: 3, stroke: '#5C3317', strokeWidth: 0.5 }));
   }
 
-  // Supports
   children.push(createLine(x + s * 0.1, y - s * 0.02, x + s * 0.1, y - s * 0.12, '#555', { strokeWidth: 1.5, layer: 3 }));
   children.push(createLine(x + s * 0.45, y - s * 0.02, x + s * 0.45, y - s * 0.12, '#555', { strokeWidth: 1.5, layer: 3 }));
 
-  return createGroup(x, y, children, { layer: 3, category: 'sled', modifiable: true, id: uid('sled') });
+  return createGroup(x, y, children, { layer: 3, category: 'sled', modifiable: true, id: uid('sled'), filter: 'url(#shadow)' });
 }
 
 export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): { elements: SVGElementData[]; defs: string } {
   _uid = 0;
+  resetComponentId();
   const elements: SVGElementData[] = [];
 
   // === SVG DEFS ===
-  const defs = `
-    <linearGradient id="winterSkyGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#3B4A6B"/>
-      <stop offset="30%" stop-color="#5A6F8F"/>
-      <stop offset="60%" stop-color="#7A8FAF"/>
-      <stop offset="100%" stop-color="#9AAFCF"/>
-    </linearGradient>
-    <linearGradient id="snowGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="40%" stop-color="#F0F4F8"/>
-      <stop offset="100%" stop-color="#D8E2EC"/>
-    </linearGradient>
-    <radialGradient id="lampGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#FFD54F" stop-opacity="0.6"/>
-      <stop offset="40%" stop-color="#FFECB3" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#FFD54F" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="windowGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#FFE082" stop-opacity="0.9"/>
-      <stop offset="60%" stop-color="#FFB74D" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#FF8F00" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="snowfall">
-      <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="2" seed="42"/>
-      <feDisplacementMap in="SourceGraphic" scale="3"/>
-    </filter>
-    <filter id="softBlur">
-      <feGaussianBlur stdDeviation="2"/>
-    </filter>
-  `;
+  const defs = combineDefs(
+    outdoorDefs(),
+    linearGradient('winterSkyGrad', [
+      { offset: '0%', color: '#3B4A6B' },
+      { offset: '30%', color: '#5A6F8F' },
+      { offset: '60%', color: '#7A8FAF' },
+      { offset: '100%', color: '#9AAFCF' },
+    ]),
+    snowGradient('snowGrad'),
+    lampGlowGradient('lampGlow'),
+    radialGradient('windowGlow', [
+      { offset: '0%', color: '#FFE082', opacity: 0.9 },
+      { offset: '60%', color: '#FFB74D', opacity: 0.5 },
+      { offset: '100%', color: '#FF8F00', opacity: 0 },
+    ]),
+    dropShadow('snowShadow', 1, 2, 2, 'rgba(0,0,0,0.1)'),
+  );
 
   // ============================
   // === LAYER 0: SKY ===
@@ -169,7 +154,7 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
     const ary = rng.nextFloat(15, 35);
     const auroraColor = rng.pick(['#4CAF50', '#81C784', '#7E57C2', '#9575CD', '#26A69A']);
     elements.push(createEllipse(ax, ay, arx, ary, auroraColor, {
-      layer: 0, category: 'aurora', modifiable: false, opacity: rng.nextFloat(0.04, 0.08), id: uid('aurora'),
+      layer: 0, category: 'aurora', modifiable: false, opacity: rng.nextFloat(0.04, 0.08), id: uid('aurora'), filter: 'url(#bgBlur)',
     }));
   }
 
@@ -186,7 +171,7 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
 
     // Mountain body
     const mPts = `${mx},${h * 0.5} ${mx + mw / 2},${h * 0.5 - mh} ${mx + mw},${h * 0.5}`;
-    elements.push(createPolygon(mx, h * 0.5, mPts, mColor, { layer: 0, category: 'mountain', modifiable: false, opacity: 0.5 + depth * 0.3, id: uid('mtn') }));
+    elements.push(createPolygon(mx, h * 0.5, mPts, mColor, { layer: 0, category: 'mountain', modifiable: false, opacity: 0.5 + depth * 0.3, id: uid('mtn'), filter: 'url(#bgBlur)' }));
 
     // Snow cap
     const capW = mw * 0.35;
@@ -197,7 +182,6 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
   // ============================
   // === LAYER 1: SNOW GROUND ===
   // ============================
-  // Wavy snow surface
   const snowPath = `M0,${h * 0.48} Q${w * 0.1},${h * 0.46} ${w * 0.2},${h * 0.49} Q${w * 0.35},${h * 0.52} ${w * 0.45},${h * 0.47} Q${w * 0.6},${h * 0.44} ${w * 0.75},${h * 0.48} Q${w * 0.9},${h * 0.51} ${w},${h * 0.47} L${w},${h} L0,${h} Z`;
   elements.push(createPath(0, 0, snowPath, 'url(#snowGrad)', { layer: 1, category: 'ground', modifiable: false, id: uid('snow_ground') }));
 
@@ -209,7 +193,7 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
   }
 
   // ============================
-  // === LAYER 2: HOUSES (3-5) ===
+  // === LAYER 2: HOUSES (3-5) - detailed components
   // ============================
   const houseCount = rng.nextInt(3, 5);
   const housePositions: { x: number; y: number; s: number }[] = [];
@@ -218,23 +202,22 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
     const hx = w * (0.1 + i * 0.22) + rng.nextFloat(-20, 20);
     const hy = h * rng.nextFloat(0.48, 0.6);
     const hs = rng.nextFloat(60, 90);
-    const houseStyle = rng.pick(['traditional', 'cabin'] as const);
 
     housePositions.push({ x: hx, y: hy, s: hs });
 
-    // House itself
-    elements.push(createHouse(hx, hy, houseStyle, hs, rng));
+    // Detailed house component with shadow
+    const house = detailedHouse(hx, hy, hs, hs * 0.9, rng);
+    house.filter = 'url(#shadow)';
+    elements.push(house);
 
-    // Snow on roof (white path on top of house)
-    const roofSnowD = houseStyle === 'traditional'
-      ? `M${hx - hs * 0.12},${hy - hs * 0.5} Q${hx + hs * 0.25},${hy - hs * 0.53} ${hx + hs / 2},${hy - hs * 0.87} Q${hx + hs * 0.75},${hy - hs * 0.53} ${hx + hs + hs * 0.12},${hy - hs * 0.5} L${hx + hs + hs * 0.12},${hy - hs * 0.46} Q${hx + hs * 0.75},${hy - hs * 0.49} ${hx + hs / 2},${hy - hs * 0.82} Q${hx + hs * 0.25},${hy - hs * 0.49} ${hx - hs * 0.12},${hy - hs * 0.46} Z`
-      : `M${hx - hs * 0.1},${hy - hs * 0.45} Q${hx + hs * 0.25},${hy - hs * 0.48} ${hx + hs / 2},${hy - hs * 0.77} Q${hx + hs * 0.75},${hy - hs * 0.48} ${hx + hs + hs * 0.1},${hy - hs * 0.45} L${hx + hs + hs * 0.1},${hy - hs * 0.42} Q${hx + hs * 0.75},${hy - hs * 0.44} ${hx + hs / 2},${hy - hs * 0.72} Q${hx + hs * 0.25},${hy - hs * 0.44} ${hx - hs * 0.1},${hy - hs * 0.42} Z`;
-    elements.push(createPath(0, 0, roofSnowD, '#F8FAFC', { layer: 2, category: 'snow_roof', modifiable: false, opacity: 0.9, id: uid('roof_snow') }));
+    // Snow on roof
+    const roofSnowD = `M${hx - hs * 0.12},${hy - hs * 0.5} Q${hx + hs * 0.25},${hy - hs * 0.53} ${hx + hs / 2},${hy - hs * 0.87} Q${hx + hs * 0.75},${hy - hs * 0.53} ${hx + hs + hs * 0.12},${hy - hs * 0.5} L${hx + hs + hs * 0.12},${hy - hs * 0.46} Q${hx + hs * 0.75},${hy - hs * 0.49} ${hx + hs / 2},${hy - hs * 0.82} Q${hx + hs * 0.25},${hy - hs * 0.49} ${hx - hs * 0.12},${hy - hs * 0.46} Z`;
+    elements.push(createPath(0, 0, roofSnowD, '#F8FAFC', { layer: 2, category: 'snow_roof', modifiable: false, opacity: 0.9, id: uid('roof_snow'), filter: 'url(#snowShadow)' }));
 
     // Warm window glow overlay
     const glowX = hx + hs * 0.5;
     const glowY = hy - hs * 0.35;
-    elements.push(createCircle(glowX, glowY, hs * 0.4, 'url(#windowGlow)', { layer: 2, category: 'window_glow', modifiable: false, opacity: 0.3, id: uid('win_glow') }));
+    elements.push(createCircle(glowX, glowY, hs * 0.4, 'url(#windowGlow)', { layer: 2, category: 'window_glow', modifiable: false, opacity: 0.3, id: uid('win_glow'), filter: 'url(#glow)' }));
 
     // Chimney + smoke
     const chimneyX = hx + hs * rng.nextFloat(0.7, 0.85);
@@ -244,16 +227,18 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
   }
 
   // ============================
-  // === LAYER 2: PINE TREES (8-12) FROSTED ===
+  // === LAYER 2: PINE TREES (8-12) - detailed components, frosted
   // ============================
   const treeCount = rng.nextInt(8, 12);
   for (let i = 0; i < treeCount; i++) {
     const tx = rng.nextFloat(10, w - 30);
     const ty = h * rng.nextFloat(0.46, 0.62);
     const treeSize = rng.nextFloat(70, 130);
-    elements.push(createTree(tx, ty, 'pine', treeSize, rng));
+    const tree = detailedTree(tx, ty, 'pine', treeSize, rng);
+    tree.filter = 'url(#softShadow)';
+    elements.push(tree);
 
-    // Frost / snow on branches (white circles on tree)
+    // Frost / snow on branches
     const frostCount = rng.nextInt(3, 6);
     for (let j = 0; j < frostCount; j++) {
       const fx = tx + rng.nextFloat(-treeSize * 0.2, treeSize * 0.2);
@@ -271,22 +256,42 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
   for (let i = 0; i < lampCount; i++) {
     const lx = w * (0.15 + i * 0.25) + rng.nextFloat(-15, 15);
     const ly = h * rng.nextFloat(0.55, 0.68);
-    elements.push(createLamp(lx, ly, 'street', rng));
 
-    // Warm glow circle around lamp
+    // Simple lamp post (keep as primitive for customization)
+    const lampChildren: SVGElementData[] = [];
+    // Post
+    lampChildren.push(createRect(lx - 2, ly - 80, 4, 80, '#444', { layer: 2 }));
+    // Lamp head
+    lampChildren.push(createRect(lx - 6, ly - 85, 12, 8, '#555', { layer: 2 }));
+    // Light bulb area
+    lampChildren.push(createRect(lx - 4, ly - 82, 8, 4, '#FFD54F', { layer: 2, opacity: 0.8 }));
+    elements.push(createGroup(lx, ly, lampChildren, { layer: 2, category: 'lamp', modifiable: true, id: uid('lamp'), filter: 'url(#shadow)' }));
+
+    // Warm glow around lamp
     elements.push(createCircle(lx, ly - 82, 35, 'url(#lampGlow)', {
-      layer: 2, category: 'lamp_glow', modifiable: false, opacity: 0.7, id: uid('lamp_glow'),
+      layer: 2, category: 'lamp_glow', modifiable: false, opacity: 0.7, id: uid('lamp_glow'), filter: 'url(#glow)',
     }));
   }
 
   // ============================
-  // === LAYER 2: FENCE SECTIONS ===
+  // === LAYER 2: FENCE SECTIONS - detailed components
   // ============================
   const fenceCount = rng.nextInt(2, 3);
   for (let i = 0; i < fenceCount; i++) {
     const fx = rng.nextFloat(10, w * 0.8);
     const fy = h * rng.nextFloat(0.58, 0.72);
-    elements.push(createFence(fx, fy, rng.nextFloat(60, 120), rng));
+    const fence = detailedFence(fx, fy, rng.nextFloat(60, 120), rng.nextFloat(25, 35), rng);
+    fence.filter = 'url(#snowShadow)';
+    elements.push(fence);
+  }
+
+  // ============================
+  // === LAYER 2: ROCKS scattered in snow
+  // ============================
+  for (let i = 0; i < rng.nextInt(3, 5); i++) {
+    const rock = detailedRock(rng.nextFloat(20, w - 20), rng.nextFloat(h * 0.6, h * 0.85), rng.nextFloat(8, 20), rng);
+    rock.filter = 'url(#snowShadow)';
+    elements.push(rock);
   }
 
   // ============================
@@ -297,15 +302,17 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
   elements.push(createSnowman(snowmanX, snowmanY, rng.nextFloat(70, 100), rng));
 
   // ============================
-  // === LAYER 3: PEOPLE (2-3) BUNDLED UP ===
+  // === LAYER 3: PEOPLE (2-3) - detailed components
   // ============================
   const peopleCount = rng.nextInt(2, 3);
   for (let i = 0; i < peopleCount; i++) {
     const px = rng.nextFloat(w * 0.1, w * 0.9);
     const py = h * rng.nextFloat(0.6, 0.75);
-    elements.push(createPerson(px, py, rng));
+    const person = detailedPerson(px, py, rng.nextFloat(28, 38), rng);
+    person.filter = 'url(#shadow)';
+    elements.push(person);
 
-    // Winter hat (circle on head)
+    // Winter hat
     elements.push(createCircle(px, py - 34, 7, rng.pick(['#DC143C', '#4169E1', '#228B22', '#FFD700']), {
       layer: 3, category: 'hat', modifiable: false, id: uid('hat'),
     }));
@@ -336,7 +343,6 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
     const trackLen = rng.nextFloat(80, 180);
     const trackD = `M${sx},${sy} Q${sx + trackLen * 0.3},${sy + rng.nextFloat(-5, 5)} ${sx + trackLen * 0.6},${sy + rng.nextFloat(-3, 3)} Q${sx + trackLen * 0.8},${sy + rng.nextFloat(-4, 4)} ${sx + trackLen},${sy + rng.nextFloat(-2, 2)}`;
     elements.push(createPath(0, 0, trackD, 'none', { stroke: '#C8D6E5', strokeWidth: 1.5, layer: 1, category: 'track', modifiable: false, opacity: 0.4, id: uid('track') }));
-    // Parallel track
     elements.push(createPath(0, 0, trackD.replace(new RegExp(`,${sy}`, 'g'), `,${sy + 4}`), 'none', { stroke: '#C8D6E5', strokeWidth: 1.5, layer: 1, category: 'track', modifiable: false, opacity: 0.35, id: uid('track2') }));
   }
 
@@ -346,13 +352,12 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
   for (let i = 0; i < rng.nextInt(6, 10); i++) {
     const fpx = rng.nextFloat(w * 0.1, w * 0.9);
     const fpy = rng.nextFloat(h * 0.6, h * 0.9);
-    // Each footprint is a small ellipse pair
     elements.push(createEllipse(fpx, fpy, 3, 1.5, '#C8D6E5', { layer: 1, category: 'footprint', modifiable: false, opacity: 0.3, id: uid('fp') }));
     elements.push(createEllipse(fpx + 5, fpy + 3, 3, 1.5, '#C8D6E5', { layer: 1, category: 'footprint', modifiable: false, opacity: 0.3, id: uid('fp') }));
   }
 
   // ============================
-  // === LAYER 1: ROAD/PATH (subtle) ===
+  // === LAYER 1: ROAD/PATH ===
   // ============================
   const roadD = `M0,${h * 0.68} Q${w * 0.2},${h * 0.66} ${w * 0.4},${h * 0.7} Q${w * 0.6},${h * 0.74} ${w * 0.8},${h * 0.69} Q${w * 0.95},${h * 0.66} ${w},${h * 0.7}`;
   elements.push(createPath(0, 0, roadD, 'none', { stroke: '#B0BEC5', strokeWidth: 30, layer: 1, category: 'road', modifiable: false, opacity: 0.15, id: uid('road') }));
@@ -377,14 +382,12 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
     const sx = rng.nextFloat(20, w - 20);
     const sy = rng.nextFloat(10, h * 0.8);
     const ss = rng.nextFloat(4, 8);
-    // 6-arm snowflake
     const children: SVGElementData[] = [];
     for (let a = 0; a < 6; a++) {
       const angle = a * 60 * Math.PI / 180;
       const ex = sx + Math.cos(angle) * ss;
       const ey = sy + Math.sin(angle) * ss;
       children.push(createLine(sx, sy, ex, ey, '#FFFFFF', { strokeWidth: 1, layer: 4, opacity: 0.7 }));
-      // Small branch
       const bx = sx + Math.cos(angle) * ss * 0.6;
       const by = sy + Math.sin(angle) * ss * 0.6;
       const brAngle1 = angle + 0.5;
@@ -408,11 +411,11 @@ export function generateSnowyVillage(rng: SeededRandom, w: number, h: number): {
   }
 
   // ============================
-  // === LAYER 4: WARM LIGHT PATCHES ON SNOW (from windows) ===
+  // === LAYER 4: WARM LIGHT PATCHES ON SNOW ===
   // ============================
   for (const hp of housePositions) {
     elements.push(createEllipse(hp.x + hp.s * 0.5, hp.y + 10, hp.s * 0.6, 12, '#FFE082', {
-      layer: 1, category: 'light_patch', modifiable: false, opacity: 0.08, id: uid('light_patch'),
+      layer: 1, category: 'light_patch', modifiable: false, opacity: 0.08, id: uid('light_patch'), filter: 'url(#glow)',
     }));
   }
 

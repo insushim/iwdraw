@@ -30,7 +30,9 @@ export class SVGRenderer {
         const childrenStr = (el.children || []).map(c => this.renderElement(c)).join('\n');
         const transform = el.transform ? ` transform="${el.transform}"` : '';
         const opacity = el.opacity !== undefined ? ` opacity="${el.opacity}"` : '';
-        return `<g${transform}${opacity} data-id="${el.id}">${childrenStr}</g>`;
+        const filter = el.filter ? ` filter="${el.filter}"` : '';
+        const clipPathAttr = el.clipPath ? ` clip-path="${el.clipPath}"` : '';
+        return `<g${transform}${opacity}${filter}${clipPathAttr} data-id="${el.id}">${childrenStr}</g>`;
       }
       default:
         return '';
@@ -51,6 +53,8 @@ export class SVGRenderer {
     } else if (el.transform) {
       parts.push(`transform="${el.transform}"`);
     }
+    if (el.filter) parts.push(`filter="${el.filter}"`);
+    if (el.clipPath) parts.push(`clip-path="${el.clipPath}"`);
     parts.push(`data-id="${el.id}"`);
     return parts.join(' ');
   }
