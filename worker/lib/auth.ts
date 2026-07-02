@@ -2,7 +2,10 @@
 // 교사 세션과 학생 토큰 모두 HS256. Supabase Auth / djwt 대체.
 
 const enc = new TextEncoder();
-const PBKDF2_ITER = 600_000; // OWASP 2023 권장(PBKDF2-HMAC-SHA256 ≥600k)
+// ⚠️ Cloudflare Workers Web Crypto는 PBKDF2 반복을 100,000으로 하드 제한한다
+// (그 이상은 "iteration counts above 100000 are not supported"로 런타임 거부).
+// OWASP 권장(≥600k)은 Workers에서 불가 — 100k가 플랫폼 상한. (로컬 miniflare는 600k 허용하나 프로덕션 거부.)
+const PBKDF2_ITER = 100_000;
 const PBKDF2_LEN = 32; // bytes
 
 // ── base64url ──
