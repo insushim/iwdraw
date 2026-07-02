@@ -91,16 +91,35 @@ export class Canvas2DBackend implements RendererBackend {
     if (eraser) target.restore();
   }
 
+  presentStroke(target: CanvasRenderingContext2D): void {
+    if (!this.ctx) return;
+    // 지우개는 레이어에 직접 그려져 이미 실시간으로 보임
+    if (this.ctx.composite === "destination-out") return;
+    target.save();
+    target.globalCompositeOperation =
+      this.ctx.composite === "multiply"
+        ? "multiply"
+        : this.ctx.composite === "lighter"
+          ? "lighter"
+          : "source-over";
+    target.drawImage(this.strokeBuf, 0, 0);
+    target.restore();
+  }
+
   endStroke(): void {
     if (!this.ctx || !this.layerCtx) return;
     if (this.ctx.composite === "destination-out") {
       this.ctx = null;
       return; // 지우개는 이미 레이어에 직접 반영됨
     }
-    // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영
+    // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영(라이브 프리뷰와 동일해야 함)
     this.layerCtx.save();
     this.layerCtx.globalCompositeOperation =
-      this.ctx.composite === "multiply" ? "multiply" : "source-over";
+      this.ctx.composite === "multiply"
+        ? "multiply"
+        : this.ctx.composite === "lighter"
+          ? "lighter"
+          : "source-over";
     this.layerCtx.drawImage(this.strokeBuf, 0, 0);
     this.layerCtx.restore();
     this.ctx = null;

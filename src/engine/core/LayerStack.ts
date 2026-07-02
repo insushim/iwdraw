@@ -129,15 +129,24 @@ export class LayerStack {
     for (const l of this.layers) if (!l.isLineart) l.ctx.clearRect(0, 0, this.width, this.height);
   }
 
-  /** 모든 레이어를 표시 캔버스에 합성 */
-  composite(target: CanvasRenderingContext2D): void {
+  /**
+   * 모든 레이어를 표시 캔버스에 합성.
+   * liveStroke: 활성 레이어를 "레이어+진행 중 스트로크" 합성본으로 대체해 그리는 훅.
+   * 레이어 자체의 opacity/blend가 적용된 상태에서 호출되므로 프리뷰가 최종 결과와 일치하고,
+   * 지우개(destination-out) 프리뷰도 활성 레이어만 뚫는다.
+   */
+  composite(
+    target: CanvasRenderingContext2D,
+    liveStroke?: (ctx: CanvasRenderingContext2D, layer: Layer) => void,
+  ): void {
     target.clearRect(0, 0, this.width, this.height);
     for (const l of this.layers) {
       if (!l.visible || l.opacity === 0) continue;
       target.save();
       target.globalAlpha = l.opacity;
       target.globalCompositeOperation = blendToComposite(l.blend);
-      target.drawImage(l.canvas, 0, 0);
+      if (liveStroke && l.id === this.activeId) liveStroke(target, l);
+      else target.drawImage(l.canvas, 0, 0);
       target.restore();
     }
   }

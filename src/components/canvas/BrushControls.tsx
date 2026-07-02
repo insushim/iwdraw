@@ -2,6 +2,7 @@
 
 import { useEditor } from "@/store/editor";
 import { rgbToCss } from "@/engine/types";
+import { BRUSH_SIZE_SCALE } from "@/engine/brushes";
 
 /* 브러시 크기(큰 슬라이더+실시간 미리보기 원) + 모드별 물양/보정 슬라이더 */
 export function BrushControls() {
@@ -17,7 +18,7 @@ export function BrushControls() {
   const mode = useEditor((s) => s.mode);
   const brush = useEditor((s) => s.brush);
 
-  const preview = Math.max(4, Math.min(64, size));
+  const preview = Math.max(4, Math.min(60, size * (BRUSH_SIZE_SCALE[brush] ?? 1)));
 
   return (
     <div className="rounded-card bg-paper p-3 shadow-soft">

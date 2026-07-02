@@ -9,7 +9,7 @@ import {
 } from "../types";
 
 /** 브러시 팁 종류 — 백엔드가 이 키로 스탬프 텍스처를 준비한다 */
-export type TipKind = "soft" | "hard" | "grain" | "rough" | "chunk" | "bristle";
+export type TipKind = "soft" | "hard" | "grain" | "rough" | "chunk" | "bristle" | "flat";
 
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
 export type DabComposite = "source-over" | "multiply" | "lighter" | "destination-out";
@@ -17,6 +17,11 @@ export type DabComposite = "source-over" | "multiply" | "lighter" | "destination
 export interface BrushConfig {
   id: BrushId;
   tip: TipKind;
+  /**
+   * 같은 '굵기' 슬라이더에서 브러시별 실제 픽셀 크기 배율.
+   * 연필(0.45)은 가늘게, 에어브러시(2.5)는 넓게 — 도구 간 체감 차이의 핵심.
+   */
+  sizeScale: number;
   /** dab 간 간격 = size × spacing */
   spacing: number;
   /** dab 1개 알파 기본값(누적되어 진해짐) */
@@ -39,6 +44,7 @@ export interface BrushConfig {
 }
 
 const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
+  sizeScale: 1,
   spacing: 0.18,
   flow: 0.7,
   jitter: 0,
@@ -87,7 +93,7 @@ export class BrushBase {
     const segLen = dist(from.x, from.y, p.x, p.y);
     if (segLen === 0) return [];
 
-    const step = Math.max(1, this.settings.size * this.cfg.spacing);
+    const step = Math.max(1, this.settings.size * this.cfg.sizeScale * this.cfg.spacing);
     const dabs: Dab[] = [];
     const angle = Math.atan2(p.y - from.y, p.x - from.x);
 
@@ -118,13 +124,14 @@ export class BrushBase {
     const c = this.cfg;
     const s = this.settings;
     const pr = clamp(p.pressure, 0, 1);
+    const base = s.size * c.sizeScale;
 
     const sizeK = 1 - c.sizePressure * (1 - pr);
-    const size = Math.max(1, s.size * Math.max(c.minSizeRatio, sizeK));
+    const size = Math.max(1, base * Math.max(c.minSizeRatio, sizeK));
     const alphaK = 1 - c.alphaPressure * (1 - pr);
     const alpha = clamp(c.flow * s.opacity * alphaK, 0.01, 1);
 
-    const j = c.jitter * s.size;
+    const j = c.jitter * base;
     const dab: Dab = {
       x: p.x + (j ? (this.rng() - 0.5) * j : 0),
       y: p.y + (j ? (this.rng() - 0.5) * j : 0),
@@ -133,7 +140,7 @@ export class BrushBase {
       rotation: c.rotationFollowsStroke ? angle : this.rng() * Math.PI * 2,
     };
     if (c.dynamicHue) {
-      dab.color = hslToRgb((this.traveled / 600) % 1, 0.9, 0.55);
+      dab.color = hslToRgb((this.traveled / 340) % 1, 0.9, 0.55);
     }
     if (c.carriesWater) {
       dab.water = s.waterAmount;

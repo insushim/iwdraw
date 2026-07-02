@@ -237,10 +237,11 @@ export class ArtEngine {
     this.strokeStartTs = performance.now();
     this.firstDabLatency = -1;
     this.strokeBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
-    // undo용 before 스냅샷(활성 레이어 전체 1장 — finalize에서 더티 타일만 잘라 씀)
-    this.beforeFull = new Uint8ClampedArray(
-      this.layers.active.ctx.getImageData(0, 0, this.width, this.height).data,
-    );
+    // undo용 before 스냅샷 — destination-out(지우개류)만 여기서(레이어에 직접 그리는 백엔드가 있음).
+    // 다른 브러시는 endStroke 합성 직전까지 레이어가 안 변하므로 그때 캡처
+    // (스트로크 시작 시 7MB getImageData 동기 readback 히치 제거).
+    this.beforeFull =
+      this.brush.cfg.composite === "destination-out" ? this.snapshotActiveLayer() : null;
 
     this.cm.backend.beginStroke(this.brushContext());
     const dabs = this.brush.begin(this.curPoints[0], this.settings);
@@ -281,8 +282,28 @@ export class ArtEngine {
       }
     }
 
+    // 합성 직전 스냅샷(레이어는 아직 미변경 상태)
+    if (!this.beforeFull) this.beforeFull = this.snapshotActiveLayer();
     this.cm.backend.endStroke();
     this.finalizeStroke(recorded);
+  }
+
+  private snapshotActiveLayer(): Uint8ClampedArray {
+    return new Uint8ClampedArray(
+      this.layers.active.ctx.getImageData(0, 0, this.width, this.height).data,
+    );
+  }
+
+  /** 라이브 프리뷰용 스크래치 캔버스(지연 생성, 스트로크 중에만 사용) */
+  private scratch: CanvasRenderingContext2D | null = null;
+  private previewScratchCtx(): CanvasRenderingContext2D {
+    if (!this.scratch) {
+      const c = document.createElement("canvas");
+      c.width = this.width;
+      c.height = this.height;
+      this.scratch = c.getContext("2d")!;
+    }
+    return this.scratch;
   }
 
   private paintDabs(dabs: ReturnType<BrushBase["begin"]>, center: StrokePoint): void {
@@ -447,6 +468,8 @@ export class ArtEngine {
   }
 
   private applyQuickShape(kind: QuickShapeKind, points: { x: number; y: number }[]): void {
+    // 레이어에 직접 그리기 전에 undo용 before 확보(홀드 타이머로 스트로크 중간에도 옴)
+    if (!this.beforeFull) this.beforeFull = this.snapshotActiveLayer();
     const ctx = this.layers.active.ctx;
     // 임시 스트로크 취소: 마지막 finalize 전이므로 레이어에 이미 그려진 임시 dab을 덮어야 함.
     // 간단화를 위해 현재 스트로크 영역을 before로 복원 후 도형을 그린다.
@@ -551,6 +574,7 @@ export class ArtEngine {
   }
   setLayerOpacity(id: string, o: number): void {
     this.layers.setOpacity(id, o);
+    this.emitLayers(); // 스토어 미러 갱신 — 컨트롤드 슬라이더가 따라오도록
     this.requestComposite();
   }
   setLayerBlend(id: string, b: LayerInfo["blend"]): void {
@@ -599,10 +623,24 @@ export class ArtEngine {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.setTransform(this.view.scale, 0, 0, this.view.scale, this.view.ox, this.view.oy);
-    // 종이 배경
+    // 진행 중 스트로크는 활성 레이어와 스크래치에서 먼저 합성해 정확히 프리뷰 —
+    // 지우개가 아래 레이어를 뚫어 보이지 않고, 레이어 opacity/blend도 그대로 반영
+    this.layers.composite(ctx, (c, layer) => {
+      if (!this.brush) {
+        c.drawImage(layer.canvas, 0, 0);
+        return;
+      }
+      const s = this.previewScratchCtx();
+      s.clearRect(0, 0, this.width, this.height);
+      s.drawImage(layer.canvas, 0, 0);
+      this.cm.backend.presentStroke(s);
+      c.drawImage(s.canvas, 0, 0);
+    });
+    // 종이 배경은 맨 뒤에 깐다(destination-over) — 지우개 프리뷰가 종이까지 뚫지 않게
+    ctx.globalCompositeOperation = "destination-over";
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, this.width, this.height);
-    this.layers.composite(ctx);
+    ctx.globalCompositeOperation = "source-over";
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.emit("dirty", {});
   }

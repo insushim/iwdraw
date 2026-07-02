@@ -341,10 +341,9 @@ export class WebGL2Backend implements RendererBackend {
     return true;
   }
 
-  endStroke(): void {
-    if (!this.ctx) return;
+  /** strokeFbo → glCanvas(기본 프레임버퍼) 복사 — 프리뷰/합성 공용 */
+  private blitStrokeToScreen(): void {
     const gl = this.gl;
-    // 스트로크 버퍼(premultiplied)를 화면 캔버스로 복사해 2D 레이어에 합성
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.width, this.height);
     gl.clearColor(0, 0, 0, 0);
@@ -357,6 +356,29 @@ export class WebGL2Backend implements RendererBackend {
     gl.uniform1i(gl.getUniformLocation(this.copyProg, "u_tex"), 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
+  }
+
+  presentStroke(target: CanvasRenderingContext2D): void {
+    if (!this.ctx) return;
+    this.blitStrokeToScreen();
+    const c = this.ctx.composite;
+    target.save();
+    target.globalCompositeOperation =
+      c === "destination-out"
+        ? "destination-out"
+        : c === "multiply"
+          ? "multiply"
+          : c === "lighter"
+            ? "lighter"
+            : "source-over";
+    target.drawImage(this.glCanvas, 0, 0);
+    target.restore();
+  }
+
+  endStroke(): void {
+    if (!this.ctx) return;
+    // 스트로크 버퍼(premultiplied)를 화면 캔버스로 복사해 2D 레이어에 합성
+    this.blitStrokeToScreen();
 
     const layerCtx = (this.ctx.layerCanvas as HTMLCanvasElement).getContext("2d")!;
     layerCtx.save();

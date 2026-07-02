@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useEditor } from "@/store/editor";
 import type { BlendMode } from "@/engine/types";
+import { Icon } from "./icons";
 
 const BLENDS: { id: BlendMode; label: string }[] = [
   { id: "normal", label: "보통" },
@@ -30,10 +31,16 @@ export function LayerPanel() {
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="pressable flex w-full items-center justify-between rounded-card px-4 py-3 font-display text-base text-ink"
+        className="pressable flex w-full items-center gap-2 rounded-card px-3 py-2.5 font-display text-base text-ink"
       >
-        <span>🗂️ 레이어 ({drawable.length})</span>
-        <span className={`transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+        <Icon name="layers" className="h-6 w-6" />
+        <span>레이어</span>
+        <span className="rounded-full bg-cream px-2 py-0.5 text-xs font-bold text-ink-soft">
+          {drawable.length}
+        </span>
+        <span className={`ml-auto text-ink-faint transition-transform ${open ? "rotate-180" : ""}`}>
+          ▾
+        </span>
       </button>
 
       {open && (
@@ -43,21 +50,21 @@ export function LayerPanel() {
             return (
               <div
                 key={l.id}
-                className={`rounded-[14px] border p-2 ${
+                className={`rounded-2xl border p-2 ${
                   active ? "border-coral bg-coral-soft" : "border-cream-deep bg-cream"
                 } ${l.isLineart ? "opacity-90" : ""}`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setVisible(l.id, !l.visible)}
                     aria-label={l.visible ? "숨기기" : "보이기"}
-                    className="touch-target text-lg"
+                    className="pressable rounded-lg p-1"
                   >
-                    {l.visible ? "👁️" : "🙈"}
+                    <Icon name={l.visible ? "eye" : "eyeOff"} className="h-5 w-5" />
                   </button>
                   <button
                     onClick={() => !l.isLineart && setActive(l.id)}
-                    className="flex-1 text-left font-semibold text-ink"
+                    className="flex-1 truncate text-left text-sm font-semibold text-ink"
                     disabled={l.isLineart}
                   >
                     {l.name}
@@ -67,9 +74,9 @@ export function LayerPanel() {
                     <button
                       onClick={() => removeLayer(l.id)}
                       aria-label="레이어 삭제"
-                      className="touch-target text-danger"
+                      className="pressable rounded-lg p-1"
                     >
-                      🗑️
+                      <Icon name="trash" className="h-5 w-5" />
                     </button>
                   )}
                 </div>
@@ -104,9 +111,9 @@ export function LayerPanel() {
           <button
             onClick={addLayer}
             disabled={drawable.length >= 8}
-            className="pressable touch-target w-full rounded-[14px] border-2 border-dashed border-ink-faint py-2 font-semibold text-ink-soft disabled:opacity-40"
+            className="pressable flex w-full items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-ink-faint py-2 text-sm font-semibold text-ink-soft disabled:opacity-40"
           >
-            ＋ 새 레이어
+            <Icon name="plus" className="h-4 w-4 text-ink-soft" />새 레이어
           </button>
         </div>
       )}

@@ -55,22 +55,26 @@ export const STROKE_BRUSHES: BrushId[] = [
 export interface BrushMeta {
   id: BrushId;
   label: string;
-  emoji: string;
   /** 저학년 모드 기본 6종에 포함 */
   junior: boolean;
 }
 
 export const BRUSH_META: BrushMeta[] = [
-  { id: "pencil", label: "연필", emoji: "✏️", junior: true },
-  { id: "crayon", label: "크레용", emoji: "🖍️", junior: true },
-  { id: "marker", label: "마커", emoji: "🖊️", junior: true },
-  { id: "watercolor", label: "수채붓", emoji: "💧", junior: true },
-  { id: "oil", label: "유화붓", emoji: "🎨", junior: false },
-  { id: "airbrush", label: "에어브러시", emoji: "💨", junior: false },
-  { id: "oilpastel", label: "오일파스텔", emoji: "🟠", junior: false },
-  { id: "glow", label: "글로우", emoji: "✨", junior: false },
-  { id: "rainbow", label: "무지개", emoji: "🌈", junior: true },
-  { id: "eraser", label: "지우개", emoji: "🧼", junior: true },
+  { id: "pencil", label: "연필", junior: true },
+  { id: "crayon", label: "크레용", junior: true },
+  { id: "marker", label: "마커", junior: true },
+  { id: "watercolor", label: "수채붓", junior: true },
+  { id: "oil", label: "유화붓", junior: false },
+  { id: "airbrush", label: "에어브러시", junior: false },
+  { id: "oilpastel", label: "오일파스텔", junior: false },
+  { id: "glow", label: "글로우", junior: false },
+  { id: "rainbow", label: "무지개", junior: true },
+  { id: "eraser", label: "지우개", junior: true },
 ];
+
+/** 브러시별 실제 픽셀 배율 — UI(굵기 미리보기 등)가 엔진 클래스를 직접 만들지 않게 여기서 1회 산출 */
+export const BRUSH_SIZE_SCALE: Partial<Record<BrushId, number>> = Object.fromEntries(
+  STROKE_BRUSHES.map((id) => [id, createBrush(id).cfg.sizeScale]),
+);
 
 export { BrushBase };

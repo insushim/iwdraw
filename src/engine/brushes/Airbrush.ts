@@ -1,15 +1,16 @@
 import { BrushBase } from "./BrushBase";
 
-/** 에어브러시: 가우시안 분사(soft 팁 + 낮은 flow + 촘촘한 spacing) */
+/** 에어브러시: 아주 넓고(2.5배) 아주 옅은 가우시안 분사 + 큰 흔들림 — 스프레이 안개 */
 export class Airbrush extends BrushBase {
   constructor(rng?: () => number) {
     super(
       {
         id: "airbrush",
         tip: "soft",
-        spacing: 0.06,
-        flow: 0.06,
-        jitter: 0.15,
+        sizeScale: 2.5,
+        spacing: 0.05,
+        flow: 0.035,
+        jitter: 0.35,
         sizePressure: 0.3,
         alphaPressure: 0.6,
         minSizeRatio: 0.8,

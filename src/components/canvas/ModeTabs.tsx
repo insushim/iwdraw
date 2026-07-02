@@ -1,52 +1,57 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEditor } from "@/store/editor";
 import type { Mode } from "@/engine/types";
+import { Icon, type IconName } from "./icons";
 
-const MODES: { id: Mode; label: string; emoji: string; tone: string }[] = [
-  { id: "sketch", label: "스케치", emoji: "✏️", tone: "bg-sun-soft" },
-  { id: "watercolor", label: "수채화", emoji: "💧", tone: "bg-sky-soft" },
-  { id: "oil", label: "유화", emoji: "🎨", tone: "bg-coral-soft" },
-  { id: "coloring", label: "색칠하기", emoji: "🖍️", tone: "bg-leaf-soft" },
+const MODES: { id: Mode; label: string; icon: IconName; tone: string; ring: string }[] = [
+  { id: "sketch", label: "스케치", icon: "sketch", tone: "bg-sun-soft", ring: "ring-sun" },
+  { id: "watercolor", label: "수채화", icon: "watercolor", tone: "bg-sky-soft", ring: "ring-sky" },
+  { id: "oil", label: "유화", icon: "palette", tone: "bg-coral-soft", ring: "ring-coral" },
+  { id: "coloring", label: "색칠하기", icon: "coloring", tone: "bg-leaf-soft", ring: "ring-leaf" },
 ];
 
-const COLORING_STEPS = ["① 도안 고르기", "② 색칠하기", "③ 배경 꾸미기"];
-
-export function ModeTabs() {
+/*
+ * 모드 탭(헤더 중앙). 색칠하기는 도안이 있어야 의미가 있으므로,
+ * 도안 없이 누르면 도안 고르기(/coloring)로 데려간다.
+ */
+export function ModeTabs({ hasLineart = false }: { hasLineart?: boolean }) {
   const mode = useEditor((s) => s.mode);
   const setMode = useEditor((s) => s.setMode);
+  const router = useRouter();
 
   return (
-    <div className="flex flex-col gap-2">
-      <div role="tablist" aria-label="그리기 모드" className="flex gap-1.5 rounded-card bg-paper p-1.5 shadow-soft">
-        {MODES.map((m) => {
-          const active = mode === m.id;
-          return (
-            <button
-              key={m.id}
-              role="tab"
-              aria-selected={active}
-              onClick={() => setMode(m.id)}
-              className={`pressable touch-target flex items-center gap-1.5 rounded-[14px] px-3 py-2 font-display text-base transition-colors ${
-                active ? `${m.tone} text-ink shadow-soft` : "text-ink-soft hover:bg-cream"
-              }`}
-            >
-              <span className="text-xl">{m.emoji}</span>
-              <span className="hidden sm:inline">{m.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      {mode === "coloring" && (
-        <div className="flex items-center gap-2 self-start rounded-full bg-leaf-soft px-3 py-1 text-sm font-semibold text-leaf-deep">
-          {COLORING_STEPS.map((s, i) => (
-            <span key={s} className="flex items-center gap-2">
-              {i > 0 && <span className="text-leaf">›</span>}
-              {s}
-            </span>
-          ))}
-        </div>
-      )}
+    <div
+      role="tablist"
+      aria-label="그리기 모드"
+      className="flex gap-1 rounded-full bg-paper p-1 shadow-soft"
+    >
+      {MODES.map((m) => {
+        const active = mode === m.id;
+        return (
+          <button
+            key={m.id}
+            role="tab"
+            aria-selected={active}
+            aria-label={m.label}
+            onClick={() => {
+              if (m.id === "coloring" && !hasLineart) {
+                router.push("/coloring"); // 도안 먼저 고르기
+                return;
+              }
+              setMode(m.id);
+            }}
+            title={m.id === "coloring" && !hasLineart ? "도안을 골라 색칠해요" : m.label}
+            className={`pressable flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-base transition-colors ${
+              active ? `${m.tone} text-ink shadow-soft ring-2 ${m.ring}` : "text-ink-soft hover:bg-cream"
+            }`}
+          >
+            <Icon name={m.icon} className="h-6 w-6" />
+            <span className="hidden lg:inline">{m.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

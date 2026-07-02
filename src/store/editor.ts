@@ -97,7 +97,15 @@ export const useEditor = create<EditorState>((set, get) => ({
       engine.on("strokeLatency", ({ ms }) => set({ latencyMs: Math.round(ms) })),
       engine.on("restoreAvailable", ({ savedAt }) => set({ restoreAvailable: savedAt })),
     ];
-    set({ engine, ready: true, usingWebGL2: engine.usingWebGL2 });
+    // 엔진 constructor가 이미 emit한 초기 상태를 직접 동기화(구독이 늦게 붙어 놓침)
+    const stack = engine.getLayers();
+    set({
+      engine,
+      ready: true,
+      usingWebGL2: engine.usingWebGL2,
+      layers: stack.info,
+      activeLayerId: stack.activeId,
+    });
     void engine.checkRestore();
   },
 

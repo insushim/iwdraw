@@ -11,6 +11,7 @@ import { fitAspectHelper } from "@/lib/aspect";
  * 캔버스 해상도는 "도안 비율"에 맞춰 결정한다(세로 도안 → 세로 캔버스).
  * 폰(세로)에선 꽉 차고, 크롬북(가로)에선 색칠지처럼 가운데 세로로 표시 — 도안 재생성 불필요.
  * 빈 캔버스는 orientation(가로/세로)으로 결정.
+ * 바깥은 어두운 작업대(bg), 종이(캔버스)만 하얗게 — 그릴 수 있는 영역이 한눈에 보인다.
  */
 export interface CanvasStageProps {
   /** 색칠 모드 초기 도안 URL */
@@ -85,13 +86,13 @@ export function CanvasStage({
   }, [size]);
 
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-card bg-white shadow-lift">
+    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-card bg-cream-deep/60 p-2 md:p-4">
       {size && (
         <canvas
           ref={canvasRef}
           width={size.width}
           height={size.height}
-          className="canvas-surface h-auto max-h-full w-auto max-w-full"
+          className="canvas-surface h-auto max-h-full w-auto max-w-full rounded-md bg-white shadow-lift"
           style={{ aspectRatio: `${size.width}/${size.height}`, touchAction: "none" }}
           aria-label="그림 캔버스"
         />
