@@ -7,7 +7,7 @@ import { ArtonLogo } from "@/components/arton-logo";
 import { CLASS_CODE_LENGTH, isValidClassCode, normalizeClassCode } from "@/lib/class-code";
 import { suggestNickname, validateNickname } from "@/lib/nickname";
 import { joinClass } from "@/lib/join-client";
-import { hasSupabase } from "@/lib/supabase/client";
+import { hasBackend } from "@/lib/backend";
 
 type Step = "code" | "nickname";
 
@@ -32,7 +32,7 @@ export function JoinClient() {
     }
     setError(null);
     setBusy(true);
-    if (!hasSupabase()) {
+    if (!hasBackend()) {
       // 오프라인/데모 모드: 백엔드 없이 캔버스 체험(작품 저장은 로컬 다운로드)
       router.push("/draw");
       return;
@@ -116,7 +116,7 @@ export function JoinClient() {
           )}
         </div>
 
-        {!hasSupabase() && (
+        {!hasBackend() && (
           <p className="mt-4 text-center text-xs text-ink-faint">
             체험 모드예요 — 학급 연결 없이 캔버스를 사용할 수 있어요.
           </p>

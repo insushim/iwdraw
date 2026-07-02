@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { ArtonLogo } from "@/components/arton-logo";
-import { hasSupabase } from "@/lib/supabase/config";
+import { hasBackend } from "@/lib/backend";
 import { TeacherAuth } from "./teacher-auth";
 
 export const metadata = { title: "교사 대시보드" };
 
 export default function TeacherPage() {
-  const configured = hasSupabase();
+  const configured = hasBackend();
 
   return (
     <main className="min-h-dvh">

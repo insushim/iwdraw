@@ -9,11 +9,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cf:dev": "NEXT_PUBLIC_HAS_BACKEND=1 wrangler dev",
+    "cf:build": "NEXT_PUBLIC_HAS_BACKEND=1 next build",
+    "cf:deploy": "NEXT_PUBLIC_HAS_BACKEND=1 next build && wrangler deploy",
+    "cf:migrate:local": "wrangler d1 execute arton --local --file=worker/schema.sql",
+    "cf:migrate:remote": "wrangler d1 execute arton --remote --file=worker/schema.sql"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.0",
-    "@supabase/supabase-js": "^2.110.0",
+    "hono": "^4.12.27",
     "nanoid": "^5.1.16",
     "next": "15.5.20",
     "perfect-freehand": "^1.2.3",
@@ -23,6 +27,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260702.1",
     "@playwright/test": "^1.61.1",
     "@serwist/next": "^9.5.11",
     "@tailwindcss/postcss": "^4",
@@ -36,7 +41,8 @@
     "sharp": "^0.35.3",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "wrangler": "^4.106.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

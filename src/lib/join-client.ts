@@ -1,10 +1,12 @@
 "use client";
 
 import { setStudentSession, type StudentSession } from "./student-session";
+import { hasBackend } from "./backend";
+import { apiFetch } from "./api";
 
 /*
- * join-class Edge Function 호출 — 코드 검증 + 학생 생성 + 커스텀 JWT 발급.
- * 서버가 rate limit·브루트포스 방어를 담당(DESIGN-REVIEW A2).
+ * /api/join 호출 — 코드 검증 + 학생 생성 + 커스텀 JWT 발급.
+ * 서버(Worker)가 rate limit·브루트포스 방어를 담당(DESIGN-REVIEW A2).
  */
 export interface JoinResult {
   ok: boolean;
@@ -13,12 +15,11 @@ export interface JoinResult {
 }
 
 export async function joinClass(code: string, nickname: string): Promise<JoinResult> {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!base) {
+  if (!hasBackend()) {
     return { ok: false, error: "offline" };
   }
   try {
-    const res = await fetch(`${base}/functions/v1/join-class`, {
+    const res = await apiFetch("/join", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code, nickname }),

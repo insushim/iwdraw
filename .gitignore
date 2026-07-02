@@ -43,3 +43,8 @@ next-env.d.ts
 # Serwist 생성물
 public/sw.js
 public/sw.js.map
+
+# Cloudflare
+.dev.vars
+.wrangler/
+out/

@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "arton",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // 정적 export 결과(out/)를 Static Assets로 서빙.
+  // /api/* 등 자산이 없는 요청은 Worker(main)로 폴백된다.
+  "assets": {
+    "directory": "./out",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+
+  // D1: 관계형 DB (Supabase Postgres 대체). database_id는 `wrangler d1 create arton` 후 채운다.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "arton",
+      "database_id": "PLACEHOLDER_RUN_D1_CREATE"
+    }
+  ],
+
+  // R2: 작품 이미지 스토리지 (Supabase Storage 대체).
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "arton-artworks"
+    }
+  ],
+
+  // Durable Objects: 실시간 협동 방 (Supabase Realtime 대체). SQLite 백엔드 = 무료 플랜.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COLLAB",
+        "class_name": "CollabRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CollabRoom"]
+    }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+}
