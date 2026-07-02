@@ -1,0 +1,76 @@
+import type { BrushId } from "../types";
+import { BrushBase } from "./BrushBase";
+import { Pencil } from "./Pencil";
+import { Crayon } from "./Crayon";
+import { Marker } from "./Marker";
+import { WatercolorBrush } from "./WatercolorBrush";
+import { OilBrush } from "./OilBrush";
+import { Airbrush } from "./Airbrush";
+import { OilPastel } from "./OilPastel";
+import { GlowBrush } from "./GlowBrush";
+import { RainbowBrush } from "./RainbowBrush";
+import { Eraser } from "./Eraser";
+
+/** 스트로크형 브러시 팩토리(fill/stamp/text는 도구라 별도) */
+export function createBrush(id: BrushId, rng?: () => number): BrushBase {
+  switch (id) {
+    case "pencil":
+      return new Pencil(rng);
+    case "crayon":
+      return new Crayon(rng);
+    case "marker":
+      return new Marker(rng);
+    case "watercolor":
+      return new WatercolorBrush(rng);
+    case "oil":
+      return new OilBrush(rng);
+    case "airbrush":
+      return new Airbrush(rng);
+    case "oilpastel":
+      return new OilPastel(rng);
+    case "glow":
+      return new GlowBrush(rng);
+    case "rainbow":
+      return new RainbowBrush(rng);
+    case "eraser":
+      return new Eraser(rng);
+    default:
+      return new Pencil(rng);
+  }
+}
+
+export const STROKE_BRUSHES: BrushId[] = [
+  "pencil",
+  "crayon",
+  "marker",
+  "watercolor",
+  "oil",
+  "airbrush",
+  "oilpastel",
+  "glow",
+  "rainbow",
+  "eraser",
+];
+
+export interface BrushMeta {
+  id: BrushId;
+  label: string;
+  emoji: string;
+  /** 저학년 모드 기본 6종에 포함 */
+  junior: boolean;
+}
+
+export const BRUSH_META: BrushMeta[] = [
+  { id: "pencil", label: "연필", emoji: "✏️", junior: true },
+  { id: "crayon", label: "크레용", emoji: "🖍️", junior: true },
+  { id: "marker", label: "마커", emoji: "🖊️", junior: true },
+  { id: "watercolor", label: "수채붓", emoji: "💧", junior: true },
+  { id: "oil", label: "유화붓", emoji: "🎨", junior: false },
+  { id: "airbrush", label: "에어브러시", emoji: "💨", junior: false },
+  { id: "oilpastel", label: "오일파스텔", emoji: "🟠", junior: false },
+  { id: "glow", label: "글로우", emoji: "✨", junior: false },
+  { id: "rainbow", label: "무지개", emoji: "🌈", junior: true },
+  { id: "eraser", label: "지우개", emoji: "🧼", junior: true },
+];
+
+export { BrushBase };

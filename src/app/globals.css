@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/* ── ArtON 디자인 토큰: "따뜻한 미술실" ─────────────────────────── */
+@theme {
+  /* 색 */
+  --color-cream: #fbf7f0;
+  --color-cream-deep: #f3ecdf;
+  --color-coral: #ff7a59;
+  --color-coral-deep: #e85f3e;
+  --color-coral-soft: #ffe3da;
+  --color-sky: #5bb8f5;
+  --color-sky-deep: #3d9be0;
+  --color-sky-soft: #e0f1fd;
+  --color-leaf: #7bc96f;
+  --color-leaf-deep: #5faf53;
+  --color-leaf-soft: #e6f5e3;
+  --color-ink: #2d2a26;
+  --color-ink-soft: #6b645b;
+  --color-ink-faint: #a39a8e;
+  --color-sun: #ffc84a;
+  --color-sun-soft: #fff3d6;
+  --color-berry: #b878e0;
+  --color-berry-soft: #f3e6fb;
+  --color-paper: #ffffff;
+  --color-danger: #e5484d;
+  --color-danger-soft: #fde7e8;
+
+  /* 폰트 */
+  --font-display: var(--font-jua), "Jua", sans-serif;
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo",
+    "Noto Sans KR", sans-serif;
+
+  /* 모양 */
+  --radius-card: 20px;
+  --radius-bubble: 28px;
+
+  /* 그림자 */
+  --shadow-soft: 0 2px 8px rgba(45, 42, 38, 0.06), 0 8px 24px rgba(45, 42, 38, 0.08);
+  --shadow-lift: 0 4px 12px rgba(45, 42, 38, 0.1), 0 14px 36px rgba(45, 42, 38, 0.12);
+  --shadow-press: 0 1px 3px rgba(45, 42, 38, 0.1);
+}
+
+:root {
+  color-scheme: light; /* 교실 프로젝터 가시성 우선 — 다크모드 없음 */
+}
+
+html {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+/* 아이들 손가락 기준 최소 터치 타깃 */
+.touch-target {
+  min-width: 48px;
+  min-height: 48px;
+}
+
+/* 눌리는 마이크로 인터랙션 */
+.pressable {
+  transition:
+    transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.12s ease;
+}
+.pressable:active {
+  transform: scale(0.96);
+  box-shadow: var(--shadow-press);
+}
+
+/* 캔버스 영역: 브라우저 제스처 차단 */
+.canvas-surface {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* 스크롤바 (교실 크롬북) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-faint);
+  border-radius: 6px;
+  border: 2px solid var(--color-cream);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 키보드 포커스 접근성 */
+:focus-visible {
+  outline: 3px solid var(--color-sky);
+  outline-offset: 2px;
+  border-radius: 8px;
+}

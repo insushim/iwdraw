@@ -1,0 +1,17 @@
+{
+  "name": "아트온 ArtON",
+  "short_name": "아트온",
+  "description": "학교 수업에 딱 맞춘 디지털 미술 놀이터 — 설치·로그인 없이 그리고 색칠해요.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FBF7F0",
+  "theme_color": "#FBF7F0",
+  "orientation": "any",
+  "lang": "ko",
+  "categories": ["education", "kids", "art"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

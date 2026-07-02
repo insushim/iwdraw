@@ -1,0 +1,148 @@
+import { nanoid } from "nanoid";
+import { blendToComposite } from "./backend";
+import type { BlendMode, LayerInfo } from "../types";
+
+/*
+ * LayerStack: 최대 8 레이어(+ 색칠 모드 라인아트 잠금 레이어). 각 레이어는 자체 2D 캔버스.
+ * composite()가 blend 모드로 표시 캔버스에 합성한다.
+ */
+export const MAX_LAYERS = 8;
+
+export interface Layer extends LayerInfo {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+}
+
+export class LayerStack {
+  private layers: Layer[] = [];
+  activeId = "";
+
+  constructor(
+    private readonly width: number,
+    private readonly height: number,
+  ) {
+    this.addLayer("레이어 1");
+  }
+
+  private newCanvas(): HTMLCanvasElement {
+    const c = document.createElement("canvas");
+    c.width = this.width;
+    c.height = this.height;
+    return c;
+  }
+
+  get list(): Layer[] {
+    return this.layers;
+  }
+
+  get info(): LayerInfo[] {
+    return this.layers.map(({ id, name, visible, opacity, blend, isLineart }) => ({
+      id,
+      name,
+      visible,
+      opacity,
+      blend,
+      isLineart,
+    }));
+  }
+
+  get active(): Layer {
+    return this.layers.find((l) => l.id === this.activeId) ?? this.layers[0];
+  }
+
+  /** 색칠 모드용 라인아트 레이어(잠금·최상단·multiply) */
+  get lineart(): Layer | undefined {
+    return this.layers.find((l) => l.isLineart);
+  }
+
+  addLayer(name?: string, isLineart = false): Layer | null {
+    const drawable = this.layers.filter((l) => !l.isLineart).length;
+    if (!isLineart && drawable >= MAX_LAYERS) return null;
+    const canvas = this.newCanvas();
+    const layer: Layer = {
+      id: nanoid(8),
+      name: name ?? `레이어 ${drawable + 1}`,
+      visible: true,
+      opacity: 1,
+      blend: isLineart ? "multiply" : "normal",
+      isLineart,
+      canvas,
+      ctx: canvas.getContext("2d")!,
+    };
+    if (isLineart) this.layers.push(layer); // 라인아트는 항상 맨 위
+    else {
+      // 라인아트 아래에 삽입
+      const lineIdx = this.layers.findIndex((l) => l.isLineart);
+      if (lineIdx === -1) this.layers.push(layer);
+      else this.layers.splice(lineIdx, 0, layer);
+    }
+    this.activeId = isLineart ? this.activeId || layer.id : layer.id;
+    if (!this.activeId) this.activeId = layer.id;
+    return layer;
+  }
+
+  removeLayer(id: string): boolean {
+    const idx = this.layers.findIndex((l) => l.id === id);
+    if (idx === -1) return false;
+    if (this.layers[idx].isLineart) return false; // 라인아트는 모드 전환으로만 제거
+    if (this.layers.filter((l) => !l.isLineart).length <= 1) return false; // 최소 1장
+    this.layers.splice(idx, 1);
+    if (this.activeId === id) this.activeId = this.layers.find((l) => !l.isLineart)!.id;
+    return true;
+  }
+
+  setActive(id: string): void {
+    const l = this.layers.find((x) => x.id === id);
+    if (l && !l.isLineart) this.activeId = id;
+  }
+
+  setVisible(id: string, v: boolean): void {
+    const l = this.layers.find((x) => x.id === id);
+    if (l) l.visible = v;
+  }
+
+  setOpacity(id: string, o: number): void {
+    const l = this.layers.find((x) => x.id === id);
+    if (l) l.opacity = Math.max(0, Math.min(1, o));
+  }
+
+  setBlend(id: string, b: BlendMode): void {
+    const l = this.layers.find((x) => x.id === id);
+    if (l && !l.isLineart) l.blend = b;
+  }
+
+  reorder(id: string, toIndex: number): void {
+    const idx = this.layers.findIndex((l) => l.id === id);
+    if (idx === -1 || this.layers[idx].isLineart) return;
+    const [l] = this.layers.splice(idx, 1);
+    const lineIdx = this.layers.findIndex((x) => x.isLineart);
+    const max = lineIdx === -1 ? this.layers.length : lineIdx;
+    this.layers.splice(Math.max(0, Math.min(max, toIndex)), 0, l);
+  }
+
+  clearActive(): void {
+    const l = this.active;
+    l.ctx.clearRect(0, 0, this.width, this.height);
+  }
+
+  clearAll(): void {
+    for (const l of this.layers) if (!l.isLineart) l.ctx.clearRect(0, 0, this.width, this.height);
+  }
+
+  /** 모든 레이어를 표시 캔버스에 합성 */
+  composite(target: CanvasRenderingContext2D): void {
+    target.clearRect(0, 0, this.width, this.height);
+    for (const l of this.layers) {
+      if (!l.visible || l.opacity === 0) continue;
+      target.save();
+      target.globalAlpha = l.opacity;
+      target.globalCompositeOperation = blendToComposite(l.blend);
+      target.drawImage(l.canvas, 0, 0);
+      target.restore();
+    }
+  }
+
+  destroy(): void {
+    this.layers = [];
+  }
+}

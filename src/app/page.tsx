@@ -1,0 +1,207 @@
+import Link from "next/link";
+import { Chip } from "@/components/ui";
+import { JoinCodeForm } from "@/components/join-code-form";
+import { ArtonLogo } from "@/components/arton-logo";
+
+const FEATURES = [
+  {
+    emoji: "💧",
+    title: "진짜처럼 번지는 수채화",
+    desc: "물 양을 조절하면 종이 위에서 물감이 스르르 번져요. 마르기 전에 다른 색을 얹으면 자연스럽게 섞여요.",
+    tone: "sky" as const,
+  },
+  {
+    emoji: "🎨",
+    title: "두께가 느껴지는 유화",
+    desc: "붓 자국이 그대로 남는 임파스토 유화. 캔버스에 남은 색과 섞이며 진짜 유화처럼 그려져요.",
+    tone: "coral" as const,
+  },
+  {
+    emoji: "🖍️",
+    title: "선 밖으로 안 삐져나가는 색칠",
+    desc: "100장의 자체 제작 도안. 색칠 모드에서는 윤곽선이 경계가 되어 어린 학생도 깔끔하게 완성해요.",
+    tone: "leaf" as const,
+  },
+  {
+    emoji: "👥",
+    title: "모둠 협동 캔버스",
+    desc: "최대 6명이 한 캔버스에 실시간으로 함께 그려요. 친구의 붓이 움직이는 게 보여요.",
+    tone: "berry" as const,
+  },
+  {
+    emoji: "🎬",
+    title: "무비 모드",
+    desc: "내 그림이 그려지는 과정을 영상처럼 재생하고 다운로드할 수 있어요.",
+    tone: "sun" as const,
+  },
+  {
+    emoji: "🔒",
+    title: "학생 개인정보 제로",
+    desc: "학생은 로그인이 없어요. 학급 코드와 닉네임만으로 참여하고, 이름·이메일 등 개인정보는 수집하지 않아요.",
+    tone: "sky" as const,
+  },
+];
+
+const STEPS = [
+  { step: "1", title: "교사가 학급 만들기", desc: "이메일로 가입하고 학급을 만들면 6자리 코드와 QR이 생겨요." },
+  { step: "2", title: "학생은 코드로 입장", desc: "설치도 로그인도 없이 코드만 입력하면 바로 캔버스가 열려요." },
+  { step: "3", title: "그리고, 전시하기", desc: "완성작은 교사 승인 후 학급 갤러리에 전시되고 A4 작품집으로 인쇄해요." },
+];
+
+export default function LandingPage() {
+  return (
+    <main className="min-h-dvh">
+      {/* ── 헤더 ── */}
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+        <ArtonLogo className="h-10" />
+        <nav className="flex items-center gap-3">
+          <Link
+            href="/pricing"
+            className="pressable rounded-card px-4 py-2 font-semibold text-ink-soft hover:text-ink"
+          >
+            요금제
+          </Link>
+          <Link
+            href="/teacher"
+            className="pressable touch-target inline-flex items-center rounded-card bg-ink px-5 py-2.5 font-display text-white shadow-soft"
+          >
+            교사 시작하기
+          </Link>
+        </nav>
+      </header>
+
+      {/* ── 히어로 ── */}
+      <section className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-12 md:grid-cols-2 md:py-20">
+        <div>
+          <Chip tone="coral" className="mb-4">
+            EasyEdu 제품군 · 수업ON의 형제 브랜드
+          </Chip>
+          <h1 className="font-display text-4xl leading-tight text-ink md:text-5xl">
+            학교 수업에 딱 맞춘
+            <br />
+            <span className="text-coral">디지털 미술 놀이터</span>
+          </h1>
+          <p className="mt-5 max-w-md text-lg text-ink-soft">
+            설치도 로그인도 필요 없어요. 지금 바로 그리거나 색칠하고, 우리 반은 학급 코드로 함께
+            모여요.
+          </p>
+
+          {/* 게스트 우선: 바로 그리기 / 색칠하기 */}
+          <div className="mt-8 flex max-w-md flex-wrap gap-3">
+            <Link
+              href="/draw"
+              className="pressable touch-target inline-flex items-center gap-2 rounded-card bg-coral px-7 py-4 font-display text-lg text-white shadow-soft"
+            >
+              🎨 바로 그리기
+            </Link>
+            <Link
+              href="/coloring"
+              className="pressable touch-target inline-flex items-center gap-2 rounded-card bg-leaf px-7 py-4 font-display text-lg text-white shadow-soft"
+            >
+              🖍️ 색칠하기
+            </Link>
+          </div>
+
+          {/* 학급 코드 입장(선택) */}
+          <div className="mt-6 max-w-md">
+            <p className="mb-2 text-sm font-semibold text-ink-faint">우리 반 코드가 있나요?</p>
+            <JoinCodeForm />
+          </div>
+        </div>
+
+        {/* 히어로 비주얼: 4모드 — 클릭하면 바로 그 모드로 */}
+        <div className="grid grid-cols-2 gap-4">
+          {[
+            { emoji: "✏️", label: "스케치", bg: "bg-sun-soft", href: "/draw?mode=sketch" },
+            { emoji: "💧", label: "수채화", bg: "bg-sky-soft", href: "/draw?mode=watercolor" },
+            { emoji: "🎨", label: "유화", bg: "bg-coral-soft", href: "/draw?mode=oil" },
+            { emoji: "🖍️", label: "색칠하기", bg: "bg-leaf-soft", href: "/coloring" },
+          ].map((m) => (
+            <Link
+              key={m.label}
+              href={m.href}
+              className={`pressable flex aspect-square flex-col items-center justify-center rounded-card ${m.bg} shadow-soft`}
+            >
+              <span className="text-6xl">{m.emoji}</span>
+              <span className="mt-3 font-display text-xl text-ink">{m.label}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* ── 3단계 흐름 ── */}
+      <section className="bg-paper py-16">
+        <div className="mx-auto max-w-6xl px-6">
+          <h2 className="text-center font-display text-3xl text-ink">
+            교실에서 이렇게 써요
+          </h2>
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {STEPS.map((s) => (
+              <div key={s.step} className="rounded-card bg-cream p-6 shadow-soft">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-coral font-display text-2xl text-white">
+                  {s.step}
+                </div>
+                <h3 className="mt-4 font-display text-xl text-ink">{s.title}</h3>
+                <p className="mt-2 text-ink-soft">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 기능 ── */}
+      <section className="mx-auto max-w-6xl px-6 py-16">
+        <h2 className="text-center font-display text-3xl text-ink">
+          아이들이 좋아하는 진짜 그림 도구
+        </h2>
+        <p className="mt-3 text-center text-ink-soft">
+          연필·크레용·마커·수채붓·유화붓·에어브러시·오일파스텔… 12가지 도구를 담았어요.
+        </p>
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f) => (
+            <div key={f.title} className="rounded-card bg-paper p-6 shadow-soft">
+              <Chip tone={f.tone}>
+                <span className="text-lg">{f.emoji}</span>
+              </Chip>
+              <h3 className="mt-4 font-display text-xl text-ink">{f.title}</h3>
+              <p className="mt-2 text-ink-soft">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── CTA ── */}
+      <section className="mx-auto max-w-6xl px-6 pb-20">
+        <div className="rounded-bubble bg-ink px-8 py-12 text-center shadow-lift">
+          <h2 className="font-display text-3xl text-white">
+            다음 미술 시간, 아트온으로 시작해 보세요
+          </h2>
+          <p className="mt-3 text-white/70">
+            무료 플랜으로 학급 1개, 학생 30명까지 바로 쓸 수 있어요.
+          </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              href="/teacher"
+              className="pressable touch-target inline-flex items-center rounded-card bg-coral px-8 py-4 font-display text-lg text-white shadow-soft"
+            >
+              교사로 시작하기
+            </Link>
+            <Link
+              href="/join"
+              className="pressable touch-target inline-flex items-center rounded-card bg-white/10 px-8 py-4 font-display text-lg text-white ring-2 ring-white/30"
+            >
+              학급 코드로 입장
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-cream-deep bg-paper py-8">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 text-sm text-ink-faint">
+          <span>© 2026 EasyEdu · 아트온 ArtON</span>
+          <span>모든 도안은 자체 제작 — 저작권 걱정 없이 수업에 쓰세요</span>
+        </div>
+      </footer>
+    </main>
+  );
+}

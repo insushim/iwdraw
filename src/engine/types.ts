@@ -1,0 +1,175 @@
+/* ArtON 브러시 엔진 공용 타입 — 프레임워크(React) 비의존 */
+
+export type Mode = "sketch" | "watercolor" | "oil" | "coloring";
+
+export type BlendMode = "normal" | "multiply" | "screen" | "overlay";
+
+export type BrushId =
+  | "pencil"
+  | "crayon"
+  | "marker"
+  | "watercolor"
+  | "oil"
+  | "airbrush"
+  | "oilpastel"
+  | "glow"
+  | "rainbow"
+  | "eraser"
+  | "fill"
+  | "stamp"
+  | "text";
+
+export interface RGB {
+  r: number; // 0~255
+  g: number;
+  b: number;
+}
+
+/** 입력 1점 — PointerHandler가 생성, Stabilizer를 거쳐 브러시로 */
+export interface StrokePoint {
+  x: number;
+  y: number;
+  /** 0~1. 마우스/터치는 simulate된 값 */
+  pressure: number;
+  /** performance.now() 기준 ms */
+  t: number;
+  tiltX?: number;
+  tiltY?: number;
+}
+
+/**
+ * Dab = 브러시가 뱉는 백엔드 독립 스탬프 1개.
+ * 브러시(순수 로직)가 Dab 스트림을 만들고, 렌더 백엔드가 래스터화한다.
+ */
+export interface Dab {
+  x: number;
+  y: number;
+  /** 스탬프 지름(px) */
+  size: number;
+  /** 0~1 — 이 dab 하나의 알파 */
+  alpha: number;
+  /** 라디안 — 결 방향(연필 기울기, 유화 bristle 등) */
+  rotation: number;
+  /** 색 오버라이드(무지개 브러시 등). 없으면 브러시 색 */
+  color?: RGB;
+  /** 수채 전용: 이 dab이 주입하는 물 양 0~1 */
+  water?: number;
+}
+
+export interface BrushSettings {
+  size: number; // px 1~128
+  opacity: number; // 0~1
+  color: RGB;
+  /** 수채: 물 양 0~1 (슬라이더) */
+  waterAmount: number;
+  /** 손떨림 보정 강도 0~10 */
+  stabilize: number;
+}
+
+/** 렌더 백엔드가 스스로 보고하는 능력 — UI 분기 없이 자연스러운 다운그레이드 */
+export interface BackendCaps {
+  webgl2: boolean;
+  /** 수채 wet 확산 시뮬 가능 여부 */
+  wetSim: boolean;
+  /** 유화 heightmap 라이팅 가능 여부 */
+  heightmap: boolean;
+}
+
+export interface LayerInfo {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number; // 0~1
+  blend: BlendMode;
+  /** 색칠 모드 라인아트 레이어 — 잠금(그리기 불가), 항상 최상단 multiply */
+  isLineart: boolean;
+}
+
+/** StrokeRecorder 로그의 한 항목(무비 모드/타임랩스 재생용) */
+export interface RecordedStroke {
+  brush: BrushId;
+  settings: BrushSettings;
+  layerId: string;
+  points: StrokePoint[];
+  /** 대칭 설정 스냅샷 */
+  symmetry: SymmetryMode;
+  /** fill/stamp/text 등 비-스트로크 액션의 파라미터 */
+  extra?: Record<string, unknown>;
+}
+
+export type SymmetryMode = "none" | "vertical" | "horizontal" | "quad";
+
+export type QuickShapeKind =
+  | "line"
+  | "circle"
+  | "rect"
+  | "triangle"
+  | "star"
+  | "heart";
+
+/** 로컬 스트로크가 커밋될 때 협동 전송용으로 방출되는 페이로드 */
+export interface StrokeCommitted {
+  brush: BrushId;
+  color: RGB;
+  size: number;
+  opacity: number;
+  water: number;
+  symmetry: SymmetryMode;
+  points: StrokePoint[];
+}
+
+/** 엔진 → UI 이벤트 (Zustand 스토어가 구독) */
+export interface EngineEvents {
+  historyChange: { canUndo: boolean; canRedo: boolean };
+  layersChange: { layers: LayerInfo[]; activeId: string };
+  strokeLatency: { ms: number };
+  dirty: Record<string, never>;
+  quickShapeApplied: { kind: QuickShapeKind };
+  restoreAvailable: { savedAt: number };
+  strokeCommitted: StrokeCommitted;
+  pointerMoved: { x: number; y: number };
+}
+
+export type EngineEventName = keyof EngineEvents;
+
+export type EngineListener<K extends EngineEventName> = (payload: EngineEvents[K]) => void;
+
+/* ── 유틸 ── */
+
+export function rgbToCss({ r, g, b }: RGB, a = 1): string {
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+export function rgbToHex({ r, g, b }: RGB): string {
+  const h = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+export function hexToRgb(hex: string): RGB {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return { r: 0, g: 0, b: 0 };
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+export function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+export function dist(ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/** 시드 가능한 결정적 난수 (테스트/타임랩스 재현성) */
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}

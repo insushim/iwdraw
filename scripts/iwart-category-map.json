@@ -1,0 +1,40 @@
+{
+  "_comment": "iwart(Coloria) 색칠 도안 → 아트온 templates 카테고리 매핑. iwart 27개 일반 테마를 아트온 5대 카테고리로 그룹핑. 부분채색(pc_*)은 별도 '단계별 색칠' 카테고리로 편입.",
+  "source": "/Users/iw-lab/Documents/dev/iwart/site",
+  "categories": {
+    "animals": {
+      "title": "동물",
+      "emoji": "🐾",
+      "themes": ["animals", "birds", "dinosaurs", "sea", "insects", "safari", "farm"]
+    },
+    "season_event": {
+      "title": "계절·행사",
+      "emoji": "🎈",
+      "themes": ["seasons", "holidays", "weather_nature", "sports", "camping", "food", "fruits_veggies"]
+    },
+    "curriculum": {
+      "title": "교과 연계",
+      "emoji": "📚",
+      "themes": ["tradition", "jobs", "vehicles", "space", "school", "music", "flowers"]
+    },
+    "fantasy": {
+      "title": "판타지",
+      "emoji": "🦄",
+      "themes": ["princess_fantasy", "robots", "pirates", "circus", "toys", "construction"]
+    },
+    "pattern": {
+      "title": "만다라·패턴",
+      "emoji": "🌀",
+      "themes": ["patterns"]
+    },
+    "step_coloring": {
+      "title": "단계별 색칠(부분채색)",
+      "emoji": "🎨",
+      "themes": [
+        "pc_zoo", "pc_farm", "pc_amusement", "pc_home", "pc_friendship",
+        "pc_city", "pc_market", "pc_neighborhood", "pc_park", "pc_school", "pc_transport"
+      ],
+      "partial": true
+    }
+  }
+}
