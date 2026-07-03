@@ -29,6 +29,8 @@ export interface EditorProps {
   /** 상단에 표시할 닉네임/학급 */
   who?: string;
   backHref?: string;
+  /** 학생 세션이 있을 때 학급 갤러리 링크 */
+  galleryHref?: string;
 }
 
 /*
@@ -36,7 +38,7 @@ export interface EditorProps {
  *  헤더 = 뒤로 · 로고 · [모드 탭] · 방향/무비/저학년 · 저장(주요 버튼)
  *  본체 = 좌 도구 레일(세로) · 캔버스(플로팅 되돌리기/다시) · 우 색/굵기/마법/레이어
  */
-export function Editor({ lineartSrc, initialMode, room, onSave, who, backHref = "/" }: EditorProps) {
+export function Editor({ lineartSrc, initialMode, room, onSave, who, backHref = "/", galleryHref }: EditorProps) {
   useKeyboard();
   const engineRef = useRef<ArtEngine | null>(null);
   const [engine, setEngine] = useState<ArtEngine | null>(null);
@@ -115,6 +117,14 @@ export function Editor({ lineartSrc, initialMode, room, onSave, who, backHref = 
           <span className="hidden rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft lg:block">
             {who}
           </span>
+        )}
+        {galleryHref && (
+          <Link
+            href={galleryHref}
+            className="pressable touch-target hidden items-center gap-1 rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft sm:flex"
+          >
+            🖼️ <span className="hidden lg:inline">우리 반 갤러리</span>
+          </Link>
         )}
         {room && (
           <span className="flex items-center gap-1 rounded-full bg-berry-soft px-3 py-1 text-sm font-semibold text-berry" title="함께 그리는 친구">

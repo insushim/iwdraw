@@ -100,8 +100,8 @@ export function ColoringGallery() {
       <div className="mx-auto max-w-6xl px-4 py-6">
         <h1 className="font-display text-3xl text-ink">색칠할 도안을 골라요 🖍️</h1>
         <p className="mt-2 text-ink-soft">
-          로그인 없이 바로 색칠할 수 있어요. 1,000장이 넘는 도안은 모두 직접 만든 그림이라 저작권
-          걱정이 없어요.
+          로그인 없이 바로 색칠할 수 있어요. 직접 만든 도안 1,000여 장과 저작권이 만료된
+          명화(반 고흐·모네·김홍도…)라 마음껏 써도 괜찮아요.
         </p>
 
         {/* 카테고리 필터 */}

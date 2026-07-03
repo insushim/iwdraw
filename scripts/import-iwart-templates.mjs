@@ -86,7 +86,21 @@ for (const [theme, meta] of Object.entries(themeToCat)) {
   };
 }
 
-writeFileSync(join(OUT_DIR, "manifest.json"), JSON.stringify(manifest, null, 2));
+// iwart 밖에서 추가된 카테고리(명화 팩 masters 등)는 보존 — 재실행이 남의 항목을 지우면 안 된다
+const manifestPath = join(OUT_DIR, "manifest.json");
+if (existsSync(manifestPath)) {
+  const prev = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const iwartThemes = new Set(Object.keys(themeToCat));
+  for (const cat of prev.categories ?? []) {
+    if (!MAP.categories[cat.id] && !manifest.categories.some((c) => c.id === cat.id)) {
+      manifest.categories.push(cat);
+    }
+  }
+  for (const [name, theme] of Object.entries(prev.themes ?? {})) {
+    if (!iwartThemes.has(name) && !manifest.themes[name]) manifest.themes[name] = theme;
+  }
+}
+writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 const totalItems = Object.values(manifest.themes).reduce((a, t) => a + t.count, 0);
 console.log(`✅ 템플릿 이관 완료: ${copied}장 복사, ${missing} 누락, ${totalItems} 매니페스트 등록`);
 console.log(`   카테고리 ${manifest.categories.length}개, 테마 ${Object.keys(manifest.themes).length}개`);

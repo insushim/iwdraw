@@ -101,6 +101,54 @@ export async function approveArtwork(id: string, approved: boolean): Promise<voi
   }
 }
 
+/* ── 도안 배포(과제) ── */
+export interface AssignmentRow {
+  id: string;
+  template_id: string;
+  title: string;
+  image: string;
+  note: string;
+  created_at: number;
+}
+
+export async function getClassAssignment(classId: string): Promise<AssignmentRow | null> {
+  if (!hasBackend()) return null;
+  try {
+    const res = await apiFetch(`/classes/${classId}/assignment`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { assignment: AssignmentRow | null };
+    return data.assignment;
+  } catch {
+    return null;
+  }
+}
+
+export async function setClassAssignment(
+  classId: string,
+  a: { template_id: string; title: string; image: string; note?: string },
+): Promise<boolean> {
+  if (!hasBackend()) return false;
+  try {
+    const res = await apiFetch(`/classes/${classId}/assignment`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(a),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function clearClassAssignment(classId: string): Promise<void> {
+  if (!hasBackend()) return;
+  try {
+    await apiFetch(`/classes/${classId}/assignment`, { method: "DELETE" });
+  } catch {
+    /* 네트워크 오류 무시 */
+  }
+}
+
 /* 작품 이미지 URL — same-origin Worker가 교사 쿠키로 소유 검증 후 R2에서 스트리밍.
  * <img src>로 쓰면 same-origin이라 세션 쿠키가 자동 전송된다(Supabase signed URL 대체). */
 export async function signedUrl(path: string): Promise<string | null> {

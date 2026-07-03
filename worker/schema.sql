@@ -77,6 +77,19 @@ CREATE TABLE IF NOT EXISTS collab_rooms (
 );
 CREATE INDEX IF NOT EXISTS collab_rooms_code_idx ON collab_rooms(code) WHERE closed_at IS NULL;
 
+-- ── 도안 배포(과제): 학급당 활성 1건 — 새 배포 시 이전 것을 비활성화 ──
+CREATE TABLE IF NOT EXISTS assignments (
+  id          TEXT PRIMARY KEY,
+  class_id    TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  template_id TEXT NOT NULL,
+  title       TEXT NOT NULL DEFAULT '',
+  image       TEXT NOT NULL,               -- /templates/... 정적 도안 경로(Worker가 검증)
+  note        TEXT NOT NULL DEFAULT '',
+  is_active   INTEGER NOT NULL DEFAULT 1,
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+);
+CREATE INDEX IF NOT EXISTS assignments_class_idx ON assignments(class_id, is_active);
+
 -- ── 학급코드 브루트포스 방어: join 시도 기록 ──
 CREATE TABLE IF NOT EXISTS join_attempts (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -1,0 +1,219 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArtonLogo } from "@/components/arton-logo";
+import { getStudentSession } from "@/lib/student-session";
+import {
+  fetchStudentImage,
+  listClassGallery,
+  toggleLike,
+  type GalleryItem,
+} from "@/lib/student-api";
+
+/*
+ * 학생용 학급 갤러리 — 선생님이 전시 승인한 작품만 보이고, 좋아요를 누를 수 있다.
+ * 학생 세션(Bearer)이 필요해 이미지도 fetch→blob URL로 로드한다.
+ */
+export function StudentGallery() {
+  // 정적 export의 프리렌더(세션 없음)와 실제 클라이언트(세션 있음)가 통째로 다른
+  // 트리를 그리므로, 마운트 후에 세션을 읽어 hydration 불일치를 피한다.
+  const [mounted, setMounted] = useState(false);
+  const [session, setSession] = useState<ReturnType<typeof getStudentSession>>(null);
+  const [items, setItems] = useState<GalleryItem[] | null>(null);
+  const [expired, setExpired] = useState(false);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [big, setBig] = useState<GalleryItem | null>(null);
+  const [bigUrl, setBigUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSession(getStudentSession());
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    void (async () => {
+      const list = await listClassGallery();
+      if (list === null) {
+        // 학생 토큰(6시간)이 만료됐거나 네트워크 오류 — 빈 갤러리로 오표시하지 않는다
+        setExpired(true);
+        setItems([]);
+        return;
+      }
+      setItems(list);
+      const entries = await Promise.all(
+        list.map(async (a) => [a.id, (await fetchStudentImage(a.thumb_path)) ?? ""] as const),
+      );
+      setUrls(Object.fromEntries(entries));
+    })();
+  }, [session]);
+
+  useEffect(() => {
+    if (!big) {
+      setBigUrl(null);
+      return;
+    }
+    // 연달아 다른 작품을 클릭해도 늦게 도착한 응답이 최신 선택을 덮지 않게 가드
+    let stale = false;
+    void fetchStudentImage(big.image_path).then((u) => {
+      if (!stale) setBigUrl(u);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [big]);
+
+  const like = async (a: GalleryItem) => {
+    // 낙관적 갱신 → 서버 응답으로 확정, 실패(토큰 만료 등)면 클릭 전 상태(a)로 롤백
+    setItems(
+      (prev) =>
+        prev?.map((x) =>
+          x.id === a.id ? { ...x, liked: !x.liked, like_count: x.like_count + (x.liked ? -1 : 1) } : x,
+        ) ?? null,
+    );
+    const res = await toggleLike(a.id);
+    setItems(
+      (prev) =>
+        prev?.map((x) =>
+          x.id === a.id
+            ? res
+              ? { ...x, liked: res.liked, like_count: res.like_count }
+              : { ...x, liked: a.liked, like_count: a.like_count } // 롤백
+            : x,
+        ) ?? null,
+    );
+  };
+
+  if (!mounted) return null;
+
+  if (!session) {
+    return (
+      <main className="grid min-h-dvh place-items-center p-6 text-center">
+        <div>
+          <p className="font-display text-2xl text-ink">학급에 먼저 입장해 주세요</p>
+          <p className="mt-2 text-ink-soft">선생님이 알려준 학급 코드로 들어오면 갤러리를 볼 수 있어요.</p>
+          <Link
+            href="/join"
+            className="pressable mt-6 inline-block rounded-card bg-coral px-6 py-3 font-display text-white shadow-soft"
+          >
+            학급 코드로 입장하기
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-dvh">
+      <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-cream-deep bg-cream/90 px-4 py-3 backdrop-blur">
+        <div className="flex items-center gap-3">
+          <Link href="/draw" className="pressable touch-target rounded-card px-2 text-xl" aria-label="그리기로">
+            ←
+          </Link>
+          <ArtonLogo className="h-8" />
+        </div>
+        <span className="text-sm text-ink-soft">
+          {session.className} · {session.nickname}
+        </span>
+      </header>
+
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <h1 className="font-display text-3xl text-ink">우리 반 갤러리 🖼️</h1>
+        <p className="mt-2 text-ink-soft">선생님이 전시한 작품이에요. 마음에 드는 그림에 ❤를 눌러 주세요.</p>
+
+        {items === null ? (
+          <div className="mt-16 text-center text-ink-faint">작품을 불러오는 중…</div>
+        ) : expired ? (
+          <div className="mt-10 rounded-card bg-paper p-10 text-center text-ink-soft shadow-soft">
+            시간이 지나 연결이 끊겼어요. 학급 코드로 다시 입장해 주세요.
+            <div className="mt-4">
+              <Link
+                href="/join"
+                className="pressable inline-block rounded-card bg-coral px-6 py-3 font-display text-white shadow-soft"
+              >
+                다시 입장하기
+              </Link>
+            </div>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="mt-10 rounded-card bg-paper p-10 text-center text-ink-soft shadow-soft">
+            아직 전시된 작품이 없어요. 멋진 그림을 그려서 저장하면
+            <br />
+            선생님이 골라 전시해 줄 거예요!
+          </div>
+        ) : (
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {items.map((a) => (
+              <div key={a.id} className="overflow-hidden rounded-card bg-paper shadow-soft">
+                <button
+                  onClick={() => setBig(a)}
+                  className="block aspect-square w-full bg-white"
+                  aria-label={`${a.nickname} 작품 크게 보기`}
+                >
+                  {urls[a.id] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={urls[a.id]} alt={`${a.nickname} 작품`} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full w-full animate-pulse bg-cream-deep" />
+                  )}
+                </button>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="truncate text-sm font-semibold text-ink">
+                    {a.nickname}
+                    {a.mine && <span className="ml-1 text-xs text-coral">나</span>}
+                  </span>
+                  {a.is_approved ? (
+                    <button
+                      onClick={() => like(a)}
+                      aria-pressed={a.liked}
+                      className={`pressable rounded-full px-2 py-1 text-sm font-semibold ${
+                        a.liked ? "bg-coral/15 text-coral" : "text-ink-faint hover:text-coral"
+                      }`}
+                    >
+                      {a.liked ? "❤" : "🤍"} {a.like_count}
+                    </button>
+                  ) : (
+                    <span className="rounded-full bg-cream-deep px-2 py-1 text-xs text-ink-soft">
+                      선생님 확인 중
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {big && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-ink/80 p-6"
+          onClick={() => setBig(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="max-h-[90dvh] max-w-4xl overflow-hidden rounded-bubble bg-paper p-4 shadow-lift"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {bigUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={bigUrl} alt={`${big.nickname} 작품`} className="max-h-[75dvh] w-auto rounded-card" />
+            ) : (
+              <div className="grid h-64 w-96 place-items-center text-ink-faint">불러오는 중…</div>
+            )}
+            <div className="mt-3 flex items-center justify-between px-1">
+              <span className="font-display text-lg text-ink">{big.nickname}</span>
+              <button
+                onClick={() => setBig(null)}
+                className="pressable rounded-card bg-ink px-5 py-2 font-display text-white"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

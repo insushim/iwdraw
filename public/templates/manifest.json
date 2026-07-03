@@ -86,6 +86,16 @@
         "pc_transport"
       ],
       "partial": true
+    },
+    {
+      "id": "masters",
+      "title": "명화",
+      "emoji": "🖼️",
+      "themes": [
+        "masters_trace",
+        "masters_quarter"
+      ],
+      "partial": true
     }
   ],
   "themes": {
@@ -7028,6 +7038,132 @@
       "count": 0,
       "cover": null,
       "items": []
+    },
+    "masters_trace": {
+      "theme": "masters_trace",
+      "title": "명화 따라 그리기",
+      "category": "masters",
+      "count": 9,
+      "cover": "/templates/masters/masters_trace_starry_night.webp",
+      "items": [
+        {
+          "id": "masters_trace_starry_night",
+          "title": "별이 빛나는 밤 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_starry_night.webp"
+        },
+        {
+          "id": "masters_trace_bedroom",
+          "title": "아를의 침실 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_bedroom.webp"
+        },
+        {
+          "id": "masters_trace_great_wave",
+          "title": "가나가와 해변의 큰 파도 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_great_wave.webp"
+        },
+        {
+          "id": "masters_trace_sunrise",
+          "title": "인상, 해돋이 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_sunrise.webp"
+        },
+        {
+          "id": "masters_trace_water_lilies",
+          "title": "수련 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_water_lilies.webp"
+        },
+        {
+          "id": "masters_trace_grande_jatte",
+          "title": "그랑드 자트 섬의 일요일 오후 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_grande_jatte.webp"
+        },
+        {
+          "id": "masters_trace_scream",
+          "title": "절규 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_scream.webp"
+        },
+        {
+          "id": "masters_trace_mondrian",
+          "title": "빨강·파랑·노랑의 구성 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_mondrian.webp"
+        },
+        {
+          "id": "masters_trace_ssireum",
+          "title": "씨름 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_ssireum.webp"
+        }
+      ]
+    },
+    "masters_quarter": {
+      "theme": "masters_quarter",
+      "title": "명화 1/4 완성하기",
+      "category": "masters",
+      "count": 9,
+      "cover": "/templates/masters/masters_quarter_starry_night.webp",
+      "items": [
+        {
+          "id": "masters_quarter_starry_night",
+          "title": "별이 빛나는 밤 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_starry_night.webp"
+        },
+        {
+          "id": "masters_quarter_bedroom",
+          "title": "아를의 침실 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_bedroom.webp"
+        },
+        {
+          "id": "masters_quarter_great_wave",
+          "title": "가나가와 해변의 큰 파도 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_great_wave.webp"
+        },
+        {
+          "id": "masters_quarter_sunrise",
+          "title": "인상, 해돋이 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_sunrise.webp"
+        },
+        {
+          "id": "masters_quarter_water_lilies",
+          "title": "수련 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_water_lilies.webp"
+        },
+        {
+          "id": "masters_quarter_grande_jatte",
+          "title": "그랑드 자트 섬의 일요일 오후 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_grande_jatte.webp"
+        },
+        {
+          "id": "masters_quarter_scream",
+          "title": "절규 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_scream.webp"
+        },
+        {
+          "id": "masters_quarter_mondrian",
+          "title": "빨강·파랑·노랑의 구성 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_mondrian.webp"
+        },
+        {
+          "id": "masters_quarter_ssireum",
+          "title": "씨름 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_ssireum.webp"
+        }
+      ]
     }
   },
   "generatedFrom": "iwart"

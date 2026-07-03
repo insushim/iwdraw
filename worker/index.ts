@@ -17,7 +17,7 @@ import {
 
 export { CollabRoom } from "./collab";
 
-type Vars = { teacherId: string };
+type Vars = { teacherId: string; studentId: string; studentClassId: string };
 type AppContext = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -103,6 +103,23 @@ async function requireTeacher(c: AppContext, next: Next) {
   c.set("teacherId", id);
   await next();
 }
+
+// 학생 인증 미들웨어(Bearer JWT) — 토큰 위조 이중 방어로 학급 소속 재확인
+async function requireStudent(c: AppContext, next: Next) {
+  const auth = c.req.header("Authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const claims = await verifyJwt<{ student_id: string; class_id: string }>(auth, c.env.STUDENT_JWT_SECRET);
+  if (!claims?.student_id || !claims?.class_id) return c.json({ error: "unauthorized" }, 401);
+  const student = await c.env.DB.prepare("SELECT id FROM students WHERE id = ? AND class_id = ?")
+    .bind(claims.student_id, claims.class_id)
+    .first();
+  if (!student) return c.json({ error: "unauthorized" }, 401);
+  c.set("studentId", claims.student_id);
+  c.set("studentClassId", claims.class_id);
+  await next();
+}
+
+// 도안 배포 image 경로 화이트리스트 — 정적 /templates/ 안의 이미지 파일만(외부 URL/트래버설 차단)
+const TEMPLATE_IMAGE_RE = /^\/templates\/[a-z0-9_\-/]+\.(webp|png|jpg|jpeg)$/i;
 
 // ══════════════════════ 교사 인증 ══════════════════════
 app.post("/api/teacher/signup", async (c) => {
@@ -352,6 +369,164 @@ app.get("/api/artwork/file", requireTeacher, async (c) => {
     "SELECT 1 FROM artworks WHERE class_id = ? AND (image_path = ? OR thumb_path = ? OR timelapse_path = ?) LIMIT 1",
   )
     .bind(classId, path, path, path)
+    .first();
+  if (!known) return c.json({ error: "not_found" }, 404);
+  const obj = await c.env.BUCKET.get(path);
+  if (!obj) return c.json({ error: "not_found" }, 404);
+  const headers = new Headers();
+  obj.writeHttpMetadata(headers);
+  headers.set("Cache-Control", "private, max-age=600");
+  return new Response(obj.body, { headers });
+});
+
+// ══════════════════════ 교사: 도안 배포 ══════════════════════
+app.get("/api/classes/:id/assignment", requireTeacher, async (c) => {
+  const teacherId = c.get("teacherId");
+  const id = c.req.param("id");
+  const owned = await c.env.DB.prepare("SELECT id FROM classes WHERE id = ? AND teacher_id = ?")
+    .bind(id, teacherId)
+    .first();
+  if (!owned) return c.json({ error: "not_found" }, 404);
+  const a = await c.env.DB.prepare(
+    "SELECT id, template_id, title, image, note, created_at FROM assignments WHERE class_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1",
+  )
+    .bind(id)
+    .first();
+  return c.json({ assignment: a ?? null });
+});
+
+app.put("/api/classes/:id/assignment", requireTeacher, async (c) => {
+  const teacherId = c.get("teacherId");
+  const id = c.req.param("id");
+  const owned = await c.env.DB.prepare("SELECT id FROM classes WHERE id = ? AND teacher_id = ?")
+    .bind(id, teacherId)
+    .first();
+  if (!owned) return c.json({ error: "not_found" }, 404);
+  let body: { template_id?: string; title?: string; image?: string; note?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "bad_request" }, 400);
+  }
+  // 런타임 타입 검증 — 문자열 아닌 값은 .trim()에서 500이 나지 않게 400으로
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const templateId = str(body.template_id).trim().slice(0, 80);
+  const title = str(body.title).trim().slice(0, 60);
+  const image = str(body.image).trim();
+  const note = str(body.note).trim().slice(0, 200);
+  if (!templateId || !TEMPLATE_IMAGE_RE.test(image)) return c.json({ error: "bad_request" }, 400);
+  const aid = genId();
+  // batch = 단일 트랜잭션 — 비활성화와 삽입 사이에 실패해도 "활성 0건" 상태로 남지 않는다
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE assignments SET is_active = 0 WHERE class_id = ?").bind(id),
+    c.env.DB.prepare(
+      "INSERT INTO assignments (id, class_id, template_id, title, image, note) VALUES (?, ?, ?, ?, ?, ?)",
+    ).bind(aid, id, templateId, title, image, note),
+  ]);
+  return c.json({ id: aid });
+});
+
+app.delete("/api/classes/:id/assignment", requireTeacher, async (c) => {
+  const teacherId = c.get("teacherId");
+  const id = c.req.param("id");
+  // 소유권을 UPDATE 조건에 직접 포함(단일 원자 쿼리)
+  await c.env.DB.prepare(
+    "UPDATE assignments SET is_active = 0 WHERE class_id = ? AND class_id IN (SELECT id FROM classes WHERE teacher_id = ?)",
+  )
+    .bind(id, teacherId)
+    .run();
+  return c.json({ ok: true });
+});
+
+// ══════════════════════ 학생: 배포된 도안 조회 ══════════════════════
+app.get("/api/student/assignment", requireStudent, async (c) => {
+  const a = await c.env.DB.prepare(
+    "SELECT id, template_id, title, image, note, created_at FROM assignments WHERE class_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1",
+  )
+    .bind(c.get("studentClassId"))
+    .first();
+  return c.json({ assignment: a ?? null });
+});
+
+// ══════════════════════ 학생: 학급 갤러리(승인작만) ══════════════════════
+app.get("/api/student/gallery", requireStudent, async (c) => {
+  const classId = c.get("studentClassId");
+  const studentId = c.get("studentId");
+  // 승인작 전체 + 본인 미승인작(승인 대기 표시용) — /api/student/file의 접근 규칙과 동일 정책
+  const { results } = await c.env.DB.prepare(
+    `SELECT a.id, a.mode, a.thumb_path, a.image_path, a.like_count, a.created_at, a.is_approved, s.nickname,
+            EXISTS(SELECT 1 FROM artwork_likes al WHERE al.artwork_id = a.id AND al.voter_key = ?) AS liked,
+            (a.student_id = ?) AS mine
+     FROM artworks a JOIN students s ON s.id = a.student_id
+     WHERE a.class_id = ? AND (a.is_approved = 1 OR a.student_id = ?)
+     ORDER BY a.created_at DESC LIMIT 200`,
+  )
+    .bind(studentId, studentId, classId, studentId)
+    .all<{ liked: number; mine: number; is_approved: number; [k: string]: unknown }>();
+  return c.json(
+    (results ?? []).map((r) => ({ ...r, liked: !!r.liked, mine: !!r.mine, is_approved: !!r.is_approved })),
+  );
+});
+
+// 좋아요 토글 — voter_key = studentId(PK 중복 방지), like_count는 원천 재집계로 갱신
+app.post("/api/student/artworks/:id/like", requireStudent, async (c) => {
+  const classId = c.get("studentClassId");
+  const studentId = c.get("studentId");
+  const artId = c.req.param("id");
+  const art = await c.env.DB.prepare(
+    "SELECT id FROM artworks WHERE id = ? AND class_id = ? AND is_approved = 1",
+  )
+    .bind(artId, classId)
+    .first();
+  if (!art) return c.json({ error: "not_found" }, 404);
+  const existing = await c.env.DB.prepare(
+    "SELECT 1 FROM artwork_likes WHERE artwork_id = ? AND voter_key = ?",
+  )
+    .bind(artId, studentId)
+    .first();
+  // 쓰기+재집계를 batch(단일 트랜잭션)로 — like_count가 원천과 어긋난 순간이 없게.
+  // 동시 더블탭 레이스: 둘 다 INSERT를 타면 한쪽이 PK 충돌 → "이미 좋아요" 상태로 정규화
+  // (count는 원천 재집계라 항상 정합, 토글이 좋아요 쪽으로 수렴하는 것은 의도된 완화)
+  const recount = c.env.DB.prepare(
+    "UPDATE artworks SET like_count = (SELECT COUNT(*) FROM artwork_likes WHERE artwork_id = ?) WHERE id = ?",
+  ).bind(artId, artId);
+  if (existing) {
+    await c.env.DB.batch([
+      c.env.DB.prepare("DELETE FROM artwork_likes WHERE artwork_id = ? AND voter_key = ?").bind(artId, studentId),
+      recount,
+    ]);
+  } else {
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare("INSERT INTO artwork_likes (artwork_id, voter_key) VALUES (?, ?)").bind(artId, studentId),
+        recount,
+      ]);
+    } catch (e) {
+      if (!String(e).includes("UNIQUE")) return c.json({ error: "server" }, 500);
+      await recount.run(); // 충돌 시 batch 전체가 롤백되므로 재집계만 별도 수행
+    }
+  }
+  const row = await c.env.DB.prepare("SELECT like_count FROM artworks WHERE id = ?")
+    .bind(artId)
+    .first<{ like_count: number }>();
+  return c.json({ liked: !existing, like_count: row?.like_count ?? 0 });
+});
+
+// 학생용 작품 이미지 — 자기 학급 + (승인작 또는 본인 작품)만 스트리밍
+app.get("/api/student/file", requireStudent, async (c) => {
+  const classId = c.get("studentClassId");
+  const studentId = c.get("studentId");
+  const path = c.req.query("path") ?? "";
+  if (!/^[a-f0-9-]+\/[a-f0-9-]+\/[a-f0-9-]+(\.[a-z]+)+$/i.test(path)) {
+    return c.json({ error: "bad_path" }, 400);
+  }
+  if (path.split("/")[0] !== classId) return c.json({ error: "forbidden" }, 403);
+  const known = await c.env.DB.prepare(
+    `SELECT 1 FROM artworks
+     WHERE class_id = ? AND (image_path = ? OR thumb_path = ? OR timelapse_path = ?)
+       AND (is_approved = 1 OR student_id = ?) LIMIT 1`,
+  )
+    .bind(classId, path, path, path, studentId)
     .first();
   if (!known) return c.json({ error: "not_found" }, 404);
   const obj = await c.env.BUCKET.get(path);

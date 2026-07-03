@@ -12,8 +12,9 @@ import {
   type ClassRow,
 } from "@/lib/teacher-api";
 import { ClassGallery } from "./class-gallery";
+import { AssignmentModal } from "./assignment-modal";
 
-/* 교사 대시보드: 학급 목록·생성·코드/QR·갤러리 */
+/* 교사 대시보드: 학급 목록·생성·코드/QR·갤러리·도안 배포 */
 export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +22,7 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
   const [name, setName] = useState("");
   const [big, setBig] = useState<ClassRow | null>(null);
   const [galleryOf, setGalleryOf] = useState<ClassRow | null>(null);
+  const [assignOf, setAssignOf] = useState<ClassRow | null>(null);
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
@@ -106,6 +108,9 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
                 <Button size="md" tone="ghost" onClick={() => setGalleryOf(c)}>
                   🖼️ 갤러리
                 </Button>
+                <Button size="md" tone="ghost" onClick={() => setAssignOf(c)}>
+                  📋 도안 배포
+                </Button>
                 <Button
                   size="md"
                   tone="ghost"
@@ -139,6 +144,8 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
 
       {/* 전자칠판 대형 표시 */}
       {big && <BigCodeModal klass={big} origin={origin} onClose={() => setBig(null)} />}
+      {/* 도안 배포 */}
+      {assignOf && <AssignmentModal klass={assignOf} onClose={() => setAssignOf(null)} />}
     </div>
   );
 }
