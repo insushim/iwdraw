@@ -1,5 +1,6 @@
 import type { BackendCaps, BlendMode, Dab, RGB } from "../types";
 import type { TipKind, DabComposite } from "../brushes/BrushBase";
+import type { PaperKind } from "./paper";
 
 /*
  * RendererBackend: 브러시가 만든 백엔드 독립 Dab 스트림을 래스터화하는 추상.
@@ -14,6 +15,8 @@ export interface StrokeContext {
   color: RGB;
   /** 종이 결 침식 강도 0~1 — endStroke에서 스트로크 버퍼에 적용(0이면 생략) */
   paperGrain: number;
+  /** 종이 종류(모드가 결정: 유화=linen, 수채=cotton, 그 외=smooth) */
+  paperKind: PaperKind;
   /**
    * wash 누적: 스트로크 버퍼에 픽셀별 최대 알파만 유지(GL blendEquation MAX).
    * 겹침 포화로 팁 질감이 뭉개지는 것을 막는다 — 유화 붓결·수채 워시의 핵심.
@@ -186,7 +189,9 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.35;
         const jr = Math.random() * half * 0.35;
-        ctx.strokeStyle = "rgba(255,255,255,1)";
+        // 밝기 변화 = 물감 명암 줄무늬(셰이드 채널) — 알파가 아니라 색이 어두워진다
+        const v = 200 + Math.floor(Math.random() * 56);
+        ctx.strokeStyle = `rgba(${v},${v},${v},1)`;
         ctx.lineWidth = size * 0.1 + Math.random() * size * 0.05;
         ctx.beginPath();
         ctx.moveTo(r - half + jl, y);
@@ -237,7 +242,8 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.5;
         const jr = Math.random() * half * 0.5;
-        ctx.strokeStyle = `rgba(255,255,255,${0.82 + Math.random() * 0.18})`;
+        const fv = 195 + Math.floor(Math.random() * 61); // 붓털별 물감 명암(셰이드 채널)
+        ctx.strokeStyle = `rgba(${fv},${fv},${fv},${0.82 + Math.random() * 0.18})`;
         ctx.lineWidth = 2.2 + Math.random() * 4.2;
         ctx.beginPath();
         ctx.moveTo(r - half + jl, y);

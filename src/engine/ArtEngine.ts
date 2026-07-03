@@ -20,7 +20,7 @@ import { LayerStack } from "./core/LayerStack";
 import { History } from "./core/History";
 import { StrokeRecorder } from "./core/StrokeRecorder";
 import { AutoSave, type SavedState } from "./core/AutoSave";
-import { drawPaperTint } from "./core/paper";
+import { drawPaperTint, type PaperKind } from "./core/paper";
 import { tilesForRect, copyTiles, TileSnapshotCommand, type TileRect } from "./core/tiles";
 import type { Layer } from "./core/LayerStack";
 import { BrushBase, createBrush } from "./brushes";
@@ -225,6 +225,11 @@ export class ArtEngine {
   }
 
   /* ── 스트로크 파이프라인 ── */
+  /** 모드가 캔버스(종이)를 결정 — 유화=린넨천, 수채=수채용지, 그 외=매끈한 도화지 */
+  private paperKindForMode(): PaperKind {
+    return this.mode === "oil" ? "linen" : this.mode === "watercolor" ? "cotton" : "smooth";
+  }
+
   private brushContext(): StrokeContext {
     const brush = this.brush!;
     const wash = brush.cfg.strokeBlend === "wash";
@@ -241,6 +246,7 @@ export class ArtEngine {
       wash,
       strokeOpacity: wash ? clamp(brush.cfg.washOpacity * this.settings.opacity, 0, 1) : 1,
       wetEdge: brush.cfg.wetEdge,
+      paperKind: this.paperKindForMode(),
     };
   }
 
@@ -434,6 +440,7 @@ export class ArtEngine {
       wash: remoteWash,
       strokeOpacity: remoteWash ? clamp(brush.cfg.washOpacity * meta.opacity, 0, 1) : 1,
       wetEdge: brush.cfg.wetEdge,
+      paperKind: this.paperKindForMode(),
     };
     this.cm.backend.beginStroke(ctx);
     let dabs = brush.begin(points[0], settings);
@@ -664,7 +671,7 @@ export class ArtEngine {
     // 종이 배경은 맨 뒤에 깐다(destination-over) — 지우개 프리뷰가 종이까지 뚫지 않게.
     // 린넨 결 → 흰 종이 순서(표시 전용, PNG 내보내기엔 미포함)
     ctx.globalCompositeOperation = "destination-over";
-    drawPaperTint(ctx, this.width, this.height);
+    drawPaperTint(ctx, this.width, this.height, this.paperKindForMode());
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, this.width, this.height);
     ctx.globalCompositeOperation = "source-over";

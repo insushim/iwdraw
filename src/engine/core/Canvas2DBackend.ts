@@ -55,10 +55,15 @@ export class Canvas2DBackend implements RendererBackend {
       c.width = tip.width;
       c.height = tip.height;
       const cx = c.getContext("2d")!;
+      // multiply 틴트: 팁의 밝기(셰이드 채널)가 물감 색의 명암으로 살아남는다(임파스토 줄무늬).
+      // source-in은 밝기를 버리고 균일 색으로 채워 질감이 평평해진다.
       cx.drawImage(tip, 0, 0);
-      cx.globalCompositeOperation = "source-in";
+      cx.globalCompositeOperation = "multiply";
       cx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
       cx.fillRect(0, 0, c.width, c.height);
+      cx.globalCompositeOperation = "destination-in";
+      cx.drawImage(tip, 0, 0);
+      cx.globalCompositeOperation = "source-over";
       this.tintCache.set(key, c);
       // 캐시 폭주 방지
       if (this.tintCache.size > 48) {
@@ -103,10 +108,26 @@ export class Canvas2DBackend implements RendererBackend {
     if (eraser) target.restore();
   }
 
+  private liveBuf: CanvasRenderingContext2D | null = null;
+
   presentStroke(target: CanvasRenderingContext2D): void {
     if (!this.ctx) return;
     // 지우개는 레이어에 직접 그려져 이미 실시간으로 보임
     if (this.ctx.composite === "destination-out") return;
+    // 종이 결을 프리뷰에도 실시간 적용("떼는 순간 질감이 생기는" 이질감 제거)
+    let src: HTMLCanvasElement = this.strokeBuf;
+    if (this.ctx.paperGrain > 0) {
+      if (!this.liveBuf) {
+        const c = document.createElement("canvas");
+        c.width = this.width;
+        c.height = this.height;
+        this.liveBuf = c.getContext("2d")!;
+      }
+      this.liveBuf.clearRect(0, 0, this.width, this.height);
+      this.liveBuf.drawImage(this.strokeBuf, 0, 0);
+      applyPaperGrain(this.liveBuf, this.width, this.height, this.ctx.paperGrain, this.ctx.paperKind);
+      src = this.liveBuf.canvas;
+    }
     target.save();
     target.globalAlpha = this.ctx.strokeOpacity; // wash 획 전체 불투명도(프리뷰=최종)
     target.globalCompositeOperation =
@@ -115,7 +136,7 @@ export class Canvas2DBackend implements RendererBackend {
         : this.ctx.composite === "lighter"
           ? "lighter"
           : "source-over";
-    target.drawImage(this.strokeBuf, 0, 0);
+    target.drawImage(src, 0, 0);
     target.restore();
   }
 
@@ -130,7 +151,7 @@ export class Canvas2DBackend implements RendererBackend {
       applyWetEdge(this.strokeCtx, this.width, this.height, this.ctx.wetEdge);
     }
     if (this.ctx.paperGrain > 0) {
-      applyPaperGrain(this.strokeCtx, this.width, this.height, this.ctx.paperGrain);
+      applyPaperGrain(this.strokeCtx, this.width, this.height, this.ctx.paperGrain, this.ctx.paperKind);
     }
     // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영(라이브 프리뷰와 동일해야 함)
     this.layerCtx.save();

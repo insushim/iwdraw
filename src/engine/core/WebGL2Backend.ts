@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
-import { applyPaperGrain, applyWetEdge } from "./paper";
+import { applyWetEdge, paperGrainTile, type PaperKind } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -25,6 +25,7 @@ uniform vec2 u_center;   // px
 uniform float u_size;    // px
 uniform float u_rot;
 out vec2 v_uv;
+out vec2 v_px;      // 캔버스 픽셀 좌표(종이 결 샘플용 — dab이 아니라 캔버스에 고정)
 void main() {
   float c = cos(u_rot); float s = sin(u_rot);
   vec2 p = vec2(a_pos.x * c - a_pos.y * s, a_pos.x * s + a_pos.y * c) * u_size;
@@ -32,17 +33,28 @@ void main() {
   vec2 clip = (px / u_resolution) * 2.0 - 1.0;
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
   v_uv = a_uv;
+  v_px = px;
 }`;
 
 const DAB_FS = `#version 300 es
 precision highp float;
 in vec2 v_uv;
+in vec2 v_px;
 uniform sampler2D u_tip;
-uniform vec4 u_color;   // premultiplied rgb + alpha
+uniform sampler2D u_paper;  // 종이 결 타일(256, repeat) — 골짜기 알파
+uniform float u_grain;      // 종이 결 강도 0~1 (dab 단위 실시간 — 프리뷰=최종)
+uniform vec4 u_color;       // rgb(0..1) + alpha
 out vec4 frag;
 void main() {
-  float a = texture(u_tip, v_uv).a * u_color.a;
-  frag = vec4(u_color.rgb * a, a);  // premultiplied
+  vec4 t = texture(u_tip, v_uv);
+  float a = t.a * u_color.a;
+  // 종이 결: 골짜기에서 안료가 빠지고(알파 침식) 살짝 어두워진다(위브가 비침)
+  float g = texture(u_paper, v_px / 256.0).a * u_grain;
+  a *= 1.0 - g * 0.85;
+  // t.r = 팁의 셰이드 채널(밝기): 물감 색 자체를 어둡게/밝게 → 임파스토 줄무늬.
+  // 순백 팁(r=1)은 기존과 동일. (업로드가 unpremultiply라 a>0에서 r은 원래 밝기)
+  float shade = t.r * (1.0 - g * 0.35);
+  frag = vec4(u_color.rgb * shade * a, a);  // premultiplied
 }`;
 
 const FULLSCREEN_VS = `#version 300 es
@@ -103,6 +115,8 @@ export class WebGL2Backend implements RendererBackend {
 
   private strokeFbo: Fbo;
   private tipTextures = new Map<TipKind, { tex: WebGLTexture; epoch: number }>();
+  /** 종이 결 타일 텍스처(repeat, 종이 종류별) — dab 셰이더가 캔버스 좌표로 샘플(실시간 종이 결) */
+  private paperTex = new Map<PaperKind, WebGLTexture>();
 
   private ctx: StrokeContext | null = null;
   /** 종이 결 모듈레이션 등 2D 포스트프로세스용(지연 생성) */
@@ -209,6 +223,22 @@ export class WebGL2Backend implements RendererBackend {
     return entry.tex;
   }
 
+  private paperTexture(kind: PaperKind): WebGLTexture {
+    let tex = this.paperTex.get(kind);
+    if (!tex) {
+      const gl = this.gl;
+      tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, paperGrainTile(kind));
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+      this.paperTex.set(kind, tex);
+    }
+    return tex;
+  }
+
   beginStroke(ctx: StrokeContext): void {
     this.ctx = ctx;
     const gl = this.gl;
@@ -245,6 +275,15 @@ export class WebGL2Backend implements RendererBackend {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.tipTexture(this.ctx.tip));
     gl.uniform1i(gl.getUniformLocation(this.dabProg, "u_tip"), 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.paperTexture(this.ctx.paperKind));
+    gl.uniform1i(gl.getUniformLocation(this.dabProg, "u_paper"), 1);
+    // 지우개는 종이 결 미적용(기존 endStroke 정책과 동일)
+    gl.uniform1f(
+      gl.getUniformLocation(this.dabProg, "u_grain"),
+      this.ctx.composite === "destination-out" ? 0 : this.ctx.paperGrain,
+    );
+    gl.activeTexture(gl.TEXTURE0);
     gl.uniform2f(gl.getUniformLocation(this.dabProg, "u_resolution"), this.width, this.height);
     const uCenter = gl.getUniformLocation(this.dabProg, "u_center");
     const uSize = gl.getUniformLocation(this.dabProg, "u_size");
@@ -307,10 +346,9 @@ export class WebGL2Backend implements RendererBackend {
     // 스트로크 버퍼(premultiplied)를 화면 캔버스로 복사해 2D 레이어에 합성
     this.blitStrokeToScreen();
 
-    // 종이 결 침식·wet edge는 2D 경유(지우개엔 미적용)
+    // 종이 결은 dab 셰이더에서 실시간 적용됨(프리뷰=최종). wet edge만 2D 후처리(마름 연출)
     let src: HTMLCanvasElement = this.glCanvas;
-    const needPost = this.ctx.paperGrain > 0 || this.ctx.wetEdge > 0;
-    if (needPost && this.ctx.composite !== "destination-out") {
+    if (this.ctx.wetEdge > 0 && this.ctx.composite !== "destination-out") {
       if (!this.post2d) {
         const c = document.createElement("canvas");
         c.width = this.width;
@@ -319,10 +357,7 @@ export class WebGL2Backend implements RendererBackend {
       }
       this.post2d.clearRect(0, 0, this.width, this.height);
       this.post2d.drawImage(this.glCanvas, 0, 0);
-      if (this.ctx.wetEdge > 0)
-        applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge);
-      if (this.ctx.paperGrain > 0)
-        applyPaperGrain(this.post2d, this.width, this.height, this.ctx.paperGrain);
+      applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge);
       src = this.post2d.canvas;
     }
 
@@ -346,6 +381,8 @@ export class WebGL2Backend implements RendererBackend {
     gl.deleteProgram(this.dabProg);
     gl.deleteProgram(this.copyProg);
     this.tipTextures.forEach((t) => gl.deleteTexture(t.tex));
+    this.paperTex.forEach((t) => gl.deleteTexture(t));
+    this.paperTex.clear();
     this.tipTextures.clear();
     gl.deleteFramebuffer(this.strokeFbo.fb);
     gl.deleteTexture(this.strokeFbo.tex);

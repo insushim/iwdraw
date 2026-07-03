@@ -21,7 +21,22 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
   const px = d.data;
   const r = size / 2;
   const FLOOR = 24; // 생성 이미지의 "거의 검정" 노이즈 제거(없으면 획이 사각 리본이 됨)
+  // 붓털별 명암 밴드(가로 10줄): AI 맵의 헤어라인 명암은 축소 시 사라지므로,
+  // 굵은 톤 밴드를 곱해 넓은 획에서도 임파스토 줄무늬가 보이게 한다(고정 시드 LCG)
+  const BANDS = 10;
+  let seed = 41;
+  const bandShade: number[] = [];
+  for (let b = 0; b < BANDS; b++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    bandShade.push(0.8 + (seed / 0x7fffffff) * 0.2);
+  }
   for (let y = 0; y < size; y++) {
+    // 밴드 사이 선형 보간 — 경계가 기계적인 평행선으로 보이지 않게
+    const t = (y / size) * BANDS - 0.5;
+    const i0 = Math.max(0, Math.min(BANDS - 1, Math.floor(t)));
+    const i1 = Math.min(BANDS - 1, i0 + 1);
+    const fr = Math.max(0, Math.min(1, t - i0));
+    const band = bandShade[i0] * (1 - fr) + bandShade[i1] * fr;
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
       const lum = Math.max(px[i], px[i + 1], px[i + 2]);
@@ -30,7 +45,9 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
       const dn = Math.hypot(x - r + 0.5, y - r + 0.5) / r;
       if (dn > 1) a = 0;
       else if (dn > 0.94) a *= 1 - (dn - 0.94) / 0.06;
-      px[i] = px[i + 1] = px[i + 2] = 255;
+      // 셰이드 채널 = 밴드 톤 × 원본 밝기(0.72~1.0) — 물감 명암 줄무늬의 근원
+      const shade = Math.round(255 * band * (0.72 + 0.28 * (lum / 255)));
+      px[i] = px[i + 1] = px[i + 2] = shade;
       px[i + 3] = a;
     }
   }

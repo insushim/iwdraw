@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor } from "@/store/editor";
 import { PALETTE_24, PALETTE_CVD, hsvToRgb, rgbToHsv, rgbEq } from "@/lib/palette";
 import { rgbToCss, type RGB } from "@/engine/types";
@@ -96,39 +96,75 @@ export function ColorPalette() {
   );
 }
 
+const WHEEL_PX = 220; // 내부 래스터 해상도(표시 크기는 CSS)
+
+/** 원형 컬러휠(각도=색상, 반지름=쨍하기) + 밝기 슬라이더 — i-scream류 직관 피커 */
 function HsvPicker({ value, onChange }: { value: RGB; onChange: (c: RGB) => void }) {
   const { h, s, v } = rgbToHsv(value);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // 휠 래스터는 1회만 그린다(v=1 고정 — 밝기는 아래 슬라이더 담당)
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const ctx = el.getContext("2d")!;
+    const img = ctx.createImageData(WHEEL_PX, WHEEL_PX);
+    const r = WHEEL_PX / 2;
+    for (let y = 0; y < WHEEL_PX; y++) {
+      for (let x = 0; x < WHEEL_PX; x++) {
+        const dx = x - r + 0.5;
+        const dy = y - r + 0.5;
+        const dist = Math.hypot(dx, dy) / r;
+        const i = (y * WHEEL_PX + x) * 4;
+        if (dist > 1) continue; // 밖은 투명
+        const hue = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+        const c = hsvToRgb(hue, Math.min(1, dist), 1);
+        img.data[i] = c.r;
+        img.data[i + 1] = c.g;
+        img.data[i + 2] = c.b;
+        // 가장자리 안티앨리어싱
+        img.data[i + 3] = dist > 0.985 ? Math.round(255 * (1 - (dist - 0.985) / 0.015)) : 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }, []);
+
+  const pick = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dx = e.clientX - rect.left - rect.width / 2;
+    const dy = e.clientY - rect.top - rect.height / 2;
+    const dist = Math.min(1, Math.hypot(dx, dy) / (rect.width / 2));
+    const hue = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+    onChange(hsvToRgb(hue, dist, v || 1));
+  };
+
+  // 현재 색 표시점 위치(%)
+  const hRad = (h * Math.PI) / 180;
+  const dotX = 50 + Math.cos(hRad) * s * 48;
+  const dotY = 50 + Math.sin(hRad) * s * 48;
+
   return (
-    <div className="mt-3 space-y-2 rounded-2xl bg-cream p-2.5">
-      <label className="block text-xs font-semibold text-ink-soft">
-        색깔
-        <input
-          type="range"
-          min={0}
-          max={360}
-          value={Math.round(h)}
-          onChange={(e) => onChange(hsvToRgb(+e.target.value, s || 1, v || 1))}
-          className="mt-1 h-3.5 w-full cursor-pointer appearance-none rounded-full"
-          style={{
-            background:
-              "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)",
+    <div className="mt-3 space-y-2.5 rounded-2xl bg-cream p-3">
+      <div className="relative mx-auto h-44 w-44 touch-none">
+        <canvas
+          ref={canvasRef}
+          width={WHEEL_PX}
+          height={WHEEL_PX}
+          className="h-full w-full cursor-crosshair rounded-full shadow-soft"
+          aria-label="컬러휠 — 돌려서 색깔, 바깥쪽일수록 쨍하게"
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            pick(e);
+          }}
+          onPointerMove={(e) => {
+            if (e.buttons > 0) pick(e);
           }}
         />
-      </label>
-      <label className="block text-xs font-semibold text-ink-soft">
-        쨍하기
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(s * 100)}
-          onChange={(e) => onChange(hsvToRgb(h, +e.target.value / 100, v || 1))}
-          className="mt-1 h-3.5 w-full cursor-pointer appearance-none rounded-full accent-coral"
-          style={{
-            background: `linear-gradient(to right, ${rgbToCss(hsvToRgb(h, 0, v || 1))}, ${rgbToCss(hsvToRgb(h, 1, v || 1))})`,
-          }}
+        <span
+          className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-[2.5px] ring-white drop-shadow"
+          style={{ left: `${dotX}%`, top: `${dotY}%`, background: rgbToCss(hsvToRgb(h, s, 1)) }}
         />
-      </label>
+      </div>
       <label className="block text-xs font-semibold text-ink-soft">
         밝기
         <input
