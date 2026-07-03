@@ -64,6 +64,8 @@ export interface BrushConfig {
   washOpacity: number;
   /** 획 실루엣 가장자리 안료 몰림 0~1(수채 wet edge) — endStroke 후처리 */
   wetEdge: number;
+  /** 획 시작·끝의 마른 붓털 트레일 강도 0~1(유화) — 진행 방향으로 저알파 fringe dab */
+  fringe: number;
 }
 
 const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
@@ -82,6 +84,7 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   strokeBlend: "buildup",
   washOpacity: 1,
   wetEdge: 0,
+  fringe: 0,
 };
 
 /**
@@ -137,6 +140,8 @@ export class BrushBase {
     const angle = this.smoothAngle(Math.atan2(p.y - from.y, p.x - from.x));
 
     if (this.pendingBegin) {
+      // 획 머리의 마른 붓털 트레일(진행 반대 방향) — 방향이 확정된 지금 찍는다
+      dabs.push(...this.fringeDabs(this.pendingBegin, angle, -1));
       dabs.push(this.makeDab(this.pendingBegin, angle)); // 보류했던 첫 dab을 실제 방향으로
       this.pendingBegin = null;
     }
@@ -162,8 +167,36 @@ export class BrushBase {
   end(): Dab[] {
     // 탭(이동 없이 뗌)이면 보류된 첫 dab을 지금이라도 찍는다 — 점 찍기 보장
     const out = this.pendingBegin ? [this.makeDab(this.pendingBegin, 0)] : [];
+    // 획 꼬리의 마른 붓털 트레일(진행 방향)
+    if (!this.pendingBegin && this.last && this.smoothedAngle !== null) {
+      out.push(...this.fringeDabs(this.last, this.smoothedAngle, 1));
+    }
     this.pendingBegin = null;
     this.last = null;
+    return out;
+  }
+
+  /** 획 양끝의 마른 붓 테이퍼 — 진행 방향(dir=+1 꼬리, -1 머리)으로 좁아지며 이어지는 dab.
+   * 알파를 낮추면 유령 같은 반투명 캡이 된다(실측) — 크기를 줄여 붓을 드는 끝맛을 만든다 */
+  private fringeDabs(p: StrokePoint, angle: number, dir: 1 | -1): Dab[] {
+    const c = this.cfg;
+    if (!c.fringe) return [];
+    const base = this.settings.size * c.sizeScale;
+    const steps: Array<[number, number, number]> = [
+      // [진행 오프셋, 크기 배율, 알파 배율]
+      [0.12, 0.72, 0.95],
+      [0.26, 0.46, 0.85],
+      [0.38, 0.24, 0.6],
+    ];
+    const out: Dab[] = [];
+    for (const [off, sz, al] of steps) {
+      const d = this.makeDab(p, angle);
+      d.x += Math.cos(angle) * dir * base * off;
+      d.y += Math.sin(angle) * dir * base * off;
+      d.size *= sz;
+      d.alpha = Math.max(0.01, d.alpha * c.fringe * al);
+      out.push(d);
+    }
     return out;
   }
 

@@ -63,6 +63,16 @@ export class Canvas2DBackend implements RendererBackend {
       cx.fillRect(0, 0, c.width, c.height);
       cx.globalCompositeOperation = "destination-in";
       cx.drawImage(tip, 0, 0);
+      // 어두운 색은 multiply로 명암이 사라진다(검정×무엇=검정) → screen으로 결을 밝게
+      const dk = 1 - Math.max(color.r, color.g, color.b) / 255;
+      if (dk > 0.4) {
+        cx.globalCompositeOperation = "screen";
+        cx.globalAlpha = 0.3 * dk;
+        cx.drawImage(tip, 0, 0);
+        cx.globalAlpha = 1;
+        cx.globalCompositeOperation = "destination-in";
+        cx.drawImage(tip, 0, 0);
+      }
       cx.globalCompositeOperation = "source-over";
       this.tintCache.set(key, c);
       // 캐시 폭주 방지

@@ -48,13 +48,19 @@ out vec4 frag;
 void main() {
   vec4 t = texture(u_tip, v_uv);
   float a = t.a * u_color.a;
-  // 종이 결: 골짜기에서 안료가 빠지고(알파 침식) 살짝 어두워진다(위브가 비침)
+  // 종이 결: 골짜기에서 안료가 빠진다(알파 침식)
   float g = texture(u_paper, v_px / 256.0).a * u_grain;
   a *= 1.0 - g * 0.85;
-  // t.r = 팁의 셰이드 채널(밝기): 물감 색 자체를 어둡게/밝게 → 임파스토 줄무늬.
-  // 순백 팁(r=1)은 기존과 동일. (업로드가 unpremultiply라 a>0에서 r은 원래 밝기)
-  float shade = t.r * (1.0 - g * 0.35);
-  frag = vec4(u_color.rgb * shade * a, a);  // premultiplied
+  // 임파스토 셰이드(t.r, 1=중립): 밝은 색은 어둡게, 어두운 색은 흰쪽으로 —
+  // 곱셈만 쓰면 검정(0)에서 줄무늬가 수학적으로 소멸(실측). 실제 유화에서도
+  // 검은 물감의 붓결은 빛을 받는 하이라이트로 보인다.
+  float f = t.r * (1.0 - g * 0.35);
+  vec3 col = u_color.rgb;
+  float dk = 1.0 - max(col.r, max(col.g, col.b)); // 검을수록 1
+  vec3 darkened = col * f;
+  vec3 lightened = mix(col, vec3(1.0), (1.0 - f) * 0.8);
+  col = mix(darkened, lightened, dk);
+  frag = vec4(col * a, a);  // premultiplied
 }`;
 
 const FULLSCREEN_VS = `#version 300 es

@@ -6,7 +6,7 @@ import { PALETTE_24, PALETTE_CVD, hsvToRgb, rgbToHsv, rgbEq } from "@/lib/palett
 import { rgbToCss, type RGB } from "@/engine/types";
 import { Icon } from "./icons";
 
-/* 색상: 지금 색 크게 + 24색 동그라미 + HSV 피커 + 최근 8색 + 색약 팔레트 토글 */
+/* 색상: 지금 색 크게 + 24색 동그라미 + HSV 피커 + 최근 8색 + 색각 보조 팔레트 토글 */
 export function ColorPalette() {
   const color = useEditor((s) => s.color);
   const setColor = useEditor((s) => s.setColor);
@@ -35,10 +35,10 @@ export function ColorPalette() {
             className={`pressable flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
               cvd ? "bg-sky-soft text-sky-deep" : "text-ink-soft hover:bg-cream"
             }`}
-            title="색약 친화 팔레트"
+            title="색각 보조 팔레트(구분하기 쉬운 색)"
           >
             <Icon name="glasses" className="h-4 w-4" />
-            색약
+            색각 보조
           </button>
           <button
             onClick={() => setShowPicker((v) => !v)}
