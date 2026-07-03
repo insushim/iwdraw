@@ -106,6 +106,18 @@ export const useEditor = create<EditorState>((set, get) => ({
       layers: stack.info,
       activeLayerId: stack.activeId,
     });
+    // UI(스토어)에 남아있는 설정을 새 엔진에 전부 푸시 — 페이지 이동 후 재마운트 시
+    // 엔진이 기본값(검정 연필 18)으로 그리던 버그(UI 표시와 실제 그리기 불일치)
+    const s = get();
+    engine.setMode(s.mode);
+    engine.setBrush(s.brush); // setMode가 모드 기본 브러시로 바꾸므로 그 뒤에 복원
+    engine.setColor(s.color);
+    engine.setSize(s.size);
+    engine.setOpacity(s.opacity);
+    engine.setWater(s.water);
+    engine.setStabilize(s.stabilize);
+    engine.setSymmetry(s.symmetry);
+    engine.setQuickShape(s.quickShape);
     void engine.checkRestore();
   },
 

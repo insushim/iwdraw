@@ -23,12 +23,12 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
   const FLOOR = 24; // 생성 이미지의 "거의 검정" 노이즈 제거(없으면 획이 사각 리본이 됨)
   // 붓털별 명암 밴드(가로 10줄): AI 맵의 헤어라인 명암은 축소 시 사라지므로,
   // 굵은 톤 밴드를 곱해 넓은 획에서도 임파스토 줄무늬가 보이게 한다(고정 시드 LCG)
-  const BANDS = 10;
+  const BANDS = 12;
   let seed = 41;
   const bandShade: number[] = [];
   for (let b = 0; b < BANDS; b++) {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    bandShade.push(0.8 + (seed / 0x7fffffff) * 0.2);
+    bandShade.push(0.74 + (seed / 0x7fffffff) * 0.26); // 대비를 키워 진행방향 결이 종이결보다 우세하게
   }
   for (let y = 0; y < size; y++) {
     // 밴드 사이 선형 보간 — 경계가 기계적인 평행선으로 보이지 않게
