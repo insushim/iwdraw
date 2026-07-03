@@ -111,7 +111,11 @@ export const useEditor = create<EditorState>((set, get) => ({
     // 엔진이 기본값(검정 연필 18)으로 그리던 버그(UI 표시와 실제 그리기 불일치)
     const s = get();
     engine.setMode(s.mode);
-    engine.setBrush(s.brush); // setMode가 모드 기본 브러시로 바꾸므로 그 뒤에 복원
+    // 지우개는 복원하지 않는다 — 재입장 후 빈 캔버스에 지우개로 그으면 아무것도
+    // 안 보여 "안 그려져요/색이 안 바뀌어요"가 된다(실사용 보고). 모드 기본 붓으로.
+    const safeBrush = s.brush === "eraser" ? engine.brushId : s.brush;
+    engine.setBrush(safeBrush); // setMode가 모드 기본 브러시로 바꾸므로 그 뒤에 복원
+    if (safeBrush !== s.brush) set({ brush: safeBrush });
     engine.setColor(s.color);
     engine.setSize(s.size);
     engine.setOpacity(s.opacity);
