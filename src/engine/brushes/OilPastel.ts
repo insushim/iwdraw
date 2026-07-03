@@ -9,14 +9,16 @@ export class OilPastel extends BrushBase {
         tip: "chunk",
         sizeScale: 1.3,
         spacing: 0.12,
-        flow: 0.95,
-        jitter: 0.1,
+        flow: 1,
+        jitter: 0.06,
         sizePressure: 0.4,
         alphaPressure: 0.25,
         minSizeRatio: 0.65,
         composite: "source-over",
         rotationFollowsStroke: true,
         paperGrain: 0.25,
+        strokeBlend: "wash", // 크리미한 덩어리 질감이 획 전체에 유지
+        washOpacity: 1,
       },
       rng,
     );

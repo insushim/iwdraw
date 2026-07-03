@@ -31,6 +31,7 @@ import { Stabilizer, strengthToStreamline } from "./input/Stabilizer";
 import { mirrorPoint } from "./tools/Symmetry";
 import { detectShape, QUICKSHAPE_HOLD_MS } from "./tools/QuickShape";
 import type { StrokeContext } from "./core/backend";
+import { loadTipOverrides } from "./core/tipLoader";
 
 /*
  * ArtEngine: 브라우저 캔버스 위에서 모든 조각을 조율하는 중심.
@@ -107,6 +108,7 @@ export class ArtEngine {
     this.recorder = new StrokeRecorder();
     this.autosave = new AutoSave(5000);
     this.stabilizer.setStrength(this.settings.stabilize);
+    loadTipOverrides(); // AI 팁 알파맵 비동기 로드(실패 시 프로시저럴 폴백)
 
     this.cm.onDowngradeToCanvas2D(() => this.requestComposite());
 
@@ -224,12 +226,16 @@ export class ArtEngine {
   /* ── 스트로크 파이프라인 ── */
   private brushContext(): StrokeContext {
     const brush = this.brush!;
+    const wash = brush.cfg.strokeBlend === "wash";
     return {
       layerCanvas: this.layers.active.canvas,
       tip: brush.cfg.tip,
       composite: brush.cfg.composite,
       color: this.settings.color,
       paperGrain: brush.cfg.paperGrain,
+      wash,
+      strokeOpacity: wash ? clamp(brush.cfg.washOpacity * this.settings.opacity, 0, 1) : 1,
+      wetEdge: brush.cfg.wetEdge,
     };
   }
 
@@ -278,7 +284,7 @@ export class ArtEngine {
     const sp = this.stabilizer.push(p);
     this.curPoints.push(sp);
     this.paintDabs(this.brush.move(sp), sp);
-    this.brush.end();
+    this.paintDabs(this.brush.end(), sp); // 탭 시 보류된 첫 dab(점 찍기)
 
     // QuickShape: 홀드 없이 뗐어도 도형성 강하면 스냅(옵션 시)
     let recorded = false;
@@ -404,23 +410,29 @@ export class ArtEngine {
     if (points.length === 0) return;
     const layer = this.remoteLayer(userId);
     const brush = createBrush(meta.brush);
+    // 원격 payload는 신뢰 불가 — 범위를 로컬 UI와 동일하게 클램프(음수 알파/거대 dab 방어)
     const settings: BrushSettings = {
-      size: meta.size,
-      opacity: meta.opacity,
+      size: clamp(meta.size, 1, 128),
+      opacity: clamp(meta.opacity, 0, 1),
       color: meta.color,
-      waterAmount: meta.water,
+      waterAmount: clamp(meta.water, 0, 1),
       stabilize: 0,
     };
+    const remoteWash = brush.cfg.strokeBlend === "wash";
     const ctx: StrokeContext = {
       layerCanvas: layer.canvas,
       tip: brush.cfg.tip,
       composite: brush.cfg.composite,
       color: meta.color,
       paperGrain: brush.cfg.paperGrain,
+      wash: remoteWash,
+      strokeOpacity: remoteWash ? clamp(brush.cfg.washOpacity * meta.opacity, 0, 1) : 1,
+      wetEdge: brush.cfg.wetEdge,
     };
     this.cm.backend.beginStroke(ctx);
     let dabs = brush.begin(points[0], settings);
     for (let i = 1; i < points.length; i++) dabs = dabs.concat(brush.move(points[i]));
+    dabs = dabs.concat(brush.end()); // rotationFollows 브러시의 보류 dab 회수
     this.cm.backend.drawDabs(dabs);
     this.cm.backend.endStroke();
     this.requestComposite();

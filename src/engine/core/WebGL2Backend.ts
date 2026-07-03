@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
-import { makeTipCanvas, type RendererBackend, type StrokeContext } from "./backend";
-import { applyPaperGrain } from "./paper";
+import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
+import { applyPaperGrain, applyWetEdge } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -102,7 +102,7 @@ export class WebGL2Backend implements RendererBackend {
   private fsVao: WebGLVertexArrayObject;
 
   private strokeFbo: Fbo;
-  private tipTextures = new Map<TipKind, WebGLTexture>();
+  private tipTextures = new Map<TipKind, { tex: WebGLTexture; epoch: number }>();
 
   private ctx: StrokeContext | null = null;
   /** 종이 결 모듈레이션 등 2D 포스트프로세스용(지연 생성) */
@@ -185,20 +185,28 @@ export class WebGL2Backend implements RendererBackend {
   }
 
   private tipTexture(kind: TipKind): WebGLTexture {
-    let t = this.tipTextures.get(kind);
-    if (!t) {
-      const gl = this.gl;
-      const src = makeTipCanvas(kind);
-      t = gl.createTexture()!;
-      gl.bindTexture(gl.TEXTURE_2D, t);
+    const gl = this.gl;
+    const epoch = getTipEpoch();
+    let entry = this.tipTextures.get(kind);
+    // AI 알파맵이 늦게 로드되면 epoch가 올라간다 → 캐시된 텍스처 재생성
+    if (entry && entry.epoch !== epoch) {
+      gl.deleteTexture(entry.tex);
+      this.tipTextures.delete(kind);
+      entry = undefined;
+    }
+    if (!entry) {
+      const src = getTipCanvas(kind);
+      const tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      this.tipTextures.set(kind, t);
+      entry = { tex, epoch };
+      this.tipTextures.set(kind, entry);
     }
-    return t;
+    return entry.tex;
   }
 
   beginStroke(ctx: StrokeContext): void {
@@ -220,10 +228,17 @@ export class WebGL2Backend implements RendererBackend {
     gl.useProgram(this.dabProg);
     gl.bindVertexArray(this.quadVao);
     gl.enable(gl.BLEND);
-    // premultiplied: additive면 ONE,ONE / 일반이면 최대 알파 누적
-    if (this.ctx.composite === "lighter") {
+    // wash: 픽셀별 최대 알파만 유지(MAX) → 겹침 포화 없이 팁 붓결이 획 전체에 보존.
+    // (premultiplied + 스트로크 내 단색이라 채널별 max가 일관됨. 무지개 같은
+    //  dab별 색 변화 브러시는 buildup을 유지해야 한다.)
+    if (this.ctx.wash) {
+      gl.blendEquation(gl.MAX);
+      gl.blendFunc(gl.ONE, gl.ONE);
+    } else if (this.ctx.composite === "lighter") {
+      gl.blendEquation(gl.FUNC_ADD);
       gl.blendFunc(gl.ONE, gl.ONE);
     } else {
+      gl.blendEquation(gl.FUNC_ADD);
       gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     }
 
@@ -274,6 +289,7 @@ export class WebGL2Backend implements RendererBackend {
     this.blitStrokeToScreen();
     const c = this.ctx.composite;
     target.save();
+    target.globalAlpha = this.ctx.strokeOpacity; // wash 획 전체 불투명도(프리뷰=최종)
     target.globalCompositeOperation =
       c === "destination-out"
         ? "destination-out"
@@ -291,9 +307,10 @@ export class WebGL2Backend implements RendererBackend {
     // 스트로크 버퍼(premultiplied)를 화면 캔버스로 복사해 2D 레이어에 합성
     this.blitStrokeToScreen();
 
-    // 종이 결 침식은 2D 경유(지우개엔 미적용)
+    // 종이 결 침식·wet edge는 2D 경유(지우개엔 미적용)
     let src: HTMLCanvasElement = this.glCanvas;
-    if (this.ctx.paperGrain > 0 && this.ctx.composite !== "destination-out") {
+    const needPost = this.ctx.paperGrain > 0 || this.ctx.wetEdge > 0;
+    if (needPost && this.ctx.composite !== "destination-out") {
       if (!this.post2d) {
         const c = document.createElement("canvas");
         c.width = this.width;
@@ -302,12 +319,16 @@ export class WebGL2Backend implements RendererBackend {
       }
       this.post2d.clearRect(0, 0, this.width, this.height);
       this.post2d.drawImage(this.glCanvas, 0, 0);
-      applyPaperGrain(this.post2d, this.width, this.height, this.ctx.paperGrain);
+      if (this.ctx.wetEdge > 0)
+        applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge);
+      if (this.ctx.paperGrain > 0)
+        applyPaperGrain(this.post2d, this.width, this.height, this.ctx.paperGrain);
       src = this.post2d.canvas;
     }
 
     const layerCtx = (this.ctx.layerCanvas as HTMLCanvasElement).getContext("2d")!;
     layerCtx.save();
+    layerCtx.globalAlpha = this.ctx.strokeOpacity;
     if (this.ctx.composite === "destination-out") {
       layerCtx.globalCompositeOperation = "destination-out";
     } else if (this.ctx.composite === "multiply") {
@@ -324,7 +345,7 @@ export class WebGL2Backend implements RendererBackend {
     const gl = this.gl;
     gl.deleteProgram(this.dabProg);
     gl.deleteProgram(this.copyProg);
-    this.tipTextures.forEach((t) => gl.deleteTexture(t));
+    this.tipTextures.forEach((t) => gl.deleteTexture(t.tex));
     this.tipTextures.clear();
     gl.deleteFramebuffer(this.strokeFbo.fb);
     gl.deleteTexture(this.strokeFbo.tex);

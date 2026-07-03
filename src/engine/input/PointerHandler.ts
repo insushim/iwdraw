@@ -82,7 +82,9 @@ export class PointerHandler {
     this.drawing = true;
     this.drawingPointerId = e.pointerId;
     this.lastMove = null;
-    this.speedEma = 0;
+    // 0으로 시작하면 첫 dab이 최대 필압(0.85)이라 획 머리에 블롭이 생긴다
+    // → 중간 속도로 시작해 느리면 자연스럽게 굵어지게
+    this.speedEma = 1.1;
     const p = this.toStrokePoint(e);
     this.lastDrawPoint = p;
     this.cb.onDown(p, e);

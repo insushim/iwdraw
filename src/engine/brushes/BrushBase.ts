@@ -37,10 +37,23 @@ export interface BrushConfig {
   composite: DabComposite;
   /** 스트로크 진행 방향으로 팁 회전(유화 bristle, 크레용 결) */
   rotationFollowsStroke: boolean;
+  /** 진행 방향 대비 팁 각도 오프셋(rad) — 마커 납작촉을 진행방향과 수직으로(넓은 획) */
+  tipAngleOffset: number;
   /** 종이 결 침식 강도 0~1 — endStroke에서 스트로크에 캔버스 질감이 배게 한다 */
   paperGrain: number;
   /** 이동 거리에 따라 hue 회전(무지개) */
   dynamicHue: boolean;
+  /**
+   * 스트로크 내 겹침 누적 방식.
+   * buildup = 겹칠수록 진해짐(연필·크레용·에어브러시).
+   * wash = 픽셀별 최대 알파만 유지 → 팁의 붓결/워시 질감이 획 전체에 보존(유화·수채·마커).
+   *        획 전체 불투명도는 washOpacity×진하기로 합성 시 1회 적용.
+   */
+  strokeBlend: "buildup" | "wash";
+  /** wash 모드에서 스트로크 전체에 적용되는 기본 불투명도(진하기 슬라이더와 곱) */
+  washOpacity: number;
+  /** 획 실루엣 가장자리 안료 몰림 0~1(수채 wet edge) — endStroke 후처리 */
+  wetEdge: number;
 }
 
 const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
@@ -53,8 +66,12 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   minSizeRatio: 0.35,
   composite: "source-over",
   rotationFollowsStroke: false,
+  tipAngleOffset: 0,
   paperGrain: 0,
   dynamicHue: false,
+  strokeBlend: "buildup",
+  washOpacity: 1,
+  wetEdge: 0,
 };
 
 /**
@@ -70,6 +87,8 @@ export class BrushBase {
   private traveled = 0;
   /** 결 방향 스무딩(EMA) — dab별 각도 점프가 만드는 줄무늬(마커/유화) 방지 */
   private smoothedAngle: number | null = null;
+  /** rotationFollows 브러시의 첫 dab — 방향을 알 수 없어 첫 move까지 보류(시작 블롭 방지) */
+  private pendingBegin: StrokePoint | null = null;
   private rng: () => number;
 
   constructor(cfg: Partial<BrushConfig> & Pick<BrushConfig, "id" | "tip">, rng?: () => number) {
@@ -87,6 +106,11 @@ export class BrushBase {
     this.residual = 0;
     this.traveled = 0;
     this.smoothedAngle = null;
+    if (this.cfg.rotationFollowsStroke) {
+      // 방향이 정해지기 전 각도 0으로 찍으면 세로획 머리에 가로 블롭이 생긴다 → 보류
+      this.pendingBegin = p;
+      return [];
+    }
     return [this.makeDab(p, 0)];
   }
 
@@ -94,11 +118,18 @@ export class BrushBase {
     if (!this.last) return [];
     const from = this.last;
     const segLen = dist(from.x, from.y, p.x, p.y);
+    // segLen 0(중복 좌표)이면 방향을 알 수 없어 pendingBegin 소비도 다음 유효
+    // 세그먼트(또는 end() 안전망)까지 지연한다 — 의도된 동작
     if (segLen === 0) return [];
 
     const step = Math.max(1, this.settings.size * this.cfg.sizeScale * this.cfg.spacing);
     const dabs: Dab[] = [];
     const angle = this.smoothAngle(Math.atan2(p.y - from.y, p.x - from.x));
+
+    if (this.pendingBegin) {
+      dabs.push(this.makeDab(this.pendingBegin, angle)); // 보류했던 첫 dab을 실제 방향으로
+      this.pendingBegin = null;
+    }
 
     let offset = step - this.residual;
     while (offset <= segLen) {
@@ -119,8 +150,11 @@ export class BrushBase {
   }
 
   end(): Dab[] {
+    // 탭(이동 없이 뗌)이면 보류된 첫 dab을 지금이라도 찍는다 — 점 찍기 보장
+    const out = this.pendingBegin ? [this.makeDab(this.pendingBegin, 0)] : [];
+    this.pendingBegin = null;
     this.last = null;
-    return [];
+    return out;
   }
 
   /** 세그먼트 각도의 언랩 EMA — 짧은 세그먼트의 각도 잡음을 흡수해 결이 이어지게 */
@@ -145,7 +179,8 @@ export class BrushBase {
     const sizeK = 1 - c.sizePressure * (1 - pr);
     const size = Math.max(1, base * Math.max(c.minSizeRatio, sizeK));
     const alphaK = 1 - c.alphaPressure * (1 - pr);
-    const alpha = clamp(c.flow * s.opacity * alphaK, 0.01, 1);
+    // wash는 진하기(opacity)를 dab이 아니라 스트로크 합성 시 1회 적용(strokeOpacity)
+    const alpha = clamp(c.flow * (c.strokeBlend === "wash" ? 1 : s.opacity) * alphaK, 0.01, 1);
 
     const j = c.jitter * base;
     const dab: Dab = {
@@ -153,7 +188,7 @@ export class BrushBase {
       y: p.y + (j ? (this.rng() - 0.5) * j : 0),
       size,
       alpha,
-      rotation: c.rotationFollowsStroke ? angle : this.rng() * Math.PI * 2,
+      rotation: c.rotationFollowsStroke ? angle + c.tipAngleOffset : this.rng() * Math.PI * 2,
     };
     if (c.dynamicHue) {
       dab.color = hslToRgb((this.traveled / 340) % 1, 0.9, 0.55);

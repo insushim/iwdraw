@@ -14,6 +14,36 @@ export interface StrokeContext {
   color: RGB;
   /** 종이 결 침식 강도 0~1 — endStroke에서 스트로크 버퍼에 적용(0이면 생략) */
   paperGrain: number;
+  /**
+   * wash 누적: 스트로크 버퍼에 픽셀별 최대 알파만 유지(GL blendEquation MAX).
+   * 겹침 포화로 팁 질감이 뭉개지는 것을 막는다 — 유화 붓결·수채 워시의 핵심.
+   */
+  wash: boolean;
+  /** 스트로크 전체 불투명도(wash용, 합성 시 1회 적용) — buildup 브러시는 1 */
+  strokeOpacity: number;
+  /** 획 실루엣 가장자리 안료 몰림 강도 0~1(수채) — endStroke에서 applyWetEdge */
+  wetEdge: number;
+}
+
+/*
+ * 팁 오버라이드: AI 생성 알파맵(public/brush-tips/*)이 로드되면 프로시저럴 팁을 대체.
+ * epoch로 백엔드 캐시(2D 캔버스/GL 텍스처)를 무효화한다.
+ */
+const tipOverrides = new Map<TipKind, HTMLCanvasElement>();
+let tipEpoch = 0;
+
+export function setTipOverride(kind: TipKind, canvas: HTMLCanvasElement): void {
+  tipOverrides.set(kind, canvas);
+  tipEpoch++;
+}
+
+export function getTipEpoch(): number {
+  return tipEpoch;
+}
+
+/** 백엔드 공용 팁 소스 — 오버라이드 우선, 없으면 프로시저럴 */
+export function getTipCanvas(kind: TipKind): HTMLCanvasElement {
+  return tipOverrides.get(kind) ?? makeTipCanvas(kind);
 }
 
 export interface RendererBackend {
@@ -25,6 +55,8 @@ export interface RendererBackend {
   /**
    * 진행 중 스트로크를 표시 캔버스에 라이브 프리뷰로 그린다(매 composite 프레임).
    * 스트로크가 없으면 no-op. endStroke 전에도 획이 즉시 보이게 하는 핵심.
+   * ⚠️ wetEdge·paperGrain 후처리는 의도적으로 endStroke에만 적용 —
+   * "펜을 떼면 물감이 마르며 가장자리·종이 결이 배어나는" 연출이자 프레임당 비용 절감.
    * 지우개(destination-out) 처리는 구현체별로 다르다 —
    * Canvas2DBackend는 레이어에 직접 지워 이미 반영되므로 no-op,
    * WebGL2Backend는 스트로크 버퍼를 매 프레임 destination-out으로 합성한다.
@@ -55,13 +87,12 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       break;
     }
     case "wet": {
-      // 수채: 중심은 균일한 워시, 가장자리에 안료가 몰리는 rim(edge darkening 베이크),
-      // 미세 granulation(안료 알갱이) — 겹치면 rim이 상쇄돼 획 경계에서만 진해진다.
+      // 수채: 균일한 워시 플래토 + granulation. rim(가장자리 안료 몰림)은 dab이 아니라
+      // 획 실루엣 기준이어야 하므로 endStroke의 applyWetEdge 후처리가 담당한다.
+      // (dab에 rim을 베이크하면 wash(MAX) 누적에서 dab별 고리가 사슬로 남는다 — 실측)
       const g = ctx.createRadialGradient(r, r, 0, r, r, r);
-      g.addColorStop(0, "rgba(255,255,255,0.6)");
-      g.addColorStop(0.7, "rgba(255,255,255,0.64)");
-      g.addColorStop(0.86, "rgba(255,255,255,0.95)");
-      g.addColorStop(0.96, "rgba(255,255,255,0.8)");
+      g.addColorStop(0, "rgba(255,255,255,0.68)");
+      g.addColorStop(0.82, "rgba(255,255,255,0.68)");
       g.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -162,39 +193,39 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       break;
     }
     case "bristle": {
-      // 유화 붓결: 옅은 바탕 워시가 스트릭을 묶고, 그 위에 굵기·밝기가 다른
-      // 가로 스트릭 + 사이사이 빈 골 — 이어 찍히면 연속된 붓자국으로 보인다.
+      // 유화 붓결(near-binary): wash 누적에서 알파 패턴이 그대로 획이 되므로
+      // 스트릭은 거의 불투명, 골은 완전히 빈다. 좌우 길이 차이 → 획 시작·끝의 마른 붓자국.
       ctx.clearRect(0, 0, size, size);
-      // 바탕 워시(스트릭 사이가 완전히 비지 않게)
-      ctx.fillStyle = "rgba(255,255,255,0.15)";
-      ctx.beginPath();
-      ctx.ellipse(r, r, r * 0.96, r * 0.82, 0, 0, Math.PI * 2);
-      ctx.fill();
-      const lines = 14;
       ctx.lineCap = "round";
-      for (let i = 0; i < lines; i++) {
-        const y = ((i + 0.5) / lines) * size + (Math.random() - 0.5) * 3;
-        if (Math.random() < 0.15) continue; // 빈 골(붓털 사이 틈)
-        const alpha = 0.3 + Math.random() * 0.7;
-        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-        ctx.lineWidth = 1.8 + Math.random() * 3.8;
-        ctx.beginPath();
+      const rows = 16;
+      for (let i = 0; i < rows; i++) {
+        const y = ((i + 0.5) / rows) * size + (Math.random() - 0.5) * 2.5;
+        if (Math.random() < 0.12) continue; // 붓털 사이 빈 골(획 전체에 이어지는 줄)
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
-        const jl = Math.random() * 8;
-        const jr = Math.random() * 8;
+        const jl = Math.random() * half * 0.5;
+        const jr = Math.random() * half * 0.5;
+        ctx.strokeStyle = `rgba(255,255,255,${0.82 + Math.random() * 0.18})`;
+        ctx.lineWidth = 2.2 + Math.random() * 4.2;
+        ctx.beginPath();
         ctx.moveTo(r - half + jl, y);
         ctx.lineTo(r + half - jr, y);
         ctx.stroke();
       }
-      // 하이라이트 얇은 털 몇 가닥(결의 대비)
-      for (let i = 0; i < 5; i++) {
-        const y = size * (0.15 + Math.random() * 0.7);
-        ctx.strokeStyle = "rgba(255,255,255,1)";
-        ctx.lineWidth = 0.9;
-        ctx.beginPath();
+      // 몸통은 꽉 차게 — 가장자리(위아래 행·좌우 끝)만 결이 갈라진다
+      ctx.fillStyle = "rgba(255,255,255,1)";
+      ctx.beginPath();
+      ctx.ellipse(r, r, r * 0.5, r * 0.68, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 흩날리는 얇은 털
+      for (let i = 0; i < 6; i++) {
+        const y = size * (0.08 + Math.random() * 0.84);
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
-        ctx.moveTo(r - half + Math.random() * 6, y);
-        ctx.lineTo(r + half - Math.random() * 6, y);
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const from = Math.random() < 0.5 ? r - half : r + half - 12;
+        ctx.moveTo(from, y);
+        ctx.lineTo(from + 12, y + (Math.random() - 0.5) * 3);
         ctx.stroke();
       }
       break;

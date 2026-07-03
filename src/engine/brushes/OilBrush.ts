@@ -15,11 +15,13 @@ export class OilBrush extends BrushBase {
         flow: 1,
         jitter: 0.015,
         sizePressure: 0.45,
-        alphaPressure: 0.1,
+        alphaPressure: 0.35, // wash에서 필압 낮은 구간=마른 붓자국(끝 갈라짐)
         minSizeRatio: 0.6,
         composite: "source-over",
         rotationFollowsStroke: true,
         paperGrain: 0.5,
+        strokeBlend: "wash", // 겹침 포화 방지 → 붓결이 획 전체에 보존
+        washOpacity: 1,
       },
       rng,
     );

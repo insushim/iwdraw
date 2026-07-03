@@ -150,3 +150,58 @@ export function drawPaperTint(
   ctx.fillStyle = tintPattern;
   ctx.fillRect(0, 0, width, height);
 }
+
+/* wet edge 작업용 스크래치 캔버스(스트로크마다 재할당 방지).
+ * ⚠️ 모듈 싱글턴 — "페이지당 활성 엔진 1개" 가정(CanvasStage 단일 마운트).
+ * 멀티 캔버스 동시 렌더가 생기면 백엔드 인스턴스 필드로 옮길 것. */
+let wetTmp: CanvasRenderingContext2D | null = null;
+let wetBand: CanvasRenderingContext2D | null = null;
+
+function scratch(
+  ref: CanvasRenderingContext2D | null,
+  width: number,
+  height: number,
+): CanvasRenderingContext2D {
+  if (!ref || ref.canvas.width !== width || ref.canvas.height !== height) {
+    const c = document.createElement("canvas");
+    c.width = width;
+    c.height = height;
+    ref = c.getContext("2d")!;
+  }
+  return ref;
+}
+
+/**
+ * 수채 wet edge: 획이 마르며 안료가 실루엣 가장자리에 몰리는 효과.
+ * 밴드 = 스트로크 − blur(스트로크): 실루엣 안쪽 경계에서만 알파가 남는다.
+ * 밴드를 source-atop으로 다시 얹어 가장자리 알파(=진하기)를 올린다 —
+ * dab 단위 rim 베이크와 달리 획 전체 실루엣 기준이라 겹침 고리가 없다.
+ */
+export function applyWetEdge(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  strength: number,
+): void {
+  wetTmp = scratch(wetTmp, width, height);
+  wetBand = scratch(wetBand, width, height);
+
+  wetTmp.clearRect(0, 0, width, height);
+  wetTmp.filter = "blur(7px)";
+  wetTmp.drawImage(ctx.canvas, 0, 0);
+  wetTmp.filter = "none";
+
+  wetBand.clearRect(0, 0, width, height);
+  wetBand.drawImage(ctx.canvas, 0, 0);
+  wetBand.globalCompositeOperation = "destination-out";
+  wetBand.drawImage(wetTmp.canvas, 0, 0);
+  wetBand.globalCompositeOperation = "source-over";
+
+  ctx.save();
+  ctx.globalCompositeOperation = "source-atop"; // 실루엣 밖으로 번지지 않게
+  ctx.globalAlpha = Math.min(1, strength);
+  ctx.drawImage(wetBand.canvas, 0, 0);
+  ctx.drawImage(wetBand.canvas, 0, 0);
+  ctx.drawImage(wetBand.canvas, 0, 0);
+  ctx.restore();
+}

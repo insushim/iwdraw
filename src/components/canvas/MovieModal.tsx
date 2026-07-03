@@ -157,8 +157,12 @@ function replayOne(
 
   let dabs = brush.begin(pts[0], stroke.settings);
   for (let i = 1; i < pts.length; i++) dabs = dabs.concat(brush.move(pts[i]));
+  dabs = dabs.concat(brush.end()); // rotationFollows 브러시의 보류 첫 dab(탭 점) 회수
+  // wash 브러시는 flow=1(진하기는 합성 시 1회)이라 재생 시 washOpacity를 반영해야 비슷한 농도
+  const washK =
+    brush.cfg.strokeBlend === "wash" ? brush.cfg.washOpacity * stroke.settings.opacity : 1;
   for (const d of dabs) {
-    ctx.globalAlpha = d.alpha;
+    ctx.globalAlpha = d.alpha * washK;
     const c = d.color ?? color;
     ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
     ctx.beginPath();

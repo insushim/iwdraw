@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
-import { makeTipCanvas, type RendererBackend, type StrokeContext } from "./backend";
-import { applyPaperGrain } from "./paper";
+import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
+import { applyPaperGrain, applyWetEdge } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -27,10 +27,19 @@ export class Canvas2DBackend implements RendererBackend {
     this.strokeCtx = this.strokeBuf.getContext("2d")!;
   }
 
+  private tipEpoch = -1;
+
   private tip(kind: TipKind): HTMLCanvasElement {
+    // AI 알파맵이 늦게 로드되면 epoch가 올라간다 → 팁·틴트 캐시 전체 무효화
+    const epoch = getTipEpoch();
+    if (epoch !== this.tipEpoch) {
+      this.tipCache.clear();
+      this.tintCache.clear();
+      this.tipEpoch = epoch;
+    }
     let t = this.tipCache.get(kind);
     if (!t) {
-      t = makeTipCanvas(kind);
+      t = getTipCanvas(kind);
       this.tipCache.set(kind, t);
     }
     return t;
@@ -69,6 +78,9 @@ export class Canvas2DBackend implements RendererBackend {
 
   drawDabs(dabs: Dab[]): void {
     if (!this.ctx) return;
+    // wash(MAX) 근사: Canvas2D엔 max 블렌드가 없어 source-over 누적을 쓴다.
+    // 팁이 near-binary(스트릭≈1, 골≈0)라 over 누적≈union≈max로 질감이 유지되고,
+    // 진하기는 strokeOpacity로 합성 시 1회 적용된다(실측: strokes-2d 스크린샷 검증).
     const eraser = this.ctx.composite === "destination-out";
     const target = eraser ? this.layerCtx! : this.strokeCtx;
     if (eraser) target.save();
@@ -96,6 +108,7 @@ export class Canvas2DBackend implements RendererBackend {
     // 지우개는 레이어에 직접 그려져 이미 실시간으로 보임
     if (this.ctx.composite === "destination-out") return;
     target.save();
+    target.globalAlpha = this.ctx.strokeOpacity; // wash 획 전체 불투명도(프리뷰=최종)
     target.globalCompositeOperation =
       this.ctx.composite === "multiply"
         ? "multiply"
@@ -112,12 +125,16 @@ export class Canvas2DBackend implements RendererBackend {
       this.ctx = null;
       return; // 지우개는 이미 레이어에 직접 반영됨
     }
-    // 종이 결 침식(마르며 캔버스 질감이 배어나는 효과) — 버퍼는 다음 스트로크에서 클리어됨
+    // wet edge(실루엣 가장자리 안료 몰림) → 종이 결 침식 순서로 후처리
+    if (this.ctx.wetEdge > 0) {
+      applyWetEdge(this.strokeCtx, this.width, this.height, this.ctx.wetEdge);
+    }
     if (this.ctx.paperGrain > 0) {
       applyPaperGrain(this.strokeCtx, this.width, this.height, this.ctx.paperGrain);
     }
     // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영(라이브 프리뷰와 동일해야 함)
     this.layerCtx.save();
+    this.layerCtx.globalAlpha = this.ctx.strokeOpacity;
     this.layerCtx.globalCompositeOperation =
       this.ctx.composite === "multiply"
         ? "multiply"
