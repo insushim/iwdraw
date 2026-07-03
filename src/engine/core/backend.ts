@@ -67,6 +67,12 @@ export interface RendererBackend {
   presentStroke(target: CanvasRenderingContext2D): void;
   /** 스트로크 종료 — 임시 버퍼를 (종이 결 침식 후) 레이어에 합성 */
   endStroke(): void;
+  /**
+   * 스트로크 폐기 — 임시 버퍼를 레이어에 합성하지 않고 버린다(QuickShape 스냅 시
+   * 프리핸드 획 대체). 스트로크가 없으면 no-op(멱등). ⚠️ Canvas2D 지우개는 레이어에
+   * 직접 그려 취소 불가 — 호출측이 destination-out 브러시에서 QuickShape를 막아야 한다.
+   */
+  cancelStroke(): void;
   /** rAF마다 호출되는 시간 진행 훅 — 현재 두 구현 모두 미사용(false). 향후 시뮬 확장용 */
   tick(dtMs: number): boolean;
   dispose(): void;

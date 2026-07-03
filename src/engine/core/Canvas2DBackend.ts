@@ -178,6 +178,12 @@ export class Canvas2DBackend implements RendererBackend {
     this.ctx = null;
   }
 
+  cancelStroke(): void {
+    // 스트로크 버퍼는 다음 beginStroke가 클리어. 지우개(레이어 직접)는 취소 불가 —
+    // 호출측(ArtEngine)이 destination-out 브러시에서 QuickShape를 막는다.
+    this.ctx = null;
+  }
+
   tick(): boolean {
     return false; // 시간 진행 시뮬 없음
   }

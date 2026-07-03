@@ -383,6 +383,11 @@ export class WebGL2Backend implements RendererBackend {
     this.ctx = null;
   }
 
+  cancelStroke(): void {
+    // 버퍼는 다음 beginStroke가 클리어 — ctx만 끊으면 present/end가 no-op
+    this.ctx = null;
+  }
+
   dispose(): void {
     const gl = this.gl;
     gl.deleteProgram(this.dabProg);

@@ -259,6 +259,7 @@ export class ArtEngine {
       return;
     }
     this.brush = createBrush(this.brushId);
+    this.quickShapeApplied = false;
     this.curPoints = [this.stabilizer.begin(p)];
     this.strokeStartTs = performance.now();
     this.firstDabLatency = -1;
@@ -298,20 +299,22 @@ export class ArtEngine {
     this.paintDabs(this.brush.move(sp), sp);
     this.paintDabs(this.brush.end(), sp); // 탭 시 보류된 첫 dab(점 찍기)
 
-    // QuickShape: 홀드 없이 뗐어도 도형성 강하면 스냅(옵션 시)
-    let recorded = false;
-    if (this.quickShapeEnabled) {
+    // QuickShape: 홀드 없이 뗐어도 도형성 강하면 스냅(옵션 시, 홀드로 이미 스냅됐으면 재감지 안 함)
+    if (this.quickShapeEnabled && !this.quickShapeApplied) {
       const shape = detectShape(this.curPoints);
-      if (shape) {
-        this.applyQuickShape(shape.kind, shape.points);
-        recorded = true;
-      }
+      if (shape) this.applyQuickShape(shape.kind, shape.points);
     }
 
     // 합성 직전 스냅샷(레이어는 아직 미변경 상태)
     if (!this.beforeFull) this.beforeFull = this.snapshotActiveLayer();
-    this.cm.backend.endStroke();
-    this.finalizeStroke(recorded);
+    if (this.quickShapeApplied) {
+      // 도형이 프리핸드를 "대체"한다 — 프리핸드 스트로크 버퍼를 합성하면
+      // 원본 쪽만 이중으로 진해진다(데칼코마니 실측 버그). 버퍼는 폐기.
+      this.cm.backend.cancelStroke();
+    } else {
+      this.cm.backend.endStroke();
+    }
+    this.finalizeStroke(this.quickShapeApplied);
   }
 
   private snapshotActiveLayer(): Uint8ClampedArray {
@@ -500,21 +503,41 @@ export class ArtEngine {
     }
   }
 
+  private quickShapeApplied = false;
+
   private applyQuickShape(kind: QuickShapeKind, points: { x: number; y: number }[]): void {
+    // 지우개(destination-out)는 레이어에 직접 그려 프리핸드 취소가 불가 + 색선 도형이
+    // 나가면 안 됨 — QuickShape 미적용
+    if (this.brush?.cfg.composite === "destination-out") return;
     // 레이어에 직접 그리기 전에 undo용 before 확보(홀드 타이머로 스트로크 중간에도 옴)
     if (!this.beforeFull) this.beforeFull = this.snapshotActiveLayer();
+    // 도형이 프리핸드를 대체 — 진행 중이던 스트로크 버퍼는 폐기(합성 금지)
+    this.cm.backend.cancelStroke();
     const ctx = this.layers.active.ctx;
-    // 임시 스트로크 취소: 마지막 finalize 전이므로 레이어에 이미 그려진 임시 dab을 덮어야 함.
-    // 간단화를 위해 현재 스트로크 영역을 before로 복원 후 도형을 그린다.
+    // 대칭(데칼코마니) 복제: 프리핸드 dab처럼 도형 폴리라인도 축마다 그린다
+    const variants =
+      this.symmetry === "none"
+        ? [points]
+        : (() => {
+            const per = points.map((p) =>
+              mirrorPoint({ x: p.x, y: p.y, pressure: 1, t: 0 }, this.symmetry, this.width, this.height),
+            );
+            return per[0].map((_, k) => per.map((mp) => mp[k]));
+          })();
     ctx.save();
     ctx.strokeStyle = `rgb(${this.settings.color.r},${this.settings.color.g},${this.settings.color.b})`;
+    ctx.globalAlpha = this.settings.opacity;
     ctx.lineWidth = this.settings.size;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.beginPath();
-    points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-    ctx.stroke();
+    for (const poly of variants) {
+      ctx.beginPath();
+      poly.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+      for (const p of poly) this.trackDirty(p.x, p.y, this.settings.size);
+    }
     ctx.restore();
+    this.quickShapeApplied = true;
     this.clearHold();
     this.emit("quickShapeApplied", { kind });
     this.requestComposite();
