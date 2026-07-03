@@ -52,6 +52,7 @@ export interface EditorState {
   undo: () => void;
   redo: () => void;
   clearActive: () => void;
+  newDrawing: () => void;
   addLayer: () => void;
   removeLayer: (id: string) => void;
   setActiveLayer: (id: string) => void;
@@ -174,6 +175,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   undo: () => get().engine?.undo(),
   redo: () => get().engine?.redo(),
   clearActive: () => get().engine?.clearActiveLayer(),
+  newDrawing: () => get().engine?.newDrawing(),
   addLayer: () => get().engine?.addLayer(),
   removeLayer: (id) => get().engine?.removeLayer(id),
   setActiveLayer: (id) => get().engine?.setActiveLayer(id),

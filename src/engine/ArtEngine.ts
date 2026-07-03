@@ -586,6 +586,25 @@ export class ArtEngine {
     this.requestComposite();
   }
 
+  /** 새 그림: 그리기 레이어를 1장으로 줄여 비우고 히스토리·기록·자동저장 초기화(도안은 유지) */
+  newDrawing(): void {
+    const drawables = this.layers.info.filter((l) => !l.isLineart);
+    for (const l of drawables.slice(1)) this.layers.removeLayer(l.id);
+    const first = this.layers.info.find((l) => !l.isLineart);
+    if (first) {
+      this.layers.setActive(first.id);
+      this.layers.setVisible(first.id, true);
+      this.layers.setOpacity(first.id, 1);
+      this.layers.clearActive();
+    }
+    this.history.clear();
+    this.recorder.clear();
+    void this.autosave.purge();
+    this.emitLayers();
+    this.emitHistory();
+    this.requestComposite();
+  }
+
   /* ── 레이어 API(UI가 호출) ── */
   addLayer(): void {
     if (this.layers.addLayer()) this.emitLayers();

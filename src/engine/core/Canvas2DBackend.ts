@@ -28,6 +28,39 @@ export class Canvas2DBackend implements RendererBackend {
   }
 
   private tipEpoch = -1;
+  private preparedCache = new Map<TipKind, { mul: HTMLCanvasElement; light: HTMLCanvasElement }>();
+
+  /** 셰이드 인코딩 → 2D용 파생 캔버스: mul(어두운 밴드 회색), light(밝은 밴드 알파) */
+  private preparedTip(kind: TipKind, tip: HTMLCanvasElement) {
+    let p = this.preparedCache.get(kind);
+    if (p) return p;
+    const w = tip.width;
+    const h = tip.height;
+    const src = tip.getContext("2d")!.getImageData(0, 0, w, h);
+    const mulImg = new ImageData(w, h);
+    const lightImg = new ImageData(w, h);
+    for (let i = 0; i < src.data.length; i += 4) {
+      const r = src.data[i] / 255;
+      const a = src.data[i + 3];
+      const dAmt = r >= 0.62 ? ((1 - r) / 0.38) * 0.3 : 0;
+      const lAmt = r < 0.55 ? ((0.55 - r) / 0.55) * 0.45 : 0;
+      const mv = Math.round(255 * (1 - dAmt));
+      mulImg.data[i] = mulImg.data[i + 1] = mulImg.data[i + 2] = mv;
+      mulImg.data[i + 3] = a;
+      lightImg.data[i] = lightImg.data[i + 1] = lightImg.data[i + 2] = 255;
+      lightImg.data[i + 3] = Math.round(a * lAmt);
+    }
+    const mk = (img: ImageData) => {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      c.getContext("2d")!.putImageData(img, 0, 0);
+      return c;
+    };
+    p = { mul: mk(mulImg), light: mk(lightImg) };
+    this.preparedCache.set(kind, p);
+    return p;
+  }
 
   private tip(kind: TipKind): HTMLCanvasElement {
     // AI 알파맵이 늦게 로드되면 epoch가 올라간다 → 팁·틴트 캐시 전체 무효화
@@ -35,6 +68,7 @@ export class Canvas2DBackend implements RendererBackend {
     if (epoch !== this.tipEpoch) {
       this.tipCache.clear();
       this.tintCache.clear();
+      this.preparedCache.clear();
       this.tipEpoch = epoch;
     }
     let t = this.tipCache.get(kind);
@@ -57,22 +91,19 @@ export class Canvas2DBackend implements RendererBackend {
       const cx = c.getContext("2d")!;
       // multiply 틴트: 팁의 밝기(셰이드 채널)가 물감 색의 명암으로 살아남는다(임파스토 줄무늬).
       // source-in은 밝기를 버리고 균일 색으로 채워 질감이 평평해진다.
-      cx.drawImage(tip, 0, 0);
+      // 셰이드 인코딩(r 0.62~1=어두운 밴드, 0~0.55=밝은 밴드)을 2D에서 재현:
+      // 어두운 밴드는 multiply, 밝은 밴드는 screen(흰쪽) — GL 셰이더와 동일 규칙
+      const { mul, light } = this.preparedTip(kind, tip);
+      cx.drawImage(mul, 0, 0);
       cx.globalCompositeOperation = "multiply";
       cx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
       cx.fillRect(0, 0, c.width, c.height);
       cx.globalCompositeOperation = "destination-in";
       cx.drawImage(tip, 0, 0);
-      // 어두운 색은 multiply로 명암이 사라진다(검정×무엇=검정) → screen으로 결을 밝게
-      const dk = 1 - Math.max(color.r, color.g, color.b) / 255;
-      if (dk > 0.4) {
-        cx.globalCompositeOperation = "screen";
-        cx.globalAlpha = 0.3 * dk;
-        cx.drawImage(tip, 0, 0);
-        cx.globalAlpha = 1;
-        cx.globalCompositeOperation = "destination-in";
-        cx.drawImage(tip, 0, 0);
-      }
+      cx.globalCompositeOperation = "screen";
+      cx.drawImage(light, 0, 0);
+      cx.globalCompositeOperation = "destination-in";
+      cx.drawImage(tip, 0, 0);
       cx.globalCompositeOperation = "source-over";
       this.tintCache.set(key, c);
       // 캐시 폭주 방지

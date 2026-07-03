@@ -45,6 +45,21 @@ export function Editor({ lineartSrc, initialMode, room, onSave, who, backHref = 
   const toggleJunior = useEditor((s) => s.toggleJunior);
   const restoreAt = useEditor((s) => s.restoreAvailable);
   const dismissRestore = useEditor((s) => s.dismissRestore);
+  const newDrawing = useEditor((s) => s.newDrawing);
+  // 새 그림 2단계 확인(아동 오조작 방지): 첫 클릭 → "정말요?" 3초, 그 안에 재클릭 시 실행
+  const [confirmNew, setConfirmNew] = useState(false);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleNewDrawing = () => {
+    if (!confirmNew) {
+      setConfirmNew(true);
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+      confirmTimer.current = setTimeout(() => setConfirmNew(false), 3000);
+      return;
+    }
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    setConfirmNew(false);
+    newDrawing();
+  };
   const canUndo = useEditor((s) => s.canUndo);
   const canRedo = useEditor((s) => s.canRedo);
   const undo = useEditor((s) => s.undo);
@@ -122,6 +137,21 @@ export function Editor({ lineartSrc, initialMode, room, onSave, who, backHref = 
             <span className="hidden lg:inline">{orientation === "landscape" ? "가로" : "세로"}</span>
           </button>
         )}
+        <button
+          onClick={handleNewDrawing}
+          className={
+            confirmNew
+              ? "pressable touch-target flex items-center gap-1 rounded-full bg-berry px-3 py-2 text-sm font-semibold text-white shadow-soft"
+              : iconBtn
+          }
+          aria-label="새 그림"
+          title="새 그림: 지금 그림을 지우고 처음부터"
+        >
+          <Icon name="plus" className="h-5 w-5" />
+          <span className={confirmNew ? "" : "hidden lg:inline"}>
+            {confirmNew ? "정말요?" : "새 그림"}
+          </span>
+        </button>
         <button
           onClick={() => setShowMovie(true)}
           className={iconBtn}

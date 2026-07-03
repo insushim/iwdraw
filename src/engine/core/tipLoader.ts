@@ -28,7 +28,10 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
   const bandShade: number[] = [];
   for (let b = 0; b < BANDS; b++) {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    bandShade.push(0.74 + (seed / 0x7fffffff) * 0.26); // 대비를 키워 진행방향 결이 종이결보다 우세하게
+    const u = seed / 0x7fffffff;
+    // ~1/3은 밝은 밴드(r 0.22~0.38 = 흰쪽 하이라이트), 나머지는 어두운 밴드(r 0.74~1)
+    // — 어떤 색이든(검정·중간 회색 포함) 최소 한쪽 밴드가 보인다
+    bandShade.push(b % 3 === 1 ? 0.22 + u * 0.16 : 0.74 + u * 0.26);
   }
   for (let y = 0; y < size; y++) {
     // 밴드 사이 선형 보간 — 경계가 기계적인 평행선으로 보이지 않게
