@@ -108,3 +108,31 @@ function blobToImage(blob: Blob): Promise<HTMLImageElement> {
     img.src = url;
   });
 }
+
+/*
+ * 사진 → 옅은 밑그림(따라 그리기용) — 원본을 흰색과 섞어 20%만 남긴다.
+ * 도안 레이어(최상단 multiply)로 깔리면 트레이싱지처럼 비쳐 학생이 직접 선을 딴다.
+ * 명화 팩 '따라 그리기'와 동일 원리(gen-masters.py TRACE_ALPHA=0.20).
+ */
+export async function photoToUnderlay(
+  file: File | Blob,
+  maxSize = 1536,
+  alpha = 0.2,
+): Promise<Blob> {
+  const img = await blobToImage(file);
+  const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(img, 0, 0, w, h);
+  ctx.globalAlpha = 1;
+  return new Promise((resolve, reject) => {
+    c.toBlob((b) => (b ? resolve(b) : reject(new Error("변환 실패"))), "image/webp", 0.9);
+  });
+}
