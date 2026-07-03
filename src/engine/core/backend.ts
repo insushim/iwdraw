@@ -12,10 +12,8 @@ export interface StrokeContext {
   tip: TipKind;
   composite: DabComposite;
   color: RGB;
-  /** 수채 모드 여부 — 백엔드가 wet 시뮬 사용 결정 */
-  watercolor: boolean;
-  /** 유화 모드 여부 — heightmap 사용 결정 */
-  oil: boolean;
+  /** 종이 결 침식 강도 0~1 — endStroke에서 스트로크 버퍼에 적용(0이면 생략) */
+  paperGrain: number;
 }
 
 export interface RendererBackend {
@@ -32,9 +30,9 @@ export interface RendererBackend {
    * WebGL2Backend는 스트로크 버퍼를 매 프레임 destination-out으로 합성한다.
    */
   presentStroke(target: CanvasRenderingContext2D): void;
-  /** 스트로크 종료 — 임시 버퍼를 레이어에 합성, 수채는 확산 마무리 */
+  /** 스트로크 종료 — 임시 버퍼를 (종이 결 침식 후) 레이어에 합성 */
   endStroke(): void;
-  /** rAF마다: 수채 확산 등 시간 진행 시뮬 1틱. 변경 있으면 true */
+  /** rAF마다 호출되는 시간 진행 훅 — 현재 두 구현 모두 미사용(false). 향후 시뮬 확장용 */
   tick(dtMs: number): boolean;
   dispose(): void;
 }
@@ -54,6 +52,31 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       g.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, size, size);
+      break;
+    }
+    case "wet": {
+      // 수채: 중심은 균일한 워시, 가장자리에 안료가 몰리는 rim(edge darkening 베이크),
+      // 미세 granulation(안료 알갱이) — 겹치면 rim이 상쇄돼 획 경계에서만 진해진다.
+      const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+      g.addColorStop(0, "rgba(255,255,255,0.6)");
+      g.addColorStop(0.7, "rgba(255,255,255,0.64)");
+      g.addColorStop(0.86, "rgba(255,255,255,0.95)");
+      g.addColorStop(0.96, "rgba(255,255,255,0.8)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(r, r, r, 0, Math.PI * 2);
+      ctx.fill();
+      // granulation: 미세 구멍
+      ctx.globalCompositeOperation = "destination-out";
+      for (let i = 0; i < 170; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const rad = Math.sqrt(Math.random()) * r * 0.92;
+        ctx.fillStyle = `rgba(0,0,0,${0.06 + Math.random() * 0.16})`;
+        const s = 1 + Math.random() * 1.8;
+        ctx.fillRect(r + Math.cos(a) * rad, r + Math.sin(a) * rad, s, s);
+      }
+      ctx.globalCompositeOperation = "source-over";
       break;
     }
     case "hard": {
@@ -139,22 +162,39 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       break;
     }
     case "bristle": {
-      // 유화 붓결: 대비 강한 가로 스트릭 + 사이사이 빈 골 — 붓자국이 확실히 남게
+      // 유화 붓결: 옅은 바탕 워시가 스트릭을 묶고, 그 위에 굵기·밝기가 다른
+      // 가로 스트릭 + 사이사이 빈 골 — 이어 찍히면 연속된 붓자국으로 보인다.
       ctx.clearRect(0, 0, size, size);
-      const lines = 11;
+      // 바탕 워시(스트릭 사이가 완전히 비지 않게)
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.beginPath();
+      ctx.ellipse(r, r, r * 0.96, r * 0.82, 0, 0, Math.PI * 2);
+      ctx.fill();
+      const lines = 14;
+      ctx.lineCap = "round";
       for (let i = 0; i < lines; i++) {
-        const y = ((i + 0.5) / lines) * size + (Math.random() - 0.5) * 4;
-        if (Math.random() < 0.18) continue; // 빈 골(붓털 사이 틈)
-        const alpha = 0.45 + Math.random() * 0.55;
+        const y = ((i + 0.5) / lines) * size + (Math.random() - 0.5) * 3;
+        if (Math.random() < 0.15) continue; // 빈 골(붓털 사이 틈)
+        const alpha = 0.3 + Math.random() * 0.7;
         ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
-        ctx.lineWidth = 2 + Math.random() * 3.5;
-        ctx.lineCap = "round";
+        ctx.lineWidth = 1.8 + Math.random() * 3.8;
         ctx.beginPath();
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
-        const jl = Math.random() * 6;
-        const jr = Math.random() * 6;
+        const jl = Math.random() * 8;
+        const jr = Math.random() * 8;
         ctx.moveTo(r - half + jl, y);
         ctx.lineTo(r + half - jr, y);
+        ctx.stroke();
+      }
+      // 하이라이트 얇은 털 몇 가닥(결의 대비)
+      for (let i = 0; i < 5; i++) {
+        const y = size * (0.15 + Math.random() * 0.7);
+        ctx.strokeStyle = "rgba(255,255,255,1)";
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
+        ctx.moveTo(r - half + Math.random() * 6, y);
+        ctx.lineTo(r + half - Math.random() * 6, y);
         ctx.stroke();
       }
       break;

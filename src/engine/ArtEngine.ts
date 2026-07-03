@@ -20,6 +20,7 @@ import { LayerStack } from "./core/LayerStack";
 import { History } from "./core/History";
 import { StrokeRecorder } from "./core/StrokeRecorder";
 import { AutoSave, type SavedState } from "./core/AutoSave";
+import { drawPaperTint } from "./core/paper";
 import { tilesForRect, copyTiles, TileSnapshotCommand, type TileRect } from "./core/tiles";
 import type { Layer } from "./core/LayerStack";
 import { BrushBase, createBrush } from "./brushes";
@@ -41,6 +42,8 @@ export interface EngineOptions {
   height: number;
   display: HTMLCanvasElement;
   forceCanvas2D?: boolean;
+  /** QA용 백엔드 강제(?backend=2d|gl) — gl은 소프트웨어 렌더러도 허용 */
+  backendOverride?: "2d" | "gl";
   /** 무비 재현성용 시드 */
   seed?: number;
 }
@@ -92,7 +95,13 @@ export class ArtEngine {
   constructor(opts: EngineOptions) {
     this.width = opts.width;
     this.height = opts.height;
-    this.cm = new CanvasManager(opts.width, opts.height, opts.display, opts.forceCanvas2D);
+    this.cm = new CanvasManager(
+      opts.width,
+      opts.height,
+      opts.display,
+      opts.forceCanvas2D || opts.backendOverride === "2d",
+      opts.backendOverride === "gl",
+    );
     this.layers = new LayerStack(opts.width, opts.height);
     this.history = new History(50);
     this.recorder = new StrokeRecorder();
@@ -220,8 +229,7 @@ export class ArtEngine {
       tip: brush.cfg.tip,
       composite: brush.cfg.composite,
       color: this.settings.color,
-      watercolor: this.mode === "watercolor",
-      oil: this.mode === "oil",
+      paperGrain: brush.cfg.paperGrain,
     };
   }
 
@@ -408,8 +416,7 @@ export class ArtEngine {
       tip: brush.cfg.tip,
       composite: brush.cfg.composite,
       color: meta.color,
-      watercolor: meta.brush === "watercolor",
-      oil: meta.brush === "oil",
+      paperGrain: brush.cfg.paperGrain,
     };
     this.cm.backend.beginStroke(ctx);
     let dabs = brush.begin(points[0], settings);
@@ -636,8 +643,10 @@ export class ArtEngine {
       this.cm.backend.presentStroke(s);
       c.drawImage(s.canvas, 0, 0);
     });
-    // 종이 배경은 맨 뒤에 깐다(destination-over) — 지우개 프리뷰가 종이까지 뚫지 않게
+    // 종이 배경은 맨 뒤에 깐다(destination-over) — 지우개 프리뷰가 종이까지 뚫지 않게.
+    // 린넨 결 → 흰 종이 순서(표시 전용, PNG 내보내기엔 미포함)
     ctx.globalCompositeOperation = "destination-over";
+    drawPaperTint(ctx, this.width, this.height);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, this.width, this.height);
     ctx.globalCompositeOperation = "source-over";

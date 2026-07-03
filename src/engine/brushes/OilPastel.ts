@@ -16,6 +16,7 @@ export class OilPastel extends BrushBase {
         minSizeRatio: 0.65,
         composite: "source-over",
         rotationFollowsStroke: true,
+        paperGrain: 0.25,
       },
       rng,
     );

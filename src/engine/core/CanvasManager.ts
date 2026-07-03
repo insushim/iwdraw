@@ -18,6 +18,7 @@ export class CanvasManager {
     readonly height: number,
     display?: HTMLCanvasElement,
     forceCanvas2D = false,
+    allowSoftwareGL = false,
   ) {
     this.display = display ?? document.createElement("canvas");
     this.display.width = width;
@@ -26,7 +27,7 @@ export class CanvasManager {
 
     this.backend = forceCanvas2D
       ? new Canvas2DBackend(width, height)
-      : tryCreateWebGL2Backend(width, height) ?? new Canvas2DBackend(width, height);
+      : tryCreateWebGL2Backend(width, height, allowSoftwareGL) ?? new Canvas2DBackend(width, height);
 
     this.display.addEventListener("webglcontextlost", this.handleLost as EventListener);
   }

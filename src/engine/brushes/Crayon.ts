@@ -16,6 +16,7 @@ export class Crayon extends BrushBase {
         minSizeRatio: 0.6,
         composite: "source-over",
         rotationFollowsStroke: true,
+        paperGrain: 0.3,
       },
       rng,
     );

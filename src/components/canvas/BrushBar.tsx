@@ -3,7 +3,7 @@
 import { useEditor } from "@/store/editor";
 import { BRUSH_META } from "@/engine/brushes";
 import type { BrushId } from "@/engine/types";
-import { Icon, type IconName } from "./icons";
+import { ToolIcon, type IconName } from "./icons";
 
 /* 도구 → 아이콘 명시 매핑: BrushId와 IconName 유니언이 별개라 캐스트 대신 컴파일 안전하게 */
 const BRUSH_ICON: Partial<Record<BrushId, IconName>> = {
@@ -59,7 +59,7 @@ export function BrushBar() {
                 : "hover:bg-cream"
             }`}
           >
-            <Icon name={BRUSH_ICON[t.id] ?? "pencil"} className={junior ? "h-9 w-9" : "h-8 w-8"} />
+            <ToolIcon name={BRUSH_ICON[t.id] ?? "pencil"} className={junior ? "h-9 w-9" : "h-8 w-8"} />
             <span
               className={`text-[10px] font-semibold leading-tight ${
                 active ? "text-coral-deep" : "text-ink-soft"

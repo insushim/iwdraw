@@ -2,7 +2,9 @@
  * ArtON 아이콘 세트 — 이모지 대신 쓰는 자체 제작 컬러 SVG (viewBox 32×32).
  * 플랫·라운드 스타일 + 공통 잉크색(#2D2A26) 외곽선으로 통일감을 준다.
  */
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 
 const INK = "#2D2A26";
 const O = { stroke: INK, strokeWidth: 1.4, strokeLinejoin: "round" as const };
@@ -323,5 +325,44 @@ export function Icon({
     <svg viewBox="0 0 32 32" className={className} aria-hidden="true" fill="none">
       {ICONS[name]}
     </svg>
+  );
+}
+
+/** AI 생성 일러스트 PNG가 있는 도구 아이콘(/public/icons/tools/) — 없거나 로드 실패 시 SVG 폴백 */
+const PNG_ICONS = new Set<IconName>([
+  "pencil",
+  "crayon",
+  "marker",
+  "watercolor",
+  "oil",
+  "airbrush",
+  "oilpastel",
+  "glow",
+  "rainbow",
+  "eraser",
+  "fill",
+  "palette",
+  "coloring",
+]);
+
+export function ToolIcon({
+  name,
+  className = "h-6 w-6",
+}: {
+  name: IconName;
+  className?: string;
+}) {
+  const [fallback, setFallback] = useState(false);
+  if (fallback || !PNG_ICONS.has(name)) return <Icon name={name} className={className} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/icons/tools/${name}.png`}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      className={`${className} select-none object-contain`}
+      onError={() => setFallback(true)}
+    />
   );
 }

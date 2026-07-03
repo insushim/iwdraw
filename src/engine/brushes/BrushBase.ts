@@ -9,7 +9,7 @@ import {
 } from "../types";
 
 /** 브러시 팁 종류 — 백엔드가 이 키로 스탬프 텍스처를 준비한다 */
-export type TipKind = "soft" | "hard" | "grain" | "rough" | "chunk" | "bristle" | "flat";
+export type TipKind = "soft" | "hard" | "grain" | "rough" | "chunk" | "bristle" | "flat" | "wet";
 
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
 export type DabComposite = "source-over" | "multiply" | "lighter" | "destination-out";
@@ -37,10 +37,10 @@ export interface BrushConfig {
   composite: DabComposite;
   /** 스트로크 진행 방향으로 팁 회전(유화 bristle, 크레용 결) */
   rotationFollowsStroke: boolean;
+  /** 종이 결 침식 강도 0~1 — endStroke에서 스트로크에 캔버스 질감이 배게 한다 */
+  paperGrain: number;
   /** 이동 거리에 따라 hue 회전(무지개) */
   dynamicHue: boolean;
-  /** settings.waterAmount를 dab.water로 전달(수채) */
-  carriesWater: boolean;
 }
 
 const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
@@ -53,8 +53,8 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   minSizeRatio: 0.35,
   composite: "source-over",
   rotationFollowsStroke: false,
+  paperGrain: 0,
   dynamicHue: false,
-  carriesWater: false,
 };
 
 /**
@@ -68,6 +68,8 @@ export class BrushBase {
   /** 다음 dab까지 남은 거리 */
   private residual = 0;
   private traveled = 0;
+  /** 결 방향 스무딩(EMA) — dab별 각도 점프가 만드는 줄무늬(마커/유화) 방지 */
+  private smoothedAngle: number | null = null;
   private rng: () => number;
 
   constructor(cfg: Partial<BrushConfig> & Pick<BrushConfig, "id" | "tip">, rng?: () => number) {
@@ -84,6 +86,7 @@ export class BrushBase {
     this.last = p;
     this.residual = 0;
     this.traveled = 0;
+    this.smoothedAngle = null;
     return [this.makeDab(p, 0)];
   }
 
@@ -95,7 +98,7 @@ export class BrushBase {
 
     const step = Math.max(1, this.settings.size * this.cfg.sizeScale * this.cfg.spacing);
     const dabs: Dab[] = [];
-    const angle = Math.atan2(p.y - from.y, p.x - from.x);
+    const angle = this.smoothAngle(Math.atan2(p.y - from.y, p.x - from.x));
 
     let offset = step - this.residual;
     while (offset <= segLen) {
@@ -120,6 +123,19 @@ export class BrushBase {
     return [];
   }
 
+  /** 세그먼트 각도의 언랩 EMA — 짧은 세그먼트의 각도 잡음을 흡수해 결이 이어지게 */
+  private smoothAngle(raw: number): number {
+    if (this.smoothedAngle === null) {
+      this.smoothedAngle = raw;
+      return raw;
+    }
+    let d = raw - this.smoothedAngle;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    this.smoothedAngle += d * 0.3;
+    return this.smoothedAngle;
+  }
+
   protected makeDab(p: StrokePoint, angle: number): Dab {
     const c = this.cfg;
     const s = this.settings;
@@ -141,9 +157,6 @@ export class BrushBase {
     };
     if (c.dynamicHue) {
       dab.color = hslToRgb((this.traveled / 340) % 1, 0.9, 0.55);
-    }
-    if (c.carriesWater) {
-      dab.water = s.waterAmount;
     }
     return dab;
   }

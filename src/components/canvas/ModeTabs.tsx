@@ -3,10 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEditor } from "@/store/editor";
 import type { Mode } from "@/engine/types";
-import { Icon, type IconName } from "./icons";
+import { ToolIcon, type IconName } from "./icons";
 
 const MODES: { id: Mode; label: string; icon: IconName; tone: string; ring: string }[] = [
-  { id: "sketch", label: "스케치", icon: "sketch", tone: "bg-sun-soft", ring: "ring-sun" },
+  { id: "sketch", label: "스케치", icon: "pencil", tone: "bg-sun-soft", ring: "ring-sun" },
   { id: "watercolor", label: "수채화", icon: "watercolor", tone: "bg-sky-soft", ring: "ring-sky" },
   { id: "oil", label: "유화", icon: "palette", tone: "bg-coral-soft", ring: "ring-coral" },
   { id: "coloring", label: "색칠하기", icon: "coloring", tone: "bg-leaf-soft", ring: "ring-leaf" },
@@ -47,7 +47,7 @@ export function ModeTabs({ hasLineart = false }: { hasLineart?: boolean }) {
               active ? `${m.tone} text-ink shadow-soft ring-2 ${m.ring}` : "text-ink-soft hover:bg-cream"
             }`}
           >
-            <Icon name={m.icon} className="h-6 w-6" />
+            <ToolIcon name={m.icon} className="h-6 w-6" />
             <span className="hidden lg:inline">{m.label}</span>
           </button>
         );

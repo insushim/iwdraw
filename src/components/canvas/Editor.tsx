@@ -53,6 +53,7 @@ export function Editor({ lineartSrc, initialMode, room, onSave, who, backHref = 
   const [saved, setSaved] = useState(false);
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
   const [showMovie, setShowMovie] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(true);
 
   const handleExport = useCallback(async () => {
     const engine = engineRef.current;
@@ -199,12 +200,25 @@ export function Editor({ lineartSrc, initialMode, room, onSave, who, backHref = 
           {room && <CollabOverlay cursors={collab.cursors} engine={engine} />}
         </div>
 
-        {/* 우측: 색 → 굵기 → 마법 도구 → 레이어 */}
-        <div className="order-3 flex shrink-0 gap-2 overflow-y-auto max-md:overflow-x-auto md:w-[264px] md:flex-col">
-          <ColorPalette />
-          <BrushControls />
-          <ActionRail />
-          <LayerPanel />
+        {/* 우측: 색 → 굵기 → 마법 도구 → 레이어 (접으면 캔버스 풀폭) */}
+        <div className="order-3 flex min-h-0 shrink-0 items-stretch gap-1">
+          <button
+            onClick={() => setPanelOpen((v) => !v)}
+            aria-expanded={panelOpen}
+            aria-label={panelOpen ? "도구 패널 접기" : "도구 패널 펼치기"}
+            title={panelOpen ? "도구 패널 접기 — 캔버스를 더 넓게" : "도구 패널 펼치기"}
+            className="pressable hidden w-5 shrink-0 items-center justify-center self-center rounded-full bg-paper py-6 text-xs text-ink-faint shadow-soft hover:text-ink md:flex"
+          >
+            {panelOpen ? "▸" : "◂"}
+          </button>
+          {panelOpen && (
+            <div className="flex shrink-0 gap-2 overflow-y-auto max-md:overflow-x-auto md:w-[264px] md:flex-col">
+              <ColorPalette />
+              <BrushControls />
+              <ActionRail />
+              <LayerPanel />
+            </div>
+          )}
         </div>
       </div>
 

@@ -30,10 +30,17 @@ describe("BrushBase dab 스트림", () => {
     }
   });
 
-  it("수채붓은 dab에 물을 싣는다", () => {
-    const brush = createBrush("watercolor", mulberry32(2));
-    const dabs = brush.begin({ x: 5, y: 5, pressure: 1, t: 0 }, SETTINGS);
-    expect(dabs[0].water).toBeCloseTo(SETTINGS.waterAmount, 5);
+  it("수채붓은 물 양이 많을수록 넓고 옅게 찍힌다", () => {
+    const dry = createBrush("watercolor", mulberry32(2)).begin(
+      { x: 5, y: 5, pressure: 1, t: 0 },
+      { ...SETTINGS, waterAmount: 0 },
+    )[0];
+    const wet = createBrush("watercolor", mulberry32(2)).begin(
+      { x: 5, y: 5, pressure: 1, t: 0 },
+      { ...SETTINGS, waterAmount: 1 },
+    )[0];
+    expect(wet.size).toBeGreaterThan(dry.size);
+    expect(wet.alpha).toBeLessThan(dry.alpha);
   });
 
   it("무지개붓은 이동에 따라 색이 바뀐다", () => {

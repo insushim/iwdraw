@@ -1,14 +1,14 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { makeTipCanvas, type RendererBackend, type StrokeContext } from "./backend";
+import { applyPaperGrain } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
  * Canvas2DBackend: 크롬북 저사양/WebGL2 미지원 폴백.
  * 임시 스트로크 버퍼에 dab을 찍고, endStroke에서 레이어에 1회 합성(스트로크 내 겹침 방지).
- * 수채 확산·유화 heightmap 라이팅은 생략(caps=false) — multiply/불투명으로 자연 다운그레이드.
  */
 export class Canvas2DBackend implements RendererBackend {
-  readonly caps: BackendCaps = { webgl2: false, wetSim: false, heightmap: false };
+  readonly caps: BackendCaps = { webgl2: false };
 
   private strokeBuf: HTMLCanvasElement;
   private strokeCtx: CanvasRenderingContext2D;
@@ -111,6 +111,10 @@ export class Canvas2DBackend implements RendererBackend {
     if (this.ctx.composite === "destination-out") {
       this.ctx = null;
       return; // 지우개는 이미 레이어에 직접 반영됨
+    }
+    // 종이 결 침식(마르며 캔버스 질감이 배어나는 효과) — 버퍼는 다음 스트로크에서 클리어됨
+    if (this.ctx.paperGrain > 0) {
+      applyPaperGrain(this.strokeCtx, this.width, this.height, this.ctx.paperGrain);
     }
     // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영(라이브 프리뷰와 동일해야 함)
     this.layerCtx.save();

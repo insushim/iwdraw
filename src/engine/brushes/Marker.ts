@@ -11,7 +11,7 @@ export class Marker extends BrushBase {
         id: "marker",
         tip: "flat",
         sizeScale: 1.05,
-        spacing: 0.05,
+        spacing: 0.04,
         flow: 0.42,
         jitter: 0,
         sizePressure: 0.05,

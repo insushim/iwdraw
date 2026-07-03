@@ -52,8 +52,6 @@ export interface Dab {
   rotation: number;
   /** 색 오버라이드(무지개 브러시 등). 없으면 브러시 색 */
   color?: RGB;
-  /** 수채 전용: 이 dab이 주입하는 물 양 0~1 */
-  water?: number;
 }
 
 export interface BrushSettings {
@@ -69,10 +67,6 @@ export interface BrushSettings {
 /** 렌더 백엔드가 스스로 보고하는 능력 — UI 분기 없이 자연스러운 다운그레이드 */
 export interface BackendCaps {
   webgl2: boolean;
-  /** 수채 wet 확산 시뮬 가능 여부 */
-  wetSim: boolean;
-  /** 유화 heightmap 라이팅 가능 여부 */
-  heightmap: boolean;
 }
 
 export interface LayerInfo {

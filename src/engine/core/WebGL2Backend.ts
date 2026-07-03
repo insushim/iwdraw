@@ -1,15 +1,20 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { makeTipCanvas, type RendererBackend, type StrokeContext } from "./backend";
+import { applyPaperGrain } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
- * WebGL2Backend: GPU 가속 dab 스탬핑 + 수채 wet-map 확산(ping-pong FBO) + 유화 heightmap 라이팅.
+ * WebGL2Backend: GPU 가속 dab 스탬핑.
  * 실패(컨텍스트 없음/셰이더 컴파일 오류) 시 CanvasManager가 Canvas2D로 폴백한다.
  *
  * 렌더 모델:
  *  - strokeFbo: 현재 스트로크를 누적(브러시 composite 내 겹침 통제)
- *  - endStroke에서 strokeFbo를 레이어 캔버스에 2D drawImage로 합성
- *  - 수채: dab이 wetMap(RG: 물/안료)에 주입 → tick()마다 확산 셰이더, 건조 후 leaf
+ *  - endStroke에서 strokeFbo를 (종이 결 모듈레이션 후) 레이어 캔버스에 2D drawImage로 합성
+ *
+ * ⚠️ 과거 wet-map 확산 시뮬은 제거됨: dab 루프 도중 injectWet이 framebuffer/VAO를
+ * 오염시켜 배치당 첫 dab만 화면에 남는 "점선 수채" 버그의 원인이었고,
+ * 확산 결과는 어디에도 렌더되지 않는 죽은 코드였다. 수채 look은
+ * wet 팁(edge darkening 베이크) + 종이 결로 표현한다.
  */
 
 const QUAD_VS = `#version 300 es
@@ -55,36 +60,6 @@ uniform sampler2D u_tex;
 out vec4 frag;
 void main() { frag = texture(u_tex, v_uv); }`;
 
-// 수채 확산: 3x3 이웃 평균, 물 많을수록 확산 강, 안료는 물 따라 이동. 건조 감쇠.
-const DIFFUSE_FS = `#version 300 es
-precision highp float;
-in vec2 v_uv;
-uniform sampler2D u_wet;   // R=water G=pigment
-uniform vec2 u_texel;
-uniform float u_dry;       // 이번 틱 건조량
-out vec4 frag;
-void main() {
-  vec2 c = texture(u_wet, v_uv).rg;
-  float water = c.r;
-  float pig = c.g;
-  vec2 sum = vec2(0.0);
-  float wsum = 0.0;
-  for (int dy=-1; dy<=1; dy++) {
-    for (int dx=-1; dx<=1; dx++) {
-      vec2 s = texture(u_wet, v_uv + u_texel * vec2(float(dx), float(dy))).rg;
-      float w = s.r + 0.05;      // 물 많은 이웃일수록 기여 큼
-      sum += s * w;
-      wsum += w;
-    }
-  }
-  vec2 avg = sum / wsum;
-  float flow = clamp(water, 0.0, 1.0);        // 확산 속도 = 물 양
-  float newWater = mix(water, avg.r, 0.25 * flow);
-  float newPig = mix(pig, avg.g, 0.35 * flow);
-  newWater = max(0.0, newWater - u_dry);       // 건조
-  frag = vec4(newWater, newPig, 0.0, 1.0);
-}`;
-
 function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const sh = gl.createShader(type)!;
   gl.shaderSource(sh, src);
@@ -122,19 +97,16 @@ export class WebGL2Backend implements RendererBackend {
 
   private dabProg: WebGLProgram;
   private copyProg: WebGLProgram;
-  private diffuseProg: WebGLProgram;
 
   private quadVao: WebGLVertexArrayObject;
   private fsVao: WebGLVertexArrayObject;
 
   private strokeFbo: Fbo;
-  private wetA: Fbo;
-  private wetB: Fbo;
   private tipTextures = new Map<TipKind, WebGLTexture>();
 
   private ctx: StrokeContext | null = null;
-  private hasFloat: boolean;
-  private wetDirty = false;
+  /** 종이 결 모듈레이션 등 2D 포스트프로세스용(지연 생성) */
+  private post2d: CanvasRenderingContext2D | null = null;
 
   constructor(
     private readonly width: number,
@@ -148,28 +120,15 @@ export class WebGL2Backend implements RendererBackend {
     this.gl = gl;
     this.glCanvas = glCanvas;
 
-    // half-float 렌더 타깃(수채/유화 시뮬)
-    this.hasFloat = !!gl.getExtension("EXT_color_buffer_float");
-
     this.dabProg = link(gl, QUAD_VS, DAB_FS);
     this.copyProg = link(gl, FULLSCREEN_VS, COPY_FS);
-    this.diffuseProg = link(gl, FULLSCREEN_VS, DIFFUSE_FS);
 
     this.quadVao = this.makeQuadVao(this.dabProg);
     this.fsVao = this.makeFsVao(this.copyProg);
 
     this.strokeFbo = this.makeFbo(gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE);
-    const wetFmt = this.hasFloat ? gl.RG16F : gl.RGBA8;
-    const wetSrc = this.hasFloat ? gl.RG : gl.RGBA;
-    const wetType = this.hasFloat ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
-    this.wetA = this.makeFbo(wetFmt, wetSrc, wetType);
-    this.wetB = this.makeFbo(wetFmt, wetSrc, wetType);
 
-    this.caps = {
-      webgl2: true,
-      wetSim: this.hasFloat,
-      heightmap: this.hasFloat,
-    };
+    this.caps = { webgl2: true };
   }
 
   private makeQuadVao(prog: WebGLProgram): WebGLVertexArrayObject {
@@ -284,61 +243,13 @@ export class WebGL2Backend implements RendererBackend {
       gl.uniform1f(uRot, dab.rotation);
       gl.uniform4f(uColor, col.r / 255, col.g / 255, col.b / 255, dab.alpha);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
-      // 수채: wetMap에 물/안료 주입은 tick 확산이 담당(여기선 스트로크 버퍼만)
-      if (this.ctx.watercolor && this.caps.wetSim && dab.water) {
-        this.injectWet(dab);
-      }
     }
     gl.bindVertexArray(null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
-  private injectWet(dab: Dab): void {
-    const gl = this.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.wetA.fb);
-    gl.viewport(0, 0, this.width, this.height);
-    gl.useProgram(this.dabProg);
-    gl.bindVertexArray(this.quadVao);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE); // 물/안료 누적
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.tipTexture("soft"));
-    gl.uniform2f(gl.getUniformLocation(this.dabProg, "u_resolution"), this.width, this.height);
-    gl.uniform2f(gl.getUniformLocation(this.dabProg, "u_center"), dab.x, dab.y);
-    gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_size"), dab.size * 1.4);
-    gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_rot"), 0);
-    gl.uniform4f(gl.getUniformLocation(this.dabProg, "u_color"), (dab.water ?? 0.5), dab.alpha, 0, 1);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    gl.bindVertexArray(null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    this.wetDirty = true;
-  }
-
-  tick(dtMs: number): boolean {
-    if (!this.caps.wetSim || !this.wetDirty) return false;
-    const gl = this.gl;
-    const dry = Math.min(0.02, dtMs / 5000); // 5초에 걸쳐 건조
-    // ping-pong 확산 2패스
-    for (let i = 0; i < 2; i++) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.wetB.fb);
-      gl.viewport(0, 0, this.width, this.height);
-      gl.useProgram(this.diffuseProg);
-      gl.bindVertexArray(this.fsVao);
-      gl.disable(gl.BLEND);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, this.wetA.tex);
-      gl.uniform1i(gl.getUniformLocation(this.diffuseProg, "u_wet"), 0);
-      gl.uniform2f(gl.getUniformLocation(this.diffuseProg, "u_texel"), 1 / this.width, 1 / this.height);
-      gl.uniform1f(gl.getUniformLocation(this.diffuseProg, "u_dry"), dry);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      gl.bindVertexArray(null);
-      // swap
-      const tmp = this.wetA;
-      this.wetA = this.wetB;
-      this.wetB = tmp;
-    }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    return true;
+  tick(): boolean {
+    return false; // 시간 진행 시뮬 없음
   }
 
   /** strokeFbo → glCanvas(기본 프레임버퍼) 복사 — 프리뷰/합성 공용 */
@@ -380,6 +291,21 @@ export class WebGL2Backend implements RendererBackend {
     // 스트로크 버퍼(premultiplied)를 화면 캔버스로 복사해 2D 레이어에 합성
     this.blitStrokeToScreen();
 
+    // 종이 결 침식은 2D 경유(지우개엔 미적용)
+    let src: HTMLCanvasElement = this.glCanvas;
+    if (this.ctx.paperGrain > 0 && this.ctx.composite !== "destination-out") {
+      if (!this.post2d) {
+        const c = document.createElement("canvas");
+        c.width = this.width;
+        c.height = this.height;
+        this.post2d = c.getContext("2d")!;
+      }
+      this.post2d.clearRect(0, 0, this.width, this.height);
+      this.post2d.drawImage(this.glCanvas, 0, 0);
+      applyPaperGrain(this.post2d, this.width, this.height, this.ctx.paperGrain);
+      src = this.post2d.canvas;
+    }
+
     const layerCtx = (this.ctx.layerCanvas as HTMLCanvasElement).getContext("2d")!;
     layerCtx.save();
     if (this.ctx.composite === "destination-out") {
@@ -389,7 +315,7 @@ export class WebGL2Backend implements RendererBackend {
     } else if (this.ctx.composite === "lighter") {
       layerCtx.globalCompositeOperation = "lighter";
     }
-    layerCtx.drawImage(this.glCanvas, 0, 0);
+    layerCtx.drawImage(src, 0, 0);
     layerCtx.restore();
     this.ctx = null;
   }
@@ -398,28 +324,33 @@ export class WebGL2Backend implements RendererBackend {
     const gl = this.gl;
     gl.deleteProgram(this.dabProg);
     gl.deleteProgram(this.copyProg);
-    gl.deleteProgram(this.diffuseProg);
     this.tipTextures.forEach((t) => gl.deleteTexture(t));
     this.tipTextures.clear();
-    for (const f of [this.strokeFbo, this.wetA, this.wetB]) {
-      gl.deleteFramebuffer(f.fb);
-      gl.deleteTexture(f.tex);
-    }
+    gl.deleteFramebuffer(this.strokeFbo.fb);
+    gl.deleteTexture(this.strokeFbo.tex);
     const lose = gl.getExtension("WEBGL_lose_context");
     lose?.loseContext();
   }
 }
 
-export function tryCreateWebGL2Backend(width: number, height: number): WebGL2Backend | null {
+export function tryCreateWebGL2Backend(
+  width: number,
+  height: number,
+  allowSoftware = false,
+): WebGL2Backend | null {
   try {
-    // 소프트웨어 렌더러(SwiftShader) 감지 → 폴백 유도
+    // 소프트웨어 렌더러(SwiftShader) 감지 → 폴백 유도 (?backend=gl 테스트 시엔 허용)
     const probe = document.createElement("canvas").getContext("webgl2");
     if (!probe) return null;
+    let software = false;
     const dbg = probe.getExtension("WEBGL_debug_renderer_info");
     if (dbg) {
       const renderer = String(probe.getParameter(dbg.UNMASKED_RENDERER_WEBGL) ?? "");
-      if (/swiftshader|software|llvmpipe/i.test(renderer)) return null;
+      software = /swiftshader|software|llvmpipe/i.test(renderer);
     }
+    // probe 컨텍스트는 즉시 반납(마운트 반복 시 브라우저 GL 컨텍스트 한도 잠식 방지)
+    probe.getExtension("WEBGL_lose_context")?.loseContext();
+    if (software && !allowSoftware) return null;
     return new WebGL2Backend(width, height);
   } catch {
     return null;

@@ -2,7 +2,8 @@ import type { StrokePoint } from "../types";
 
 /*
  * PointerHandler: Pointer Events → StrokePoint. 필압(pressure)·coalesced events 처리.
- * 마우스는 pressure 0.5 고정 → 브러시가 simulatePressure로 보완.
+ * 펜(스타일러스)은 실제 필압, 마우스·손가락은 속도 기반 필압 시뮬 —
+ * 천천히 그으면 눌러 그리듯 굵고 진하게, 빠르면 가늘게(획 끝 테이퍼가 자연히 생김).
  * 캔버스 좌표계로 변환(디바이스 픽셀 비율 반영)은 호출측(ArtEngine)이 매핑 함수 주입.
  */
 export interface PointerCallbacks {
@@ -19,6 +20,11 @@ export class PointerHandler {
   private active = new Map<number, PointerEvent>();
   private drawing = false;
   private drawingPointerId = -1;
+  /** 속도 기반 필압 시뮬 상태(마우스·손가락) */
+  private lastMove: { x: number; y: number; t: number } | null = null;
+  private speedEma = 0;
+  /** 그리던 포인터의 마지막 점 — 멀티터치 전환 시 두 번째 손가락 좌표로 점프 커밋되는 것 방지 */
+  private lastDrawPoint: StrokePoint | null = null;
 
   constructor(
     private readonly el: HTMLElement,
@@ -34,9 +40,20 @@ export class PointerHandler {
 
   private toStrokePoint(e: PointerEvent): StrokePoint {
     const { x, y } = this.toLocal(e.clientX, e.clientY);
-    // 마우스는 버튼 눌림 시 pressure 0 보고 → 0.5로 정규화
-    const pressure =
-      e.pointerType === "mouse" ? 0.5 : e.pressure > 0 ? e.pressure : 0.5;
+    let pressure: number;
+    if (e.pointerType === "pen" && e.pressure > 0) {
+      pressure = e.pressure; // 스타일러스: 실제 필압
+    } else {
+      // 마우스/손가락: 속도 기반 필압 시뮬(EMA) — 느리면 굵고 진하게
+      const prev = this.lastMove;
+      if (prev && e.timeStamp > prev.t) {
+        const d = Math.hypot(e.clientX - prev.x, e.clientY - prev.y);
+        const v = d / (e.timeStamp - prev.t); // px/ms
+        this.speedEma += (v - this.speedEma) * 0.3;
+      }
+      pressure = Math.min(0.85, Math.max(0.35, 0.85 - this.speedEma * 0.22));
+    }
+    this.lastMove = { x: e.clientX, y: e.clientY, t: e.timeStamp };
     return {
       x,
       y,
@@ -52,10 +69,11 @@ export class PointerHandler {
     this.active.set(e.pointerId, e);
 
     if (this.active.size >= 2) {
-      // 멀티터치 → 제스처. 진행 중 스트로크는 취소.
+      // 멀티터치 → 제스처. 진행 중 스트로크는 그리던 포인터의 마지막 점에서 마감
+      // (두 번째 손가락 좌표로 onUp하면 긴 직선이 커밋되는 사고 방지).
       if (this.drawing) {
         this.drawing = false;
-        this.cb.onUp(this.toStrokePoint(e), e);
+        this.cb.onUp(this.lastDrawPoint ?? this.toStrokePoint(e), e);
       }
       this.cb.onGesture([...this.active.values()], e, "start");
       return;
@@ -63,7 +81,11 @@ export class PointerHandler {
 
     this.drawing = true;
     this.drawingPointerId = e.pointerId;
-    this.cb.onDown(this.toStrokePoint(e), e);
+    this.lastMove = null;
+    this.speedEma = 0;
+    const p = this.toStrokePoint(e);
+    this.lastDrawPoint = p;
+    this.cb.onDown(p, e);
   };
 
   private handleMove = (e: PointerEvent) => {
@@ -79,7 +101,9 @@ export class PointerHandler {
     const raw =
       typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [];
     const events = raw.length > 0 ? raw : [e];
-    this.cb.onMove(events.map((ev) => this.toStrokePoint(ev)), e);
+    const points = events.map((ev) => this.toStrokePoint(ev));
+    this.lastDrawPoint = points[points.length - 1];
+    this.cb.onMove(points, e);
   };
 
   private handleUp = (e: PointerEvent) => {
