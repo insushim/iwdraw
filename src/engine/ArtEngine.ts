@@ -31,6 +31,7 @@ import { Stabilizer, strengthToStreamline } from "./input/Stabilizer";
 import { mirrorPoint } from "./tools/Symmetry";
 import { detectShape, QUICKSHAPE_HOLD_MS } from "./tools/QuickShape";
 import type { StrokeContext } from "./core/backend";
+import type { TipKind } from "./brushes/BrushBase";
 import { loadTipOverrides } from "./core/tipLoader";
 
 /*
@@ -227,9 +228,13 @@ export class ArtEngine {
   private brushContext(): StrokeContext {
     const brush = this.brush!;
     const wash = brush.cfg.strokeBlend === "wash";
+    // 작은 유화 획은 bold 붓결 LOD — fine 맵의 미세 골은 dab 축소 시 서브픽셀로 사라진다
+    const pxSize = this.settings.size * brush.cfg.sizeScale;
+    const tip: TipKind =
+      brush.cfg.tip === "bristle" && pxSize < 40 ? "bristle-bold" : brush.cfg.tip;
     return {
       layerCanvas: this.layers.active.canvas,
-      tip: brush.cfg.tip,
+      tip,
       composite: brush.cfg.composite,
       color: this.settings.color,
       paperGrain: brush.cfg.paperGrain,
@@ -419,9 +424,10 @@ export class ArtEngine {
       stabilize: 0,
     };
     const remoteWash = brush.cfg.strokeBlend === "wash";
+    const remotePx = settings.size * brush.cfg.sizeScale;
     const ctx: StrokeContext = {
       layerCanvas: layer.canvas,
-      tip: brush.cfg.tip,
+      tip: brush.cfg.tip === "bristle" && remotePx < 40 ? "bristle-bold" : brush.cfg.tip,
       composite: brush.cfg.composite,
       color: meta.color,
       paperGrain: brush.cfg.paperGrain,

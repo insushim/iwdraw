@@ -74,7 +74,7 @@ export default function LandingPage() {
       <section className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-12 md:grid-cols-2 md:py-20">
         <div>
           <Chip tone="coral" className="mb-4">
-            EasyEdu 제품군 · 수업ON의 형제 브랜드
+            iw corp 제품군 · 수업ON의 형제 브랜드
           </Chip>
           <h1 className="font-display text-4xl leading-tight text-ink md:text-5xl">
             학교 수업에 딱 맞춘
@@ -198,7 +198,7 @@ export default function LandingPage() {
 
       <footer className="border-t border-cream-deep bg-paper py-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 text-sm text-ink-faint">
-          <span>© 2026 EasyEdu · 아트온 ArtON</span>
+          <span>© 2026 iw corp · 아트온 ArtON</span>
           <span>모든 도안은 자체 제작 — 저작권 걱정 없이 수업에 쓰세요</span>
         </div>
       </footer>

@@ -10,7 +10,7 @@ export class OilBrush extends BrushBase {
       {
         id: "oil",
         tip: "bristle",
-        sizeScale: 1.25,
+        sizeScale: 1.5, // 유화는 넓은 붓이 기본 — 기본 굵기에서도 붓결이 보일 폭 확보
         spacing: 0.05,
         flow: 1,
         jitter: 0.015,

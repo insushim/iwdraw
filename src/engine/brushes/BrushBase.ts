@@ -8,8 +8,18 @@ import {
   type StrokePoint,
 } from "../types";
 
-/** 브러시 팁 종류 — 백엔드가 이 키로 스탬프 텍스처를 준비한다 */
-export type TipKind = "soft" | "hard" | "grain" | "rough" | "chunk" | "bristle" | "flat" | "wet";
+/** 브러시 팁 종류 — 백엔드가 이 키로 스탬프 텍스처를 준비한다.
+ * bristle-bold = 작은 획용 LOD(붓털 적고 굵게) — 미세 골은 dab이 작아지면 축소로 사라진다 */
+export type TipKind =
+  | "soft"
+  | "hard"
+  | "grain"
+  | "rough"
+  | "chunk"
+  | "bristle"
+  | "bristle-bold"
+  | "flat"
+  | "wet";
 
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
 export type DabComposite = "source-over" | "multiply" | "lighter" | "destination-out";

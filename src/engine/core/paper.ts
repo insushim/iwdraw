@@ -108,7 +108,7 @@ export function paperTintTile(): HTMLCanvasElement {
     img.data[p] = 92;
     img.data[p + 1] = 84;
     img.data[p + 2] = 72;
-    img.data[p + 3] = Math.round(d * 11); // 최대 ~4% — 아주 은은하게
+    img.data[p + 3] = Math.round(d * 15); // 최대 ~6% — 린넨 위브가 보이되 티끌처럼 지저분하지 않게
   }
   ctx.putImageData(img, 0, 0);
   tintTile = c;

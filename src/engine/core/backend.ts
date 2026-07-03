@@ -174,6 +174,39 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       }
       break;
     }
+    case "bristle-bold": {
+      // 작은 획용 붓결 LOD(20~40px dab): 몸통은 거의 solid, 골은 "부분 투명 홈"으로.
+      // 골을 완전히 비우면 작은 획이 2~3가닥으로 쪼개진다(실측) — i-scream 소형 붓과
+      // 같은 "solid 리본 + 옅은 붓결 홈 + 너덜한 양끝" 구조.
+      ctx.clearRect(0, 0, size, size);
+      ctx.lineCap = "round";
+      const boldRows = 7;
+      for (let i = 0; i < boldRows; i++) {
+        const y = ((i + 0.5) / boldRows) * size + (Math.random() - 0.5) * 4;
+        const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
+        const jl = Math.random() * half * 0.35;
+        const jr = Math.random() * half * 0.35;
+        ctx.strokeStyle = "rgba(255,255,255,1)";
+        ctx.lineWidth = size * 0.1 + Math.random() * size * 0.05;
+        ctx.beginPath();
+        ctx.moveTo(r - half + jl, y);
+        ctx.lineTo(r + half - jr, y);
+        ctx.stroke();
+      }
+      // 붓결 홈 2줄: 은은한 부분 투명(0.28) — 강하면 작은 획이 가닥으로 쪼개진다(실측)
+      ctx.globalCompositeOperation = "destination-out";
+      for (const gy of [0.34, 0.62]) {
+        const y = size * gy;
+        ctx.strokeStyle = "rgba(0,0,0,0.28)";
+        ctx.lineWidth = size * 0.04;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(size, y);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      break;
+    }
     case "flat": {
       // 마커 납작촉: 가로로 긴 라운드 사각 — 스트로크 방향으로 회전해 챠콜펜 느낌
       ctx.clearRect(0, 0, size, size);
