@@ -88,18 +88,20 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
   cotton: {
     make() {
       const rand = Math.random;
-      // 위브 없는 셀룰로스 요철 — 굵은 덩어리 + 미세 입자
-      const n1 = latticeNoise(TILE, 20, rand);
-      const n2 = latticeNoise(TILE, 72, rand);
+      // 위브 없는 셀룰로스 요철 — 미세 입자 위주. 굵은 덩어리(저주파) 비중이 크면
+      // 획이 곰팡이 얼룩처럼 보인다(2026-07-03 사용자 실측 보고 → 0.45/20cell에서 하향)
+      const n1 = latticeNoise(TILE, 30, rand);
+      const n2 = latticeNoise(TILE, 84, rand);
       const f = new Float32Array(TILE * TILE);
-      for (let i = 0; i < f.length; i++) f[i] = 0.45 * n1[i] + 0.55 * n2[i];
+      for (let i = 0; i < f.length; i++) f[i] = 0.3 * n1[i] + 0.7 * n2[i];
       return f;
     },
-    grainLo: 0.46,
-    grainHi: 0.84,
-    tintLo: 0.52,
+    // 임계 상향 = 가장 깊은 골에만 침식 → 드문드문한 잔입자(granulation)
+    grainLo: 0.58,
+    grainHi: 0.9,
+    tintLo: 0.56,
     tintHi: 0.94,
-    tintAlpha: 24,
+    tintAlpha: 18,
   },
   smooth: {
     make() {
