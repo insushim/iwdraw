@@ -190,7 +190,7 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const jl = Math.random() * half * 0.35;
         const jr = Math.random() * half * 0.35;
         // 밝기 변화 = 물감 명암 줄무늬(셰이드 채널) — 알파가 아니라 색이 어두워진다
-        const v = 200 + Math.floor(Math.random() * 56);
+        const v = 185 + Math.floor(Math.random() * 71);
         ctx.strokeStyle = `rgba(${v},${v},${v},1)`;
         ctx.lineWidth = size * 0.1 + Math.random() * size * 0.05;
         ctx.beginPath();
@@ -202,7 +202,7 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       ctx.globalCompositeOperation = "destination-out";
       for (const gy of [0.34, 0.62]) {
         const y = size * gy;
-        ctx.strokeStyle = "rgba(0,0,0,0.28)";
+        ctx.strokeStyle = "rgba(0,0,0,0.34)";
         ctx.lineWidth = size * 0.04;
         ctx.beginPath();
         ctx.moveTo(0, y);

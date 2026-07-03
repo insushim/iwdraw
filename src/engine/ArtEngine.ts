@@ -197,6 +197,7 @@ export class ArtEngine {
       coloring: "crayon",
     };
     this.setBrush(def[mode]);
+    this.requestComposite(); // 모드=종이(캔버스) 변경 — 즉시 다시 그려야 탭 클릭에 바로 반응
   }
   setBrush(id: BrushId): void {
     this.brushId = id;
@@ -668,12 +669,14 @@ export class ArtEngine {
       this.cm.backend.presentStroke(s);
       c.drawImage(s.canvas, 0, 0);
     });
-    // 종이 배경은 맨 뒤에 깐다(destination-over) — 지우개 프리뷰가 종이까지 뚫지 않게.
-    // 린넨 결 → 흰 종이 순서(표시 전용, PNG 내보내기엔 미포함)
+    // 흰 종이는 맨 뒤(destination-over), 종이 결은 맨 위 multiply(표시 전용, 내보내기 미포함).
+    // 결을 위에 곱해야 ① 도안(불투명 흰 배경)이 결을 덮지 않고 ② 물감 위로도
+    // 캔버스 요철이 비쳐 "종이에 앉은" 질감이 난다(i-scream 방식).
     ctx.globalCompositeOperation = "destination-over";
-    drawPaperTint(ctx, this.width, this.height, this.paperKindForMode());
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, this.width, this.height);
+    ctx.globalCompositeOperation = "multiply";
+    drawPaperTint(ctx, this.width, this.height, this.paperKindForMode());
     ctx.globalCompositeOperation = "source-over";
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.emit("dirty", {});

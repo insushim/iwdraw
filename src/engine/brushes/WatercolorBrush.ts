@@ -19,10 +19,10 @@ export class WatercolorBrush extends BrushBase {
         alphaPressure: 0.5,
         minSizeRatio: 0.5,
         composite: "multiply",
-        paperGrain: 0.4,
+        paperGrain: 0.55, // 수채용지 요철이 워시에 배어나게(질감 강화)
         strokeBlend: "wash", // 획 내부 균일(겹침 스캘럽 제거)
         washOpacity: 0.55,
-        wetEdge: 0.6, // 마르며 실루엣 가장자리에 안료 몰림(endStroke 후처리)
+        wetEdge: 0.75, // 마르며 실루엣 가장자리에 안료 몰림(endStroke 후처리)
       },
       rng,
     );

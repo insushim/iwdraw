@@ -75,15 +75,15 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
         for (let x = 0; x < TILE; x++) {
           const i = y * TILE + x;
           // 위브 비중을 높여 씨실·날실이 방향성 있게 보인다(캔버스천)
-          f[i] = 0.2 * n1[i] + 0.24 * n2[i] + 0.28 * rows[y] + 0.28 * cols[x];
+          f[i] = 0.18 * n1[i] + 0.22 * n2[i] + 0.3 * rows[y] + 0.3 * cols[x];
         }
       return f;
     },
     grainLo: 0.55,
     grainHi: 0.85,
-    tintLo: 0.52,
+    tintLo: 0.5,
     tintHi: 0.92,
-    tintAlpha: 22,
+    tintAlpha: 30,
   },
   cotton: {
     make() {
@@ -95,11 +95,11 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
       for (let i = 0; i < f.length; i++) f[i] = 0.45 * n1[i] + 0.55 * n2[i];
       return f;
     },
-    grainLo: 0.5,
-    grainHi: 0.85,
-    tintLo: 0.55,
-    tintHi: 0.95,
-    tintAlpha: 16,
+    grainLo: 0.46,
+    grainHi: 0.84,
+    tintLo: 0.52,
+    tintHi: 0.94,
+    tintAlpha: 24,
   },
   smooth: {
     make() {

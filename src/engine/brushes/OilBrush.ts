@@ -19,7 +19,7 @@ export class OilBrush extends BrushBase {
         minSizeRatio: 0.6,
         composite: "source-over",
         rotationFollowsStroke: true,
-        paperGrain: 0.5,
+        paperGrain: 0.6, // 얇은 굵기에서도 캔버스 결이 배어나게
         strokeBlend: "wash", // 겹침 포화 방지 → 붓결이 획 전체에 보존
         washOpacity: 1,
       },
