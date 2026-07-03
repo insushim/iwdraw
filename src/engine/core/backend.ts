@@ -189,9 +189,10 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.35;
         const jr = Math.random() * half * 0.35;
-        // 셰이드 채널: 어두운 밴드(r 0.74~1)와 밝은 밴드(r≈0.3, 하이라이트)를 섞는다
-        // — 검정·중간 회색·흰색 어떤 색에서도 한쪽 밴드는 보인다
-        const v = i % 3 === 1 ? 77 : 190 + Math.floor(Math.random() * 66);
+        // 밝기 변화 = 물감 명암 줄무늬(셰이드 채널) — 알파가 아니라 색이 어두워진다.
+        // 밝은 하이라이트 밴드를 팁에 섞지 말 것: 모든 색이 회색빛이 된다(검정 실측).
+        // 어두운 색 처리는 렌더러가 색 밝기로 방향(어둡게/밝게)만 선택한다.
+        const v = 185 + Math.floor(Math.random() * 71);
         ctx.strokeStyle = `rgba(${v},${v},${v},1)`;
         ctx.lineWidth = size * 0.1 + Math.random() * size * 0.05;
         ctx.beginPath();
@@ -243,8 +244,7 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.5;
         const jr = Math.random() * half * 0.5;
-        // 붓털별 셰이드: 대부분 어두운 밴드, 간간이 밝은 하이라이트 밴드(r≈0.3)
-        const fv = i % 4 === 2 ? 77 : 195 + Math.floor(Math.random() * 61);
+        const fv = 195 + Math.floor(Math.random() * 61); // 붓털별 물감 명암(셰이드 채널)
         ctx.strokeStyle = `rgba(${fv},${fv},${fv},${0.82 + Math.random() * 0.18})`;
         ctx.lineWidth = 2.2 + Math.random() * 4.2;
         ctx.beginPath();

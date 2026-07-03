@@ -51,14 +51,16 @@ void main() {
   // 종이 결: 골짜기에서 안료가 빠진다(알파 침식)
   float g = texture(u_paper, v_px / 256.0).a * u_grain;
   a *= 1.0 - g * 0.85;
-  // 임파스토 셰이드(t.r 인코딩): r=1 중립 / r 0.62~1 어두운 붓털 밴드 / r 0~0.55 밝은 밴드.
-  // 색 밝기로 방향을 크로스페이드하면 중간 회색에서 효과가 상쇄되는 널포인트가 생긴다(실측)
-  // → 밴드를 공간적으로 어둡게/밝게 분리하면 어떤 색이든 한쪽은 보인다(0.55~0.62는 중립 완충).
-  float r = t.r;
-  float dAmt = step(0.62, r) * clamp((1.0 - r) / 0.38, 0.0, 1.0) * 0.30;
-  float lAmt = clamp((0.55 - r) / 0.55, 0.0, 1.0) * 0.45;
-  vec3 col = u_color.rgb * (1.0 - dAmt);
-  col = mix(col, vec3(1.0), lAmt);
+  // 임파스토 셰이드(t.r, 1=중립): 방향을 색 밝기로 "선택"한다(step) —
+  // ① 크로스페이드(가중 평균)는 중간 회색에서 ±상쇄 널포인트(실측),
+  // ② 팁에 밝은 밴드를 섞으면 모든 색이 회색빛(검정 실측). 둘 다 금지.
+  // 밝은 색(밝기≥0.4) = 물감이 어두워지는 골, 어두운 색 = 빛 받는 하이라이트.
+  float f = t.r * (1.0 - g * 0.35);
+  vec3 col = u_color.rgb;
+  float dk = 1.0 - max(col.r, max(col.g, col.b)); // 검을수록 1
+  vec3 darkened = col * f;
+  vec3 lightened = mix(col, vec3(1.0), (1.0 - f) * 0.8 * dk);
+  col = mix(darkened, lightened, step(0.6, dk));
   frag = vec4(col * a, a);  // premultiplied
 }`;
 
