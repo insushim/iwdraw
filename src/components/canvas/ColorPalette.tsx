@@ -135,7 +135,7 @@ function HsvPicker({ value, onChange }: { value: RGB; onChange: (c: RGB) => void
     const dy = e.clientY - rect.top - rect.height / 2;
     const dist = Math.min(1, Math.hypot(dx, dy) / (rect.width / 2));
     const hue = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
-    onChange(hsvToRgb(hue, dist, v || 1));
+    onChange(hsvToRgb(hue, dist, 1)); // 휠에서 색 고르면 밝기 최대로 시작(이후 슬라이더로 낮춤)
   };
 
   // 현재 색 표시점 위치(%)
@@ -173,9 +173,10 @@ function HsvPicker({ value, onChange }: { value: RGB; onChange: (c: RGB) => void
           max={100}
           value={Math.round(v * 100)}
           onChange={(e) => onChange(hsvToRgb(h, s, +e.target.value / 100))}
-          className="mt-1 h-3.5 w-full cursor-pointer appearance-none rounded-full accent-coral"
+          className="mt-1 h-3.5 w-full cursor-pointer appearance-none rounded-full"
           style={{
             background: `linear-gradient(to right, #000, ${rgbToCss(hsvToRgb(h, s, 1))})`,
+            accentColor: rgbToCss(value), // 슬라이더 손잡이(버튼)를 지금 고른 색으로
           }}
         />
       </label>
