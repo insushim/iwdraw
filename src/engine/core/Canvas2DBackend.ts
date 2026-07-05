@@ -108,7 +108,9 @@ export class Canvas2DBackend implements RendererBackend {
       target.globalAlpha = dab.alpha;
       if (eraser) {
         target.globalCompositeOperation = "destination-out";
-      } else if (this.ctx.composite === "lighter") {
+      } else if (this.ctx.composite === "lighter" && !this.ctx.wash) {
+        // buildup+additive만 버퍼 내 가산. wash는 GL의 MAX와 짝 — 버퍼 안에서
+        // lighter로 쌓으면 획 내부가 흰색으로 클리핑된다(글로우 실측: 속 빈 튜브).
         target.globalCompositeOperation = "lighter";
       }
       target.translate(dab.x, dab.y);

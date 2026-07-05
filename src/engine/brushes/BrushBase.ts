@@ -19,7 +19,8 @@ export type TipKind =
   | "bristle"
   | "bristle-bold"
   | "flat"
-  | "wet";
+  | "wet"
+  | "glow";
 
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
 export type DabComposite = "source-over" | "multiply" | "lighter" | "destination-out";

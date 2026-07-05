@@ -184,40 +184,58 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       break;
     }
     case "bristle-bold": {
-      // 작은 획용 붓결 LOD(20~40px dab): 몸통은 거의 solid, 골은 "부분 투명 홈"으로.
-      // 골을 완전히 비우면 작은 획이 2~3가닥으로 쪼개진다(실측) — i-scream 소형 붓과
-      // 같은 "solid 리본 + 옅은 붓결 홈 + 너덜한 양끝" 구조.
+      // 작은 획용 붓결 LOD(20~40px dab): 큰 bristle과 같은 "solid 중립 몸통 + 셰이드 붓결"
+      // 구조. 붓결은 알파 구멍이 아니라 불투명 셰이드 줄로만 — destination-out 홈은
+      // wash(MAX) 누적에서 획 전체에 이어지는 반투명 줄이 돼 종이가 흰 줄로 비친다(실측).
+      // 행 전체를 어둡게(v=185~) 칠하는 것도 금지: multiply 틴트로 획이 통째로 회색빛(실측).
       ctx.clearRect(0, 0, size, size);
       ctx.lineCap = "round";
-      const boldRows = 7;
+      const boldRows = 8;
       for (let i = 0; i < boldRows; i++) {
-        const y = ((i + 0.5) / boldRows) * size + (Math.random() - 0.5) * 4;
+        const y = ((i + 0.5) / boldRows) * size + (Math.random() - 0.5) * 3;
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.35;
         const jr = Math.random() * half * 0.35;
-        // 밝기 변화 = 물감 명암 줄무늬(셰이드 채널) — 알파가 아니라 색이 어두워진다.
-        // 밝은 하이라이트 밴드를 팁에 섞지 말 것: 모든 색이 회색빛이 된다(검정 실측).
-        // 어두운 색 처리는 렌더러가 색 밝기로 방향(어둡게/밝게)만 선택한다.
-        const v = 185 + Math.floor(Math.random() * 71);
+        // 셰이드 채널(v<255 = 물감 명암) — 옅게만. 방향(어둡게/밝게)은 렌더러가 색으로 선택.
+        const v = 216 + Math.floor(Math.random() * 40);
         ctx.strokeStyle = `rgba(${v},${v},${v},1)`;
-        ctx.lineWidth = size * 0.1 + Math.random() * size * 0.05;
+        // 행 피치(size/8)보다 넓게 → 행 사이 알파 틈 없음(틈=종이 비침 흰 줄)
+        ctx.lineWidth = size * 0.13 + Math.random() * size * 0.05;
         ctx.beginPath();
         ctx.moveTo(r - half + jl, y);
         ctx.lineTo(r + half - jr, y);
         ctx.stroke();
       }
-      // 붓결 홈 2줄: 은은한 부분 투명(0.28) — 강하면 작은 획이 가닥으로 쪼개진다(실측)
-      ctx.globalCompositeOperation = "destination-out";
-      for (const gy of [0.34, 0.62]) {
+      // 몸통 중립(순색) 채움 — 큰 bristle의 solid 타원과 동일 역할. 좌우 끝은 행의
+      // jl/jr 지터가 너덜한 마른 붓끝을 만든다.
+      ctx.fillStyle = "rgba(255,255,255,1)";
+      ctx.beginPath();
+      ctx.ellipse(r, r, r * 0.55, r * 0.64, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 은은한 붓결 줄 2개: 불투명 셰이드(색이 살짝 어두워질 뿐 종이는 안 비침)
+      for (const gy of [0.36, 0.63]) {
         const y = size * gy;
-        ctx.strokeStyle = "rgba(0,0,0,0.34)";
-        ctx.lineWidth = size * 0.04;
+        const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
+        ctx.strokeStyle = "rgba(208,208,208,1)";
+        ctx.lineWidth = size * 0.035;
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(size, y);
+        ctx.moveTo(r - half * 0.9, y);
+        ctx.lineTo(r + half * 0.9, y);
         ctx.stroke();
       }
-      ctx.globalCompositeOperation = "source-over";
+      break;
+    }
+    case "glow": {
+      // 네온 단면: 중심 플래토(솔리드 코어) + 넓게 퍼지는 할로.
+      // wash(MAX)에서 이 프로필이 그대로 튜브 단면이 된다 — 획 내부 균일이 전제.
+      const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.3, "rgba(255,255,255,1)");
+      g.addColorStop(0.42, "rgba(255,255,255,0.5)");
+      g.addColorStop(0.7, "rgba(255,255,255,0.18)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
       break;
     }
     case "flat": {
