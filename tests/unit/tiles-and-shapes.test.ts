@@ -56,6 +56,79 @@ describe("QuickShape.detectShape", () => {
   it("점이 너무 적으면 null", () => {
     expect(detectShape([{ x: 0, y: 0, pressure: 1, t: 0 }])).toBeNull();
   });
+
+  // 손그림 도형 시뮬레이터: 꼭짓점에서 시작하는 닫힌 다각형(이음새 오프바이원 회귀 방지)
+  function polygon(nSides: number, jitter = 0): StrokePoint[] {
+    const cx = 200,
+      cy = 200,
+      R = 120,
+      rot = -Math.PI / 2,
+      perEdge = 14;
+    const corners = Array.from({ length: nSides }, (_, i) => {
+      const a = rot + (i / nSides) * Math.PI * 2;
+      return { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R };
+    });
+    const pts: StrokePoint[] = [];
+    for (let i = 0; i < nSides; i++) {
+      const A = corners[i];
+      const B = corners[(i + 1) % nSides];
+      for (let k = 0; k < perEdge; k++) {
+        const t = k / perEdge;
+        pts.push({
+          x: A.x + (B.x - A.x) * t + (((i * 7 + k) % 5) - 2) * 0.2 * jitter,
+          y: A.y + (B.y - A.y) * t + (((i * 3 + k) % 5) - 2) * 0.2 * jitter,
+          pressure: 0.5,
+          t: pts.length,
+        });
+      }
+    }
+    pts.push({ x: corners[0].x, y: corners[0].y, pressure: 0.5, t: pts.length });
+    return pts;
+  }
+
+  it("삼각형 인식(꼭짓점에서 시작 — 이음새 포함)", () => {
+    expect(detectShape(polygon(3))?.kind).toBe("triangle");
+    expect(detectShape(polygon(3, 4))?.kind).toBe("triangle");
+  });
+
+  it("사각형 인식", () => {
+    expect(detectShape(polygon(4))?.kind).toBe("rect");
+    expect(detectShape(polygon(4, 4))?.kind).toBe("rect");
+  });
+
+  it("하트 인식(오목 상단 홈 → 삼각형으로 오인 금지)", () => {
+    const pts: StrokePoint[] = [];
+    for (let i = 0; i <= 60; i++) {
+      const t = (i / 60) * Math.PI * 2;
+      const x = 16 * Math.sin(t) ** 3;
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      pts.push({ x: 200 + x * 6, y: 200 - y * 6, pressure: 0.5, t: i });
+    }
+    expect(detectShape(pts)?.kind).toBe("heart");
+  });
+
+  it("별 인식(5각)", () => {
+    const raw: { x: number; y: number }[] = [];
+    for (let i = 0; i <= 10; i++) {
+      const t = -Math.PI / 2 + (i / 10) * Math.PI * 2;
+      const rr = i % 2 === 0 ? 120 : 50;
+      raw.push({ x: 200 + Math.cos(t) * rr, y: 200 + Math.sin(t) * rr });
+    }
+    const pts: StrokePoint[] = [];
+    for (let i = 0; i < raw.length - 1; i++) {
+      for (let k = 0; k < 6; k++) {
+        const t = k / 6;
+        pts.push({
+          x: raw[i].x + (raw[i + 1].x - raw[i].x) * t,
+          y: raw[i].y + (raw[i + 1].y - raw[i].y) * t,
+          pressure: 0.5,
+          t: pts.length,
+        });
+      }
+    }
+    pts.push({ x: raw[0].x, y: raw[0].y, pressure: 0.5, t: pts.length });
+    expect(detectShape(pts)?.kind).toBe("star");
+  });
 });
 
 describe("Symmetry.mirrorPoint", () => {

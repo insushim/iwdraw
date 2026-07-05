@@ -81,36 +81,106 @@ export function detectShape(pts: StrokePoint[]): ShapeResult | null {
     radii.reduce((a, c) => a + (c - rMean) * (c - rMean), 0) / radii.length;
   const rCv = Math.sqrt(rVar) / Math.max(1, rMean); // 변동계수
 
-  // 볼록 꼭짓점(방향 급변) 개수
-  const corners = countCorners(pts);
+  // 등간격 재샘플(닫힌 윤곽) 후 순환 꼭짓점 계산 —
+  // 시작=끝 이음새(seam)의 꼭짓점까지 세어 삼각형/사각형이 하나씩 밀리는 오프바이원 방지.
+  const rs = resampleClosed(pts, 64);
+  const corners = countCornersCyclic(rs);
+  const convex = isConvexish(rs);
 
   if (rCv < 0.14 && corners <= 2) {
     return { kind: "circle", points: sampleCircle(b.cx, b.cy, (b.w + b.h) / 4, b.w / b.h) };
   }
-  if (corners === 3) return { kind: "triangle", points: regularPoly(b, 3, -Math.PI / 2) };
-  if (corners === 4) return { kind: "rect", points: rectPoints(b) };
-  // 별/하트는 오목(반지름 진동) 특징으로 구분
+  // 볼록한 3/4각만 삼각형·사각형(사각형도 반지름 진동 8회라 별 판정보다 먼저 확정).
+  // 오목하면(하트 상단 홈·별 스파이크) 넘어간다.
+  if (convex && corners === 3) return { kind: "triangle", points: regularPoly(b, 3, -Math.PI / 2) };
+  if (convex && corners === 4) return { kind: "rect", points: rectPoints(b) };
+  // 별은 오목 + 반지름 진동이 강함
   if (isStarLike(radii, rMean)) return { kind: "star", points: starPoints(b) };
-  if (corners <= 6) return { kind: "heart", points: heartPoints(b) };
+  // 오목하거나 꼭짓점이 애매한 닫힌 도형 → 하트
+  if (!convex || corners <= 6) return { kind: "heart", points: heartPoints(b) };
   return null;
 }
 
-function countCorners(pts: StrokePoint[]): number {
-  let corners = 0;
-  const step = Math.max(1, Math.floor(pts.length / 48));
-  let prevAngle: number | null = null;
-  for (let i = step; i < pts.length - step; i += step) {
-    const a = pts[i - step];
-    const b = pts[i];
-    const c = pts[i + step];
-    const ang = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x);
-    const norm = Math.abs(Math.atan2(Math.sin(ang), Math.cos(ang)));
-    if (norm > 0.9) {
-      if (prevAngle === null || i - prevAngle > step * 2) corners++;
-      prevAngle = i;
+/** 닫힌 스트로크를 둘레를 따라 n개로 등간격 재샘플(첫 점부터 다시 첫 점까지). */
+function resampleClosed(pts: StrokePoint[], n: number): { x: number; y: number }[] {
+  const path = pts.map((p) => ({ x: p.x, y: p.y }));
+  const first = path[0];
+  const last = path[path.length - 1];
+  if (Math.hypot(first.x - last.x, first.y - last.y) > 1e-6) path.push({ x: first.x, y: first.y });
+  let total = 0;
+  for (let i = 1; i < path.length; i++) total += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
+  if (total < 1e-6) return [first];
+  const seg = total / n;
+  const out: { x: number; y: number }[] = [{ x: first.x, y: first.y }];
+  let cur = path[0];
+  let idx = 1;
+  let acc = 0;
+  let target = seg;
+  while (out.length < n && idx < path.length) {
+    const nx = path[idx];
+    const segLen = Math.hypot(nx.x - cur.x, nx.y - cur.y);
+    if (acc + segLen >= target) {
+      const t = segLen < 1e-9 ? 0 : (target - acc) / segLen;
+      out.push({ x: cur.x + (nx.x - cur.x) * t, y: cur.y + (nx.y - cur.y) * t });
+      target += seg;
+    } else {
+      acc += segLen;
+      cur = nx;
+      idx++;
     }
   }
-  return corners;
+  return out;
+}
+
+/** 순환(wrap-around) 방향 급변 클러스터 수 = 꼭짓점 수. 이음새 꼭짓점도 포함. */
+function countCornersCyclic(rs: { x: number; y: number }[], thresh = 0.85): number {
+  const n = rs.length;
+  if (n < 6) return 0;
+  const k = Math.max(2, Math.round(n / 16));
+  const flag: boolean[] = new Array(n).fill(false);
+  for (let i = 0; i < n; i++) {
+    const a = rs[(i - k + n) % n];
+    const b = rs[i];
+    const c = rs[(i + k) % n];
+    const raw = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x);
+    if (Math.abs(Math.atan2(Math.sin(raw), Math.cos(raw))) > thresh) flag[i] = true;
+  }
+  const s = flag.indexOf(false);
+  if (s === -1) return 1; // 전부 급변 = 퇴화, 1로 취급
+  let count = 0;
+  let run = false;
+  for (let j = 0; j < n; j++) {
+    const idx = (s + j) % n;
+    if (flag[idx]) {
+      if (!run) count++;
+      run = true;
+    } else run = false;
+  }
+  return count;
+}
+
+/** 오목 회전각 누적이 작으면 볼록(삼각형·사각형). 하트 상단 홈은 큰 오목 → false. */
+function isConvexish(rs: { x: number; y: number }[]): boolean {
+  const n = rs.length;
+  if (n < 6) return true;
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const p = rs[i];
+    const q = rs[(i + 1) % n];
+    area += p.x * q.y - q.x * p.y;
+  }
+  const orient = Math.sign(area) || 1;
+  const k = Math.max(2, Math.round(n / 16));
+  let concave = 0;
+  for (let i = 0; i < n; i++) {
+    const a = rs[(i - k + n) % n];
+    const b = rs[i];
+    const c = rs[(i + k) % n];
+    const raw = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x);
+    const ang = Math.atan2(Math.sin(raw), Math.cos(raw));
+    if (Math.sign(ang) === -orient) concave += Math.abs(ang);
+  }
+  return concave < 1.2; // rad — 손떨림 여유는 두되 하트 홈은 확실히 초과
 }
 
 function isStarLike(radii: number[], rMean: number): boolean {
