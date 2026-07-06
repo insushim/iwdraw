@@ -28,9 +28,11 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
   const bandShade: number[] = [];
   for (let b = 0; b < BANDS; b++) {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    // 어두운 밴드만(0.74~1) — 밝은 하이라이트 밴드를 팁에 섞으면 모든 색이 회색빛이
+    // 어두운 밴드만(0.90~1) — 밝은 하이라이트 밴드를 팁에 섞으면 모든 색이 회색빛이
     // 된다(검정 실측). 어두운 색 처리는 셰이더에서 색 밝기로 방향만 선택한다.
-    bandShade.push(0.74 + (seed / 0x7fffffff) * 0.26);
+    // 평균은 0.95 부근 유지 — 0.74~1(평균 0.87)은 굵은 획만 14% 어두워져
+    // bold LOD(<40px)와 색이 어긋난다(2026-07-06 프로브 실측 220 vs 254).
+    bandShade.push(0.9 + (seed / 0x7fffffff) * 0.1);
   }
   for (let y = 0; y < size; y++) {
     // 밴드 사이 선형 보간 — 경계가 기계적인 평행선으로 보이지 않게
@@ -47,8 +49,9 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
       const dn = Math.hypot(x - r + 0.5, y - r + 0.5) / r;
       if (dn > 1) a = 0;
       else if (dn > 0.94) a *= 1 - (dn - 0.94) / 0.06;
-      // 셰이드 채널 = 밴드 톤 × 원본 밝기(0.72~1.0) — 물감 명암 줄무늬의 근원
-      const shade = Math.round(255 * band * (0.72 + 0.28 * (lum / 255)));
+      // 셰이드 채널 = 밴드 톤 × 원본 밝기(0.92~1.0) — 물감 명암 줄무늬의 근원.
+      // 두 계수의 곱이 평균 셰이드 → 색 밝기를 좌우하므로 합산 평균 ≈0.95 유지
+      const shade = Math.round(255 * band * (0.92 + 0.08 * (lum / 255)));
       px[i] = px[i + 1] = px[i + 2] = shade;
       px[i + 3] = a;
     }

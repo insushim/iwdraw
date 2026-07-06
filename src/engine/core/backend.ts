@@ -206,11 +206,13 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         ctx.lineTo(r + half - jr, y);
         ctx.stroke();
       }
-      // 몸통 중립(순색) 채움 — 큰 bristle의 solid 타원과 동일 역할. 좌우 끝은 행의
-      // jl/jr 지터가 너덜한 마른 붓끝을 만든다.
-      ctx.fillStyle = "rgba(255,255,255,1)";
+      // 몸통 채움 — 큰 bristle의 solid 타원과 동일 역할(알파 구멍 방지). 좌우 끝은
+      // 행의 jl/jr 지터가 너덜한 마른 붓끝을 만든다. 셰이드는 순백(255)이 아니라
+      // fine 팁 평균과 같은 242(≈0.95) — wash MAX에서 튜브 중심은 이 타원이 항상
+      // 이기므로, 255면 얇은 획만 순색이 돼 굵은 획과 색이 어긋난다(프로브 실측).
+      ctx.fillStyle = "rgba(242,242,242,1)";
       ctx.beginPath();
-      ctx.ellipse(r, r, r * 0.55, r * 0.64, 0, 0, Math.PI * 2);
+      ctx.ellipse(r, r, r * 0.4, r * 0.5, 0, 0, Math.PI * 2);
       ctx.fill();
       // 은은한 붓결 줄 2개: 불투명 셰이드(색이 살짝 어두워질 뿐 종이는 안 비침)
       for (const gy of [0.36, 0.63]) {
@@ -268,7 +270,7 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.5;
         const jr = Math.random() * half * 0.5;
-        const fv = 195 + Math.floor(Math.random() * 61); // 붓털별 물감 명암(셰이드 채널)
+        const fv = 232 + Math.floor(Math.random() * 24); // 셰이드 평균 ≈0.95 — bold LOD와 색 일치
         ctx.strokeStyle = `rgba(${fv},${fv},${fv},${0.82 + Math.random() * 0.18})`;
         ctx.lineWidth = 2.2 + Math.random() * 4.2;
         ctx.beginPath();
