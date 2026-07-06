@@ -66,7 +66,6 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
   linen: {
     make() {
       const rand = Math.random;
-      const n1 = latticeNoise(TILE, 28, rand);
       const n2 = latticeNoise(TILE, 96, rand);
       const rows = weaveLine(TILE, rand);
       const cols = weaveLine(TILE, rand);
@@ -74,8 +73,9 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
       for (let y = 0; y < TILE; y++)
         for (let x = 0; x < TILE; x++) {
           const i = y * TILE + x;
-          // 위브 비중을 높여 씨실·날실이 방향성 있게 보인다(캔버스천)
-          f[i] = 0.18 * n1[i] + 0.22 * n2[i] + 0.3 * rows[y] + 0.3 * cols[x];
+          // 씨실·날실이 지배하는 균일 직조 — 저주파 덩어리 노이즈(28cell)는 틴트를
+          // 키우면 얼룩으로 읽힌다(사용자 실측 2회) → 제거, 고주파만 소량 섞는다
+          f[i] = 0.14 * n2[i] + 0.43 * rows[y] + 0.43 * cols[x];
         }
       return f;
     },
@@ -89,12 +89,12 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
   cotton: {
     make() {
       const rand = Math.random;
-      // 위브 없는 셀룰로스 요철 — 미세 입자 위주. 굵은 덩어리(저주파) 비중이 크면
-      // 획이 곰팡이 얼룩처럼 보인다(2026-07-03 사용자 실측 보고 → 0.45/20cell에서 하향)
-      const n1 = latticeNoise(TILE, 30, rand);
-      const n2 = latticeNoise(TILE, 84, rand);
+      // 위브 없는 셀룰로스 요철 — 미세 입자만. 굵은 덩어리(저주파) 비중이 크면
+      // 얼룩처럼 보인다(2026-07-03·07-06 사용자 실측 2회 → 저주파 완전 제거)
+      const n2 = latticeNoise(TILE, 110, rand);
+      const n3 = latticeNoise(TILE, 60, rand);
       const f = new Float32Array(TILE * TILE);
-      for (let i = 0; i < f.length; i++) f[i] = 0.3 * n1[i] + 0.7 * n2[i];
+      for (let i = 0; i < f.length; i++) f[i] = 0.75 * n2[i] + 0.25 * n3[i];
       return f;
     },
     // 임계 상향 = 가장 깊은 골에만 침식 → 드문드문한 잔입자(granulation)

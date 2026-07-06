@@ -99,22 +99,28 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       // 수채: 균일한 워시 플래토 + granulation. rim(가장자리 안료 몰림)은 dab이 아니라
       // 획 실루엣 기준이어야 하므로 endStroke의 applyWetEdge 후처리가 담당한다.
       // (dab에 rim을 베이크하면 wash(MAX) 누적에서 dab별 고리가 사슬로 남는다 — 실측)
-      // 플래토를 0.9까지 유지 — 0.82는 가장자리 페이드가 넓어 획이 번져 보인다(사용자 실측)
+      // 플래토를 0.9까지 유지 — 0.82는 가장자리 페이드가 넓어 획이 번져 보인다(사용자 실측).
+      // 플래토 알파 0.8: 0.68은 washOpacity와 곱해져 진하기 100%에서도 너무 연함(실측)
       const g = ctx.createRadialGradient(r, r, 0, r, r, r);
-      g.addColorStop(0, "rgba(255,255,255,0.68)");
-      g.addColorStop(0.9, "rgba(255,255,255,0.68)");
+      g.addColorStop(0, "rgba(255,255,255,0.8)");
+      g.addColorStop(0.9, "rgba(255,255,255,0.8)");
       g.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(r, r, r, 0, Math.PI * 2);
       ctx.fill();
-      // granulation: 미세 구멍
+      // granulation: 미세 구멍(고정 시드 — 랜덤이면 로드마다 질감 밀도 요동)
+      let wetSeed = 97;
+      const wrand = () => {
+        wetSeed = (wetSeed * 1103515245 + 12345) & 0x7fffffff;
+        return wetSeed / 0x7fffffff;
+      };
       ctx.globalCompositeOperation = "destination-out";
-      for (let i = 0; i < 170; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const rad = Math.sqrt(Math.random()) * r * 0.92;
-        ctx.fillStyle = `rgba(0,0,0,${0.06 + Math.random() * 0.16})`;
-        const s = 1 + Math.random() * 1.8;
+      for (let i = 0; i < 240; i++) {
+        const a = wrand() * Math.PI * 2;
+        const rad = Math.sqrt(wrand()) * r * 0.92;
+        ctx.fillStyle = `rgba(0,0,0,${0.08 + wrand() * 0.2})`;
+        const s = 1 + wrand() * 2.2;
         ctx.fillRect(r + Math.cos(a) * rad, r + Math.sin(a) * rad, s, s);
       }
       ctx.globalCompositeOperation = "source-over";
