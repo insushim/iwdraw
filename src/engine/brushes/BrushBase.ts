@@ -67,9 +67,6 @@ export interface BrushConfig {
   wetEdge: number;
   /** 획 시작·끝의 마른 붓털 트레일 강도 0~1(유화) — 진행 방향으로 저알파 fringe dab */
   fringe: number;
-  /** 획 몸통의 마른 붓 반점 0~1(유화) — 캔버스 돌기에 물감이 안 앉은 아주 작은 흰 점.
-   * GL은 dab 셰이더, 2D는 presentStroke 라이브 경로에서 실시간 침식(팝인 금지) */
-  flecks: number;
   /** 종이 결을 알파 침식 대신 "색 백화"(흰 캔버스가 물감에 배어남)로 — 획 불투명 유지.
    * 불투명 매체(유화)용: 알파 침식이면 겹친 획이 진해져 반투명 마커로 읽힌다(i-scream 대비 실측) */
   grainLift: boolean;
@@ -94,7 +91,6 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   washOpacity: 1,
   wetEdge: 0,
   fringe: 0,
-  flecks: 0,
   grainLift: false,
   streaks: 0,
 };

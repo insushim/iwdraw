@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, makeTipHighlightCanvas, type RendererBackend, type StrokeContext } from "./backend";
-import { applyWetEdge, fleckTile, paperGrainTile, type PaperKind } from "./paper";
+import { applyWetEdge, paperGrainTile, type PaperKind } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -42,9 +42,7 @@ in vec2 v_uv;
 in vec2 v_px;
 uniform sampler2D u_tip;
 uniform sampler2D u_paper;  // 종이 결 타일(256, repeat) — 골짜기 알파
-uniform sampler2D u_fleck;  // 마른 붓 반점 타일(256, repeat) — 아주 작은 흰 점
 uniform float u_grain;      // 종이 결 강도 0~1 (dab 단위 실시간 — 프리뷰=최종)
-uniform float u_flecks;     // 마른 붓 반점 강도 0~1 (실시간 — 펜 뗄 때 팝인 금지)
 uniform float u_grainLift;  // 1=결을 색 백화로(불투명 유지, 유화) / 0=알파 침식(수채 등)
 uniform sampler2D u_tipHl;  // 붓 방향 밝은 스트릭 맵(팁 UV) — 마른 붓털 하이라이트
 uniform float u_streaks;    // 스트릭 강도 0~1
@@ -59,9 +57,6 @@ void main() {
   //    진해져 불투명 물감이 아니라 반투명 마커로 읽힌다(i-scream 비교 사용자 실측 2026-07-06).
   float g = texture(u_paper, v_px / 256.0).a * u_grain;
   a *= 1.0 - g * 0.5 * (1.0 - u_grainLift);
-  // 마른 붓 반점: 캔버스 돌기에 물감이 안 앉은 흰 점 — 캔버스 좌표 고정(v_px)이라
-  // 같은 자리의 dab들이 같은 구멍을 공유(wash MAX에서도 일관)
-  a *= 1.0 - texture(u_fleck, v_px / 256.0).a * u_flecks;
   // 임파스토 셰이드(t.r, 1=중립): 방향을 색 밝기로 "선택"한다(step) —
   // ① 크로스페이드(가중 평균)는 중간 회색에서 ±상쇄 널포인트(실측),
   // ② 팁에 밝은 밴드를 섞으면 모든 색이 회색빛(검정 실측). 둘 다 금지.
@@ -72,8 +67,10 @@ void main() {
   // 붓 방향 밝은 스트릭(마른 붓털 하이라이트) — 밝은 값은 wash(MAX)에서 살아남아
   // 덧칠 내부에도 붓결이 유지된다(어두운 골은 MAX가 지움 — i-scream 비교 실측)
   float hl = texture(u_tipHl, v_uv).a * u_streaks;
-  // 백화 모드의 밝은 색: 결 이랑 흰색 혼입 + 스트릭(합산 캡 0.5 — 과백화 방지)
-  vec3 darkened = mix(col * f, vec3(1.0), min(0.5, g * 0.5 * u_grainLift + hl));
+  // 백화 모드의 밝은 색: 결 이랑 흰색 혼입 + 스트릭. 합산 캡 0.3 — 0.5는 채도 높은
+  // 색(로열블루)이 분필처럼 바랜다("흰색 섞은 듯", 2026-07-06 사용자 실측). 직조는
+  // 획 전체에 상시 깔리는 항이라 특히 낮게(0.32) — 스트릭은 국소라 좀 더 허용.
+  vec3 darkened = mix(col * f, vec3(1.0), min(0.3, g * 0.32 * u_grainLift + hl * 0.62));
   // 어두운 색 하이라이트는 상한 필수 — 깊은 골(f=0.6)에 비례 계수만 쓰면 골마다
   // 37% 백색 혼입 → 검정이 회색빛 + 흰 줄 스팸(실기기 실측). 0.16 캡이면
   // 결이 보이면서 검정은 검정으로 남는다(백화·스트릭 기여도 같은 캡 안).
@@ -284,24 +281,6 @@ export class WebGL2Backend implements RendererBackend {
     return tex;
   }
 
-  /** 마른 붓 반점 타일 텍스처(repeat) — dab 셰이더가 캔버스 좌표로 샘플(지연 생성) */
-  private fleckTexGl: WebGLTexture | null = null;
-
-  private fleckTexture(): WebGLTexture {
-    if (!this.fleckTexGl) {
-      const gl = this.gl;
-      const tex = gl.createTexture()!;
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fleckTile());
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-      this.fleckTexGl = tex;
-    }
-    return this.fleckTexGl;
-  }
-
   beginStroke(ctx: StrokeContext): void {
     this.ctx = ctx;
     const gl = this.gl;
@@ -342,15 +321,11 @@ export class WebGL2Backend implements RendererBackend {
     gl.bindTexture(gl.TEXTURE_2D, this.paperTexture(this.ctx.paperKind));
     gl.uniform1i(gl.getUniformLocation(this.dabProg, "u_paper"), 1);
     gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, this.fleckTexture());
-    gl.uniform1i(gl.getUniformLocation(this.dabProg, "u_fleck"), 2);
-    gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.tipHlTexture(this.ctx.tip));
-    gl.uniform1i(gl.getUniformLocation(this.dabProg, "u_tipHl"), 3);
+    gl.uniform1i(gl.getUniformLocation(this.dabProg, "u_tipHl"), 2);
     // 지우개는 종이 결·반점 미적용(기존 endStroke 정책과 동일)
     const eraser = this.ctx.composite === "destination-out";
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_grain"), eraser ? 0 : this.ctx.paperGrain);
-    gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_flecks"), eraser ? 0 : this.ctx.flecks);
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_grainLift"), this.ctx.grainLift ? 1 : 0);
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_streaks"), eraser ? 0 : this.ctx.streaks);
     gl.activeTexture(gl.TEXTURE0);
@@ -461,10 +436,6 @@ export class WebGL2Backend implements RendererBackend {
     this.paperTex.clear();
     this.tipHlTex.forEach((t) => gl.deleteTexture(t));
     this.tipHlTex.clear();
-    if (this.fleckTexGl) {
-      gl.deleteTexture(this.fleckTexGl);
-      this.fleckTexGl = null;
-    }
     this.tipTextures.clear();
     gl.deleteFramebuffer(this.strokeFbo.fb);
     gl.deleteTexture(this.strokeFbo.tex);

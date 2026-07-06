@@ -24,7 +24,8 @@ export class OilBrush extends BrushBase {
         strokeBlend: "wash", // 겹침 포화 방지 → 붓결이 획 전체에 보존
         washOpacity: 1,
         fringe: 0.9, // 획 양끝 마른 붓털 트레일
-        flecks: 0.55, // 흰 점은 거의 안 느껴질 만큼만(사용자 실측) — 질감 주역은 streaks
+        // ⚠️ 고립된 흰 점(fleck) 금지 — 캔버스 고정 점은 붓 방향과 무관해 "인위적"으로
+        // 읽힌다(2026-07-06 사용자 실측 3회 수렴, 기능 제거). 질감은 streaks+직조 백화 전담
         grainLift: true, // 유화 물감은 불투명 — 결은 구멍이 아니라 흰 캔버스 배어남(겹침 진해짐 방지)
         streaks: 0.55, // 붓 방향 밝은 스트릭 — MAX에서 살아남아 덧칠 내부에도 붓결 유지(i-scream)
       },
