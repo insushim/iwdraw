@@ -177,23 +177,30 @@ export class BrushBase {
     return out;
   }
 
-  /** 획 양끝의 마른 붓 테이퍼 — 진행 방향(dir=+1 꼬리, -1 머리)으로 좁아지며 이어지는 dab.
-   * 알파를 낮추면 유령 같은 반투명 캡이 된다(실측) — 크기를 줄여 붓을 드는 끝맛을 만든다 */
+  /** 획 양끝의 마른 붓 테이퍼 — 진행 방향(dir=+1 꼬리, -1 머리)으로 좁아지며
+   * "흩어지는" dab. 일직선 정렬 테이퍼는 끝이 매끈한 캡이 된다 — 작은 점들을
+   * 수직으로 흩뿌려 사이사이 종이가 비치는 마른 붓끝(흰 점)을 만든다(i-scream 참조).
+   * 알파를 크게 낮추면 유령 같은 반투명 캡(실측) — 크기 축소+산포가 정답 */
   private fringeDabs(p: StrokePoint, angle: number, dir: 1 | -1): Dab[] {
     const c = this.cfg;
     if (!c.fringe) return [];
     const base = this.settings.size * c.sizeScale;
-    const steps: Array<[number, number, number]> = [
-      // [진행 오프셋, 크기 배율, 알파 배율]
-      [0.12, 0.72, 0.95],
-      [0.26, 0.46, 0.85],
-      [0.38, 0.24, 0.6],
+    const steps: Array<[number, number, number, number]> = [
+      // [진행 오프셋, 크기 배율, 알파 배율, 수직 산포(±size 비율)]
+      [0.1, 0.62, 0.95, 0.06],
+      [0.22, 0.4, 0.9, 0.14],
+      [0.32, 0.26, 0.85, 0.2],
+      [0.42, 0.15, 0.8, 0.26],
+      [0.5, 0.09, 0.75, 0.3],
     ];
+    const px = -Math.sin(angle); // 진행 수직 방향
+    const py = Math.cos(angle);
     const out: Dab[] = [];
-    for (const [off, sz, al] of steps) {
+    for (const [off, sz, al, scatter] of steps) {
       const d = this.makeDab(p, angle);
-      d.x += Math.cos(angle) * dir * base * off;
-      d.y += Math.sin(angle) * dir * base * off;
+      const lateral = (this.rng() - 0.5) * 2 * scatter * base;
+      d.x += Math.cos(angle) * dir * base * off + px * lateral;
+      d.y += Math.sin(angle) * dir * base * off + py * lateral;
       d.size *= sz;
       d.alpha = Math.max(0.01, d.alpha * c.fringe * al);
       out.push(d);

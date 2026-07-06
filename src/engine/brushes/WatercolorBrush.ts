@@ -21,7 +21,7 @@ export class WatercolorBrush extends BrushBase {
         composite: "multiply",
         paperGrain: 0.5, // 수채용지 요철(granulation) — 셰이더 침식 계수 하향(0.5)에 맞춰 상향
         strokeBlend: "wash", // 획 내부 균일(겹침 스캘럽 제거)
-        washOpacity: 0.72, // 0.55는 진하기 100%에서도 너무 연함(사용자 실측)
+        washOpacity: 0.85, // 물양이 실제 농도를 담당(아래 makeDab) — 상한만 정의
         wetEdge: 0.75, // 마르며 실루엣 가장자리에 안료 몰림(endStroke 후처리)
       },
       rng,
@@ -30,10 +30,12 @@ export class WatercolorBrush extends BrushBase {
 
   protected override makeDab(p: StrokePoint, angle: number): Dab {
     const dab = super.makeDab(p, angle);
-    // 물 양 매핑: 많이 적실수록 넓게 퍼지고 옅게
+    // 물 양 매핑: 많이 적실수록 넓게 퍼지고 옅게. 스팬을 크게 —
+    // 물 0% = 마른 안료(거의 불투명 과슈), 100% = 옅은 워시.
+    // (±20% 스팬은 물 0%에서도 반투명해 "이게 맞아?" 소리 나옴 — 사용자 실측)
     const w = this.settings.waterAmount;
     dab.size *= 1 + w * 0.35;
-    dab.alpha = Math.min(1, dab.alpha * (1.15 - w * 0.55));
+    dab.alpha = Math.min(1, dab.alpha * (1.35 - w * 0.85));
     return dab;
   }
 }

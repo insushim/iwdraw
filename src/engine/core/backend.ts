@@ -102,8 +102,8 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       // 플래토를 0.9까지 유지 — 0.82는 가장자리 페이드가 넓어 획이 번져 보인다(사용자 실측).
       // 플래토 알파 0.8: 0.68은 washOpacity와 곱해져 진하기 100%에서도 너무 연함(실측)
       const g = ctx.createRadialGradient(r, r, 0, r, r, r);
-      g.addColorStop(0, "rgba(255,255,255,0.8)");
-      g.addColorStop(0.9, "rgba(255,255,255,0.8)");
+      g.addColorStop(0, "rgba(255,255,255,0.94)");
+      g.addColorStop(0.9, "rgba(255,255,255,0.94)");
       g.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -212,7 +212,7 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const jr = brand() * half * 0.35;
         // 셰이드 채널(v<255 = 물감 명암). 딥 행은 고정 인덱스(3/8) — fine 팁 밴드와 정합.
         const deepRow = i === 1 || i === 4 || i === 6;
-        const v = deepRow ? 166 + Math.floor(brand() * 17) : 246 + Math.floor(brand() * 10);
+        const v = deepRow ? 190 + Math.floor(brand() * 16) : 246 + Math.floor(brand() * 10);
         ctx.strokeStyle = `rgba(${v},${v},${v},1)`;
         // 행 피치(size/8)보다 넓게 → 행 사이 알파 틈 없음(틈=종이 비침 흰 줄)
         ctx.lineWidth = size * 0.13 + brand() * size * 0.05;
@@ -234,7 +234,7 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       for (const gy of [0.26, 0.44, 0.6, 0.76]) {
         const y = size * gy;
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
-        ctx.strokeStyle = "rgba(140,140,140,1)";
+        ctx.strokeStyle = "rgba(168,168,168,1)";
         ctx.lineWidth = size * 0.06;
         ctx.beginPath();
         ctx.moveTo(r - half * 0.9, y);

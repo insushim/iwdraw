@@ -34,7 +34,8 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
   for (let b = 0; b < BANDS; b++) {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
     const rnd = seed / 0x7fffffff;
-    bandShade.push(DEEP.has(b) ? 0.6 + rnd * 0.12 : 0.96 + rnd * 0.04);
+    // 골 0.72~0.82 — 0.60~0.72는 색 획이 검정끼로 읽힘(사용자 실측, i-scream 대비 과함)
+    bandShade.push(DEEP.has(b) ? 0.72 + rnd * 0.1 : 0.96 + rnd * 0.04);
   }
   for (let y = 0; y < size; y++) {
     // 밴드 사이 선형 보간 — 경계가 기계적인 평행선으로 보이지 않게
