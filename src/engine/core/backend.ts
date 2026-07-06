@@ -28,6 +28,8 @@ export interface StrokeContext {
   wetEdge: number;
   /** 획 몸통 마른 붓 흰 점 침식 0~1(유화) — dab 셰이더/라이브 경로 실시간(팝인 금지) */
   flecks: number;
+  /** 종이 결을 색 백화로(불투명 유지, 유화) — false면 알파 침식(수채 등) */
+  grainLift: boolean;
 }
 
 /*

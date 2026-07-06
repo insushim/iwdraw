@@ -248,6 +248,7 @@ export class ArtEngine {
       strokeOpacity: wash ? clamp(brush.cfg.washOpacity * this.settings.opacity, 0, 1) : 1,
       wetEdge: brush.cfg.wetEdge,
       flecks: brush.cfg.flecks,
+      grainLift: brush.cfg.grainLift,
       paperKind: this.paperKindForMode(),
     };
   }
@@ -446,6 +447,7 @@ export class ArtEngine {
       strokeOpacity: remoteWash ? clamp(brush.cfg.washOpacity * meta.opacity, 0, 1) : 1,
       wetEdge: brush.cfg.wetEdge,
       flecks: brush.cfg.flecks,
+      grainLift: brush.cfg.grainLift,
       paperKind: this.paperKindForMode(),
     };
     this.cm.backend.beginStroke(ctx);

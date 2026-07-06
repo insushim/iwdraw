@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
-import { applyFlecks, applyPaperGrain, applyWetEdge } from "./paper";
+import { applyFlecks, applyPaperGrain, applyPaperGrainLift, applyWetEdge } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -138,8 +138,7 @@ export class Canvas2DBackend implements RendererBackend {
       }
       this.liveBuf.clearRect(0, 0, this.width, this.height);
       this.liveBuf.drawImage(this.strokeBuf, 0, 0);
-      if (this.ctx.paperGrain > 0)
-        applyPaperGrain(this.liveBuf, this.width, this.height, this.ctx.paperGrain, this.ctx.paperKind);
+      if (this.ctx.paperGrain > 0) this.grain(this.liveBuf);
       if (this.ctx.flecks > 0) applyFlecks(this.liveBuf, this.width, this.height, this.ctx.flecks);
       src = this.liveBuf.canvas;
     }
@@ -153,6 +152,17 @@ export class Canvas2DBackend implements RendererBackend {
           : "source-over";
     target.drawImage(src, 0, 0);
     target.restore();
+  }
+
+  /** 종이 결 적용 — 불투명 매체(grainLift)는 백화, 그 외는 알파 침식(라이브/최종 공용) */
+  private grain(target: CanvasRenderingContext2D): void {
+    const c = this.ctx!;
+    if (c.grainLift) {
+      const dk = 1 - Math.max(c.color.r, c.color.g, c.color.b) / 255;
+      applyPaperGrainLift(target, this.width, this.height, c.paperGrain, c.paperKind, dk);
+    } else {
+      applyPaperGrain(target, this.width, this.height, c.paperGrain, c.paperKind);
+    }
   }
 
   endStroke(): void {
@@ -169,9 +179,7 @@ export class Canvas2DBackend implements RendererBackend {
     if (this.ctx.flecks > 0) {
       applyFlecks(this.strokeCtx, this.width, this.height, this.ctx.flecks);
     }
-    if (this.ctx.paperGrain > 0) {
-      applyPaperGrain(this.strokeCtx, this.width, this.height, this.ctx.paperGrain, this.ctx.paperKind);
-    }
+    if (this.ctx.paperGrain > 0) this.grain(this.strokeCtx);
     // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영(라이브 프리뷰와 동일해야 함)
     this.layerCtx.save();
     this.layerCtx.globalAlpha = this.ctx.strokeOpacity;

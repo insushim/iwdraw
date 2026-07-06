@@ -48,6 +48,10 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
       const i = (y * size + x) * 4;
       const lum = Math.max(px[i], px[i + 1], px[i + 2]);
       let a = lum <= FLOOR ? 0 : ((lum - FLOOR) / (255 - FLOOR)) * (px[i + 3] / 255) * 255;
+      // 몸통 알파 포화(×1.18 클램프): AI 맵 몸통이 1 미만이면 겹친 획이 진해져
+      // 불투명 물감이 아니라 반투명 마커로 읽힌다(i-scream 비교 실측 2026-07-06).
+      // 0은 0으로 유지 — 가장자리/마른 끝 그라디언트 형태는 보존된다.
+      a = Math.min(255, a * 1.18);
       // 깊은 골은 물감도 살짝 얇게(-4%) — 종이 결이 비쳐 마른 붓결이 산다.
       // ⚠️ 강한 알파 골(≥30%)은 wash에서 획 전체 흰 줄(bristle-bold 실측), -8%도
       // 검정에선 종이 흰 줄로 읽힌다(실기기 실측) — 지각 하한까지만.

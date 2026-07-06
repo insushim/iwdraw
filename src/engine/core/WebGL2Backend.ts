@@ -45,15 +45,18 @@ uniform sampler2D u_paper;  // 종이 결 타일(256, repeat) — 골짜기 알�
 uniform sampler2D u_fleck;  // 마른 붓 반점 타일(256, repeat) — 아주 작은 흰 점
 uniform float u_grain;      // 종이 결 강도 0~1 (dab 단위 실시간 — 프리뷰=최종)
 uniform float u_flecks;     // 마른 붓 반점 강도 0~1 (실시간 — 펜 뗄 때 팝인 금지)
+uniform float u_grainLift;  // 1=결을 색 백화로(불투명 유지, 유화) / 0=알파 침식(수채 등)
 uniform vec4 u_color;       // rgb(0..1) + alpha
 out vec4 frag;
 void main() {
   vec4 t = texture(u_tip, v_uv);
   float a = t.a * u_color.a;
-  // 종이 결: 골짜기에서 안료가 빠진다(알파 침식). 계수 0.85는 백색 혼입 노이즈가
-  // 붓결 셰이드와 같은 진폭이 돼 줄무늬를 위장한다(실측) — 0.5로 은은하게.
+  // 종이 결 — 두 모드(u_grainLift로 선택):
+  //  · 침식(수채 등): 골짜기에서 안료가 빠진다(알파 ↓). 계수 0.5(0.85는 붓결 위장 실측).
+  //  · 백화(유화): 알파는 유지하고 색에 흰 캔버스가 배어난다 — 알파 침식이면 겹친 획이
+  //    진해져 불투명 물감이 아니라 반투명 마커로 읽힌다(i-scream 비교 사용자 실측 2026-07-06).
   float g = texture(u_paper, v_px / 256.0).a * u_grain;
-  a *= 1.0 - g * 0.5;
+  a *= 1.0 - g * 0.5 * (1.0 - u_grainLift);
   // 마른 붓 반점: 캔버스 돌기에 물감이 안 앉은 흰 점 — 캔버스 좌표 고정(v_px)이라
   // 같은 자리의 dab들이 같은 구멍을 공유(wash MAX에서도 일관)
   a *= 1.0 - texture(u_fleck, v_px / 256.0).a * u_flecks;
@@ -61,14 +64,15 @@ void main() {
   // ① 크로스페이드(가중 평균)는 중간 회색에서 ±상쇄 널포인트(실측),
   // ② 팁에 밝은 밴드를 섞으면 모든 색이 회색빛(검정 실측). 둘 다 금지.
   // 밝은 색(밝기≥0.4) = 물감이 어두워지는 골, 어두운 색 = 빛 받는 하이라이트.
-  float f = t.r * (1.0 - g * 0.35);
+  float f = t.r * (1.0 - g * 0.35 * (1.0 - u_grainLift));
   vec3 col = u_color.rgb;
   float dk = 1.0 - max(col.r, max(col.g, col.b)); // 검을수록 1
-  vec3 darkened = col * f;
+  // 백화 모드의 밝은 색: 결 이랑에 흰색 혼입(마른 붓이 캔버스 위를 스치는 자국)
+  vec3 darkened = mix(col * f, vec3(1.0), g * 0.42 * u_grainLift);
   // 어두운 색 하이라이트는 상한 필수 — 깊은 골(f=0.6)에 비례 계수만 쓰면 골마다
   // 37% 백색 혼입 → 검정이 회색빛 + 흰 줄 스팸(실기기 실측). 0.16 캡이면
-  // 결이 보이면서 검정은 검정으로 남는다.
-  float lift = min(0.16, (1.0 - f) * 0.5) * dk;
+  // 결이 보이면서 검정은 검정으로 남는다(백화 모드의 결 기여도 같은 캡 안).
+  float lift = min(0.16, (1.0 - f) * 0.5 + g * 0.3 * u_grainLift) * dk;
   vec3 lightened = mix(col, vec3(1.0), lift);
   col = mix(darkened, lightened, step(0.6, dk));
   frag = vec4(col * a, a);  // premultiplied
@@ -320,6 +324,7 @@ export class WebGL2Backend implements RendererBackend {
     const eraser = this.ctx.composite === "destination-out";
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_grain"), eraser ? 0 : this.ctx.paperGrain);
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_flecks"), eraser ? 0 : this.ctx.flecks);
+    gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_grainLift"), this.ctx.grainLift ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform2f(gl.getUniformLocation(this.dabProg, "u_resolution"), this.width, this.height);
     const uCenter = gl.getUniformLocation(this.dabProg, "u_center");

@@ -15,7 +15,8 @@ export class OilBrush extends BrushBase {
         flow: 1,
         jitter: 0.015,
         sizePressure: 0.45,
-        alphaPressure: 0.35, // wash에서 필압 낮은 구간=마른 붓자국(끝 갈라짐)
+        alphaPressure: 0.1, // 유화 물감은 불투명 — 0.35는 마우스 필압(속도 0.35~0.85)에서
+        // dab 알파 0.77까지 떨어져 겹친 획이 진해짐(i-scream 비교 실측). 마른 끝은 fringe 담당
         minSizeRatio: 0.6,
         composite: "source-over",
         rotationFollowsStroke: true,
@@ -24,6 +25,7 @@ export class OilBrush extends BrushBase {
         washOpacity: 1,
         fringe: 0.9, // 획 양끝 마른 붓털 트레일
         flecks: 0.9, // 획 몸통 마른 붓 흰 점(아주 작게·드물게) — 셰이더 실시간, 팁 가장자리 밝기는 팁에 베이크
+        grainLift: true, // 유화 물감은 불투명 — 결은 구멍이 아니라 흰 캔버스 배어남(겹침 진해짐 방지)
       },
       rng,
     );

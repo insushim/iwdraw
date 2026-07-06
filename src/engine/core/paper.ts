@@ -210,6 +210,30 @@ export function applyPaperGrain(
   ctx.restore();
 }
 
+/**
+ * 종이 결 "백화" 적용(불투명 매체용) — 알파는 유지하고 획 안에 흰 캔버스 이랑이 배어난다.
+ * 알파 침식(applyPaperGrain)이면 겹친 획이 진해져 반투명 마커로 읽힌다(i-scream 비교 실측).
+ * dk(0~1, 검을수록 1)로 어두운 색 백색 혼입을 캡 — GL 셰이더의 lift 캡과 체감 정합.
+ */
+export function applyPaperGrainLift(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  strength: number,
+  kind: PaperKind,
+  dk: number,
+): void {
+  const pat = ctx.createPattern(paperGrainTile(kind), "repeat");
+  if (!pat) return;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "source-atop"; // 획 실루엣 안에서만 백화
+  ctx.globalAlpha = Math.min(1, strength * 0.42 * (dk > 0.6 ? 0.4 : 1));
+  ctx.fillStyle = pat;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
 /** 표시 캔버스에 종이 결 깔기(내보내기 비포함, compositeNow 전용 — 매 프레임 호출이라 패턴 캐시) */
 export function drawPaperTint(
   ctx: CanvasRenderingContext2D,
