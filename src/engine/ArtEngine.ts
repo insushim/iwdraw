@@ -549,7 +549,9 @@ export class ArtEngine {
     const img = layer.ctx.getImageData(0, 0, this.width, this.height);
     let barrier: Uint8Array | null = null;
     const lineart = this.layers.lineart;
-    if (this.mode === "coloring" && lineart) {
+    // 도안이 있으면 모드와 무관하게 선을 벽으로 — 색칠 도안을 열고 스케치/유화 탭으로
+    // 전환해도 페인트통이 선을 넘으면 안 된다(mode==="coloring" 조건이던 실측 버그)
+    if (lineart) {
       const la = lineart.ctx.getImageData(0, 0, this.width, this.height);
       barrier = buildBarrierFromLineart(la.data, this.width, this.height);
     }
