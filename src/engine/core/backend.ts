@@ -26,9 +26,7 @@ export interface StrokeContext {
   strokeOpacity: number;
   /** 획 실루엣 가장자리 안료 몰림 강도 0~1(수채) — endStroke에서 applyWetEdge */
   wetEdge: number;
-  /** 획 실루엣 가장자리 알파 침식 0~1(유화, 좌우·양끝 밝게) — endStroke에서 applyDryEdge */
-  dryEdge: number;
-  /** 획 몸통 마른 붓 흰 점 침식 0~1(유화) — endStroke에서 applyFlecks */
+  /** 획 몸통 마른 붓 흰 점 침식 0~1(유화) — dab 셰이더/라이브 경로 실시간(팝인 금지) */
   flecks: number;
 }
 
@@ -249,7 +247,10 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         // 셰이드 채널(v<255 = 물감 명암). 딥 행은 고정 인덱스(3/8) — fine 팁 밴드와 정합.
         const deepRow = i === 1 || i === 4 || i === 6;
         const v = deepRow ? 190 + Math.floor(brand() * 16) : 246 + Math.floor(brand() * 10);
-        ctx.strokeStyle = `rgba(${v},${v},${v},1)`;
+        // 획 좌우 가장자리 밝은 테 — fine 팁(tipLoader)과 동일 처리(색 게이트 정합)
+        const bny = Math.abs(y - r) / r;
+        const bEdgeK = bny > 0.78 ? 1 - 0.45 * Math.min(1, (bny - 0.78) / 0.22) : 1;
+        ctx.strokeStyle = `rgba(${v},${v},${v},${bEdgeK})`;
         // 행 피치(size/8)보다 넓게 → 행 사이 알파 틈 없음(틈=종이 비침 흰 줄)
         ctx.lineWidth = size * 0.13 + brand() * size * 0.05;
         ctx.beginPath();
@@ -326,7 +327,11 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         // 페이지 로드마다 딥 행 개수가 달라져 평균 셰이드가 요동(색 게이트 flaky 실측)
         const deepRow = i === 1 || i === 4 || i === 6;
         const fv = deepRow ? 166 + Math.floor(Math.random() * 17) : 246 + Math.floor(Math.random() * 10);
-        ctx.strokeStyle = `rgba(${fv},${fv},${fv},${0.82 + Math.random() * 0.18})`;
+        // 획 좌우 가장자리(팁 상하단 행) 물감 얇게 — 종이가 비쳐 밝은 테(i-scream).
+        // 실루엣 후처리는 펜 뗄 때 팝인(사용자 실측) → 팁 베이크로 프리뷰=최종
+        const ny = Math.abs(y - r) / r;
+        const edgeK = ny > 0.78 ? 1 - 0.45 * Math.min(1, (ny - 0.78) / 0.22) : 1;
+        ctx.strokeStyle = `rgba(${fv},${fv},${fv},${(0.82 + Math.random() * 0.18) * edgeK})`;
         ctx.lineWidth = 2.2 + Math.random() * 4.2;
         ctx.beginPath();
         ctx.moveTo(r - half + jl, y);

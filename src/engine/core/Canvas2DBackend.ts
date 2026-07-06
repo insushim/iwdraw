@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
-import { applyDryEdge, applyFlecks, applyPaperGrain, applyWetEdge } from "./paper";
+import { applyFlecks, applyPaperGrain, applyWetEdge } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -127,9 +127,9 @@ export class Canvas2DBackend implements RendererBackend {
     if (!this.ctx) return;
     // 지우개는 레이어에 직접 그려져 이미 실시간으로 보임
     if (this.ctx.composite === "destination-out") return;
-    // 종이 결을 프리뷰에도 실시간 적용("떼는 순간 질감이 생기는" 이질감 제거)
+    // 종이 결·마른 붓 반점을 프리뷰에도 실시간 적용("떼는 순간 질감/구멍이 생기는" 팝인 제거)
     let src: HTMLCanvasElement = this.strokeBuf;
-    if (this.ctx.paperGrain > 0) {
+    if (this.ctx.paperGrain > 0 || this.ctx.flecks > 0) {
       if (!this.liveBuf) {
         const c = document.createElement("canvas");
         c.width = this.width;
@@ -138,7 +138,9 @@ export class Canvas2DBackend implements RendererBackend {
       }
       this.liveBuf.clearRect(0, 0, this.width, this.height);
       this.liveBuf.drawImage(this.strokeBuf, 0, 0);
-      applyPaperGrain(this.liveBuf, this.width, this.height, this.ctx.paperGrain, this.ctx.paperKind);
+      if (this.ctx.paperGrain > 0)
+        applyPaperGrain(this.liveBuf, this.width, this.height, this.ctx.paperGrain, this.ctx.paperKind);
+      if (this.ctx.flecks > 0) applyFlecks(this.liveBuf, this.width, this.height, this.ctx.flecks);
       src = this.liveBuf.canvas;
     }
     target.save();
@@ -159,12 +161,10 @@ export class Canvas2DBackend implements RendererBackend {
       this.ctx = null;
       return; // 지우개는 이미 레이어에 직접 반영됨
     }
-    // wet edge(실루엣 가장자리 안료 몰림) → dry edge → 반점 → 종이 결 침식 순서로 후처리
+    // wet edge(실루엣 가장자리 안료 몰림) → 반점 → 종이 결 침식 순서로 후처리
+    // (반점·종이 결은 presentStroke 라이브 경로와 동일 — 프리뷰=최종)
     if (this.ctx.wetEdge > 0) {
       applyWetEdge(this.strokeCtx, this.width, this.height, this.ctx.wetEdge);
-    }
-    if (this.ctx.dryEdge > 0) {
-      applyDryEdge(this.strokeCtx, this.width, this.height, this.ctx.dryEdge);
     }
     if (this.ctx.flecks > 0) {
       applyFlecks(this.strokeCtx, this.width, this.height, this.ctx.flecks);

@@ -23,8 +23,7 @@ export class OilBrush extends BrushBase {
         strokeBlend: "wash", // 겹침 포화 방지 → 붓결이 획 전체에 보존
         washOpacity: 1,
         fringe: 0.9, // 획 양끝 마른 붓털 트레일
-        dryEdge: 0.6, // 획 좌우·양끝 가장자리 물감이 얇아져 밝게(i-scream 참조)
-        flecks: 0.85, // 획 몸통 마른 붓 흰 점 — 캔버스 돌기에 물감이 안 앉은 자국
+        flecks: 0.9, // 획 몸통 마른 붓 흰 점(아주 작게·드물게) — 셰이더 실시간, 팁 가장자리 밝기는 팁에 베이크
       },
       rng,
     );

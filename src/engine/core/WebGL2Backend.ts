@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
-import { applyDryEdge, applyFlecks, applyWetEdge, paperGrainTile, type PaperKind } from "./paper";
+import { applyWetEdge, fleckTile, paperGrainTile, type PaperKind } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -42,7 +42,9 @@ in vec2 v_uv;
 in vec2 v_px;
 uniform sampler2D u_tip;
 uniform sampler2D u_paper;  // 종이 결 타일(256, repeat) — 골짜기 알파
+uniform sampler2D u_fleck;  // 마른 붓 반점 타일(256, repeat) — 아주 작은 흰 점
 uniform float u_grain;      // 종이 결 강도 0~1 (dab 단위 실시간 — 프리뷰=최종)
+uniform float u_flecks;     // 마른 붓 반점 강도 0~1 (실시간 — 펜 뗄 때 팝인 금지)
 uniform vec4 u_color;       // rgb(0..1) + alpha
 out vec4 frag;
 void main() {
@@ -52,6 +54,9 @@ void main() {
   // 붓결 셰이드와 같은 진폭이 돼 줄무늬를 위장한다(실측) — 0.5로 은은하게.
   float g = texture(u_paper, v_px / 256.0).a * u_grain;
   a *= 1.0 - g * 0.5;
+  // 마른 붓 반점: 캔버스 돌기에 물감이 안 앉은 흰 점 — 캔버스 좌표 고정(v_px)이라
+  // 같은 자리의 dab들이 같은 구멍을 공유(wash MAX에서도 일관)
+  a *= 1.0 - texture(u_fleck, v_px / 256.0).a * u_flecks;
   // 임파스토 셰이드(t.r, 1=중립): 방향을 색 밝기로 "선택"한다(step) —
   // ① 크로스페이드(가중 평균)는 중간 회색에서 ±상쇄 널포인트(실측),
   // ② 팁에 밝은 밴드를 섞으면 모든 색이 회색빛(검정 실측). 둘 다 금지.
@@ -251,6 +256,24 @@ export class WebGL2Backend implements RendererBackend {
     return tex;
   }
 
+  /** 마른 붓 반점 타일 텍스처(repeat) — dab 셰이더가 캔버스 좌표로 샘플(지연 생성) */
+  private fleckTexGl: WebGLTexture | null = null;
+
+  private fleckTexture(): WebGLTexture {
+    if (!this.fleckTexGl) {
+      const gl = this.gl;
+      const tex = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fleckTile());
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+      this.fleckTexGl = tex;
+    }
+    return this.fleckTexGl;
+  }
+
   beginStroke(ctx: StrokeContext): void {
     this.ctx = ctx;
     const gl = this.gl;
@@ -290,11 +313,13 @@ export class WebGL2Backend implements RendererBackend {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.paperTexture(this.ctx.paperKind));
     gl.uniform1i(gl.getUniformLocation(this.dabProg, "u_paper"), 1);
-    // 지우개는 종이 결 미적용(기존 endStroke 정책과 동일)
-    gl.uniform1f(
-      gl.getUniformLocation(this.dabProg, "u_grain"),
-      this.ctx.composite === "destination-out" ? 0 : this.ctx.paperGrain,
-    );
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.fleckTexture());
+    gl.uniform1i(gl.getUniformLocation(this.dabProg, "u_fleck"), 2);
+    // 지우개는 종이 결·반점 미적용(기존 endStroke 정책과 동일)
+    const eraser = this.ctx.composite === "destination-out";
+    gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_grain"), eraser ? 0 : this.ctx.paperGrain);
+    gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_flecks"), eraser ? 0 : this.ctx.flecks);
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform2f(gl.getUniformLocation(this.dabProg, "u_resolution"), this.width, this.height);
     const uCenter = gl.getUniformLocation(this.dabProg, "u_center");
@@ -358,11 +383,10 @@ export class WebGL2Backend implements RendererBackend {
     // 스트로크 버퍼(premultiplied)를 화면 캔버스로 복사해 2D 레이어에 합성
     this.blitStrokeToScreen();
 
-    // 종이 결은 dab 셰이더에서 실시간 적용됨(프리뷰=최종).
-    // wet/dry edge·마른 붓 반점은 2D 후처리 — 펜을 떼면 "마르는" 연출
+    // 종이 결·마른 붓 반점은 dab 셰이더에서 실시간 적용됨(프리뷰=최종 — 펜 뗄 때
+    // 구멍 팝인 금지, 2026-07-06 사용자 실측). wet edge만 2D 후처리(수채 마름 연출)
     let src: HTMLCanvasElement = this.glCanvas;
-    const post = this.ctx.wetEdge > 0 || this.ctx.dryEdge > 0 || this.ctx.flecks > 0;
-    if (post && this.ctx.composite !== "destination-out") {
+    if (this.ctx.wetEdge > 0 && this.ctx.composite !== "destination-out") {
       if (!this.post2d) {
         const c = document.createElement("canvas");
         c.width = this.width;
@@ -371,9 +395,7 @@ export class WebGL2Backend implements RendererBackend {
       }
       this.post2d.clearRect(0, 0, this.width, this.height);
       this.post2d.drawImage(this.glCanvas, 0, 0);
-      if (this.ctx.wetEdge > 0) applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge);
-      if (this.ctx.dryEdge > 0) applyDryEdge(this.post2d, this.width, this.height, this.ctx.dryEdge);
-      if (this.ctx.flecks > 0) applyFlecks(this.post2d, this.width, this.height, this.ctx.flecks);
+      applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge);
       src = this.post2d.canvas;
     }
 
@@ -404,6 +426,10 @@ export class WebGL2Backend implements RendererBackend {
     this.tipTextures.forEach((t) => gl.deleteTexture(t.tex));
     this.paperTex.forEach((t) => gl.deleteTexture(t));
     this.paperTex.clear();
+    if (this.fleckTexGl) {
+      gl.deleteTexture(this.fleckTexGl);
+      this.fleckTexGl = null;
+    }
     this.tipTextures.clear();
     gl.deleteFramebuffer(this.strokeFbo.fb);
     gl.deleteTexture(this.strokeFbo.tex);

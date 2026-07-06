@@ -56,6 +56,15 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
       const dn = Math.hypot(x - r + 0.5, y - r + 0.5) / r;
       if (dn > 1) a = 0;
       else if (dn > 0.94) a *= 1 - (dn - 0.94) / 0.06;
+      // 획 좌우 가장자리(팁 상하단) 물감 얇게 — 종이가 비쳐 밝은 테가 획 전체에
+      // 이어진다(i-scream 유화). 실루엣 후처리(dryEdge)는 펜 뗄 때 팝인이라 금지
+      // (2026-07-06 사용자 실측) — 팁에 베이크하면 그리는 중에도 동일(프리뷰=최종).
+      // ⚠️ 내부 알파 골 금지 교훈과 별개: 최외곽 밴드(ny>0.78)에만 건다.
+      const ny = Math.abs(y - r + 0.5) / r;
+      if (ny > 0.78) {
+        const et = Math.min(1, (ny - 0.78) / 0.22);
+        a *= 1 - 0.45 * et * et * (3 - 2 * et);
+      }
       // 셰이드 채널 = 밴드 톤 × 원본 밝기(0.92~1.0) — 물감 명암 줄무늬의 근원.
       // 두 계수의 곱이 평균 셰이드 → 색 밝기를 좌우하므로 합산 평균 ≈0.95 유지
       const shade = Math.round(255 * band * (0.92 + 0.08 * (lum / 255)));
