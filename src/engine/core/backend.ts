@@ -26,6 +26,10 @@ export interface StrokeContext {
   strokeOpacity: number;
   /** 획 실루엣 가장자리 안료 몰림 강도 0~1(수채) — endStroke에서 applyWetEdge */
   wetEdge: number;
+  /** 획 실루엣 가장자리 알파 침식 0~1(유화, 좌우·양끝 밝게) — endStroke에서 applyDryEdge */
+  dryEdge: number;
+  /** 획 몸통 마른 붓 흰 점 침식 0~1(유화) — endStroke에서 applyFlecks */
+  flecks: number;
 }
 
 /*
@@ -137,32 +141,43 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       break;
     }
     case "grain": {
-      // 연필 흑연결: 아주 작은 입자를 촘촘히 — 가장자리로 갈수록 희박
+      // 연필 흑연결: 아주 작은 입자를 촘촘히 — 가장자리로 갈수록 희박.
+      // 코어 플래토: 1px 입자는 실제 연필 굵기(~14px)로 축소되면 서브픽셀로 사라져
+      // 알파가 붕괴 → 진하기 100%가 회색(2026-07-06 사용자 실측). 낮은 알파의 심지가
+      // buildup 누적으로 흑연 농도를 만들고, 입자는 결 질감을 담당한다.
       ctx.clearRect(0, 0, size, size);
-      const dots = Math.floor(size * size * 0.09);
+      const core = ctx.createRadialGradient(r, r, 0, r, r, r);
+      core.addColorStop(0, "rgba(255,255,255,0.2)");
+      core.addColorStop(0.55, "rgba(255,255,255,0.14)");
+      core.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = core;
+      ctx.fillRect(0, 0, size, size);
+      const dots = Math.floor(size * size * 0.14);
       for (let i = 0; i < dots; i++) {
         const a = Math.random() * Math.PI * 2;
         const rad = Math.sqrt(Math.random()) * r;
         const x = r + Math.cos(a) * rad;
         const y = r + Math.sin(a) * rad;
         const fall = Math.pow(1 - rad / r, 0.6);
-        ctx.fillStyle = `rgba(255,255,255,${fall * (0.5 + Math.random() * 0.5)})`;
+        ctx.fillStyle = `rgba(255,255,255,${fall * (0.62 + Math.random() * 0.38)})`;
         ctx.fillRect(x, y, 1.1, 1.1);
       }
       break;
     }
     case "rough": {
-      // 크레용 왁스: 굵고 성긴 덩어리 입자 — 종이 요철에 왁스가 묻는 느낌
+      // 크레용 왁스: 굵고 성긴 덩어리 입자 — 종이 요철에 왁스가 묻는 느낌.
+      // 커버리지·알파 상향(0.018→0.03, 최저 0.35→0.55): 왁스답게 채도 꽉 차게 —
+      // 흰 틈은 paperGrain 침식이 담당(연필=미세 입자, 크레용=왁스+종이 골 구분)
       ctx.clearRect(0, 0, size, size);
-      const clumps = Math.floor(size * size * 0.018);
+      const clumps = Math.floor(size * size * 0.03);
       for (let i = 0; i < clumps; i++) {
         const a = Math.random() * Math.PI * 2;
         const rad = Math.sqrt(Math.random()) * r * 0.95;
         const x = r + Math.cos(a) * rad;
         const y = r + Math.sin(a) * rad;
-        const fall = 1 - rad / r;
-        const s = 2 + Math.random() * 4;
-        ctx.fillStyle = `rgba(255,255,255,${fall * (0.35 + Math.random() * 0.65)})`;
+        const fall = Math.pow(1 - rad / r, 0.75);
+        const s = 2.5 + Math.random() * 4.5;
+        ctx.fillStyle = `rgba(255,255,255,${fall * (0.55 + Math.random() * 0.45)})`;
         ctx.beginPath();
         ctx.arc(x, y, s / 2, 0, Math.PI * 2);
         ctx.fill();
@@ -187,6 +202,27 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const rad = r * (0.7 + Math.random() * 0.3);
         ctx.fillStyle = `rgba(255,255,255,${0.2 + Math.random() * 0.5})`;
         ctx.fillRect(r + Math.cos(a) * rad, r + Math.sin(a) * rad, 2.2, 2.2);
+      }
+      // 크리미 스트릭(셰이드 채널, rotationFollowsStroke로 진행 방향을 따름) —
+      // 민무늬 플래토는 "진한 마커"로 읽힌다(2026-07-06 사용자 실측) → 버터가 뭉개진
+      // 명암 결. 고정 시드: 로드마다 결 배치가 바뀌면 평균 셰이드 요동(색 게이트 교훈)
+      let chunkSeed = 59;
+      const crand = () => {
+        chunkSeed = (chunkSeed * 1103515245 + 12345) & 0x7fffffff;
+        return chunkSeed / 0x7fffffff;
+      };
+      ctx.lineCap = "round";
+      for (let i = 0; i < 7; i++) {
+        const y = size * (0.14 + (i / 7) * 0.72) + (crand() - 0.5) * 6;
+        const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r))) * 0.9;
+        if (half < 4) continue;
+        const v = 208 + Math.floor(crand() * 26);
+        ctx.strokeStyle = `rgba(${v},${v},${v},1)`;
+        ctx.lineWidth = 2.5 + crand() * 3.5;
+        ctx.beginPath();
+        ctx.moveTo(r - half + crand() * half * 0.3, y);
+        ctx.lineTo(r + half - crand() * half * 0.3, y + (crand() - 0.5) * 4);
+        ctx.stroke();
       }
       break;
     }

@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
-import { applyWetEdge, paperGrainTile, type PaperKind } from "./paper";
+import { applyDryEdge, applyFlecks, applyWetEdge, paperGrainTile, type PaperKind } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -358,9 +358,11 @@ export class WebGL2Backend implements RendererBackend {
     // 스트로크 버퍼(premultiplied)를 화면 캔버스로 복사해 2D 레이어에 합성
     this.blitStrokeToScreen();
 
-    // 종이 결은 dab 셰이더에서 실시간 적용됨(프리뷰=최종). wet edge만 2D 후처리(마름 연출)
+    // 종이 결은 dab 셰이더에서 실시간 적용됨(프리뷰=최종).
+    // wet/dry edge·마른 붓 반점은 2D 후처리 — 펜을 떼면 "마르는" 연출
     let src: HTMLCanvasElement = this.glCanvas;
-    if (this.ctx.wetEdge > 0 && this.ctx.composite !== "destination-out") {
+    const post = this.ctx.wetEdge > 0 || this.ctx.dryEdge > 0 || this.ctx.flecks > 0;
+    if (post && this.ctx.composite !== "destination-out") {
       if (!this.post2d) {
         const c = document.createElement("canvas");
         c.width = this.width;
@@ -369,7 +371,9 @@ export class WebGL2Backend implements RendererBackend {
       }
       this.post2d.clearRect(0, 0, this.width, this.height);
       this.post2d.drawImage(this.glCanvas, 0, 0);
-      applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge);
+      if (this.ctx.wetEdge > 0) applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge);
+      if (this.ctx.dryEdge > 0) applyDryEdge(this.post2d, this.width, this.height, this.ctx.dryEdge);
+      if (this.ctx.flecks > 0) applyFlecks(this.post2d, this.width, this.height, this.ctx.flecks);
       src = this.post2d.canvas;
     }
 

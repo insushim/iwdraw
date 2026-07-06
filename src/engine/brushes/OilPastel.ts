@@ -16,7 +16,7 @@ export class OilPastel extends BrushBase {
         minSizeRatio: 0.65,
         composite: "source-over",
         rotationFollowsStroke: true,
-        paperGrain: 0.25,
+        paperGrain: 0.45, // 0.25는 민무늬 "진한 마커"로 읽힘(사용자 실측) — 종이 골 침식으로 파스텔 질감
         strokeBlend: "wash", // 크리미한 덩어리 질감이 획 전체에 유지
         washOpacity: 1,
       },

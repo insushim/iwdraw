@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
-import { applyPaperGrain, applyWetEdge } from "./paper";
+import { applyDryEdge, applyFlecks, applyPaperGrain, applyWetEdge } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -159,9 +159,15 @@ export class Canvas2DBackend implements RendererBackend {
       this.ctx = null;
       return; // 지우개는 이미 레이어에 직접 반영됨
     }
-    // wet edge(실루엣 가장자리 안료 몰림) → 종이 결 침식 순서로 후처리
+    // wet edge(실루엣 가장자리 안료 몰림) → dry edge → 반점 → 종이 결 침식 순서로 후처리
     if (this.ctx.wetEdge > 0) {
       applyWetEdge(this.strokeCtx, this.width, this.height, this.ctx.wetEdge);
+    }
+    if (this.ctx.dryEdge > 0) {
+      applyDryEdge(this.strokeCtx, this.width, this.height, this.ctx.dryEdge);
+    }
+    if (this.ctx.flecks > 0) {
+      applyFlecks(this.strokeCtx, this.width, this.height, this.ctx.flecks);
     }
     if (this.ctx.paperGrain > 0) {
       applyPaperGrain(this.strokeCtx, this.width, this.height, this.ctx.paperGrain, this.ctx.paperKind);

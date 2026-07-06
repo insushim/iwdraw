@@ -21,7 +21,7 @@ export class Marker extends BrushBase {
         rotationFollowsStroke: true,
         tipAngleOffset: Math.PI / 2, // 납작촉을 진행방향과 수직으로 → 어느 방향이든 넓은 획
         strokeBlend: "wash", // 한 획 안은 균일한 잉크(겹침 얼룩 없음), 획끼리는 multiply로 진해짐
-        washOpacity: 0.6,
+        washOpacity: 0.85, // 0.6은 진하기 100%에서도 연함(2026-07-06 사용자 실측) — 겹침 진해짐은 유지
       },
       rng,
     );

@@ -282,3 +282,83 @@ export function applyWetEdge(
   ctx.drawImage(wetBand.canvas, 0, 0);
   ctx.restore();
 }
+
+/**
+ * 유화 dry edge: wetEdge의 역방향 — 실루엣 가장자리 밴드의 알파를 침식해
+ * 획 좌우·양끝의 물감이 얇아지며 종이가 비쳐 밝아 보인다(i-scream 유화 참조).
+ * 밴드가 진행 방향과 무관한 실루엣 기준이라 좌우 가장자리에도 자연히 걸린다.
+ */
+export function applyDryEdge(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  strength: number,
+): void {
+  wetTmp = scratch(wetTmp, width, height);
+  wetBand = scratch(wetBand, width, height);
+
+  wetTmp.clearRect(0, 0, width, height);
+  wetTmp.filter = "blur(5px)"; // wetEdge(7px)보다 좁게 — 가장자리 얇은 물감 띠
+  wetTmp.drawImage(ctx.canvas, 0, 0);
+  wetTmp.filter = "none";
+
+  wetBand.clearRect(0, 0, width, height);
+  wetBand.drawImage(ctx.canvas, 0, 0);
+  wetBand.globalCompositeOperation = "destination-out";
+  wetBand.drawImage(wetTmp.canvas, 0, 0);
+  wetBand.globalCompositeOperation = "source-over";
+
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.globalAlpha = Math.min(1, strength);
+  ctx.drawImage(wetBand.canvas, 0, 0);
+  ctx.restore();
+}
+
+/* 마른 붓 반점 타일 — 캔버스 돌기에 물감이 안 앉은 흰 점(획 몸통용).
+ * 고정 시드: 랜덤이면 스트로크마다 반점 위치가 달라져 색 게이트가 흔들린다.
+ * 캔버스 좌표에 고정(identity transform) — 종이 결(v_px 샘플)과 같은 "종이에 붙은" 모델. */
+let fleckTileC: HTMLCanvasElement | null = null;
+
+function fleckTile(): HTMLCanvasElement {
+  if (fleckTileC) return fleckTileC;
+  const c = document.createElement("canvas");
+  c.width = c.height = TILE;
+  const ctx = c.getContext("2d")!;
+  let seed = 41;
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  // 밀도: 256² 타일에 52개 ≈ 굵기 60px·길이 400px 획에 반점 ~20개(i-scream 체감 정합)
+  for (let i = 0; i < 52; i++) {
+    const x = rand() * TILE;
+    const y = rand() * TILE;
+    const r = 0.9 + rand() * 1.7;
+    ctx.fillStyle = `rgba(255,255,255,${0.55 + rand() * 0.45})`;
+    ctx.beginPath();
+    // 살짝 길쭉한 타원 + 랜덤 회전 — 원형 도트의 기계적 인상 방지
+    ctx.ellipse(x, y, r * (0.7 + rand() * 0.9), r, rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  fleckTileC = c;
+  return c;
+}
+
+/** 획 몸통에 마른 붓 흰 점 침식(destination-out) — endStroke 후처리 */
+export function applyFlecks(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  strength: number,
+): void {
+  const pat = ctx.createPattern(fleckTile(), "repeat");
+  if (!pat) return;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.globalAlpha = Math.min(1, strength);
+  ctx.fillStyle = pat;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}

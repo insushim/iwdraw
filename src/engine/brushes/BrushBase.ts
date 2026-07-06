@@ -67,6 +67,10 @@ export interface BrushConfig {
   wetEdge: number;
   /** 획 시작·끝의 마른 붓털 트레일 강도 0~1(유화) — 진행 방향으로 저알파 fringe dab */
   fringe: number;
+  /** 획 실루엣 가장자리 알파 침식 0~1(유화) — 좌우·양끝 물감이 얇아져 밝아 보임(i-scream) */
+  dryEdge: number;
+  /** 획 몸통의 마른 붓 반점 0~1(유화) — 캔버스 돌기에 물감이 안 앉은 흰 점 침식 */
+  flecks: number;
 }
 
 const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
@@ -86,6 +90,8 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   washOpacity: 1,
   wetEdge: 0,
   fringe: 0,
+  dryEdge: 0,
+  flecks: 0,
 };
 
 /**
