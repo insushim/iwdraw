@@ -249,6 +249,7 @@ export class ArtEngine {
       wetEdge: brush.cfg.wetEdge,
       flecks: brush.cfg.flecks,
       grainLift: brush.cfg.grainLift,
+      streaks: brush.cfg.streaks,
       paperKind: this.paperKindForMode(),
     };
   }
@@ -448,6 +449,7 @@ export class ArtEngine {
       wetEdge: brush.cfg.wetEdge,
       flecks: brush.cfg.flecks,
       grainLift: brush.cfg.grainLift,
+      streaks: brush.cfg.streaks,
       paperKind: this.paperKindForMode(),
     };
     this.cm.backend.beginStroke(ctx);

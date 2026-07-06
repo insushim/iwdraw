@@ -324,13 +324,13 @@ export function fleckTile(): HTMLCanvasElement {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
     return seed / 0x7fffffff;
   };
-  // 정말 작고 드물게: 52개·r~2.6은 획이 모래처럼 삭아 보인다(2026-07-06 사용자 실측)
-  // → 14개·r≤1.3, 굵기 50 획(75px×~600px) 기준 반점 ~10개
-  for (let i = 0; i < 14; i++) {
+  // "하얀 점이 거의 안 느껴질 만큼"(2026-07-06 사용자) — 질감의 주역은 밝은 스트릭이고
+  // 반점은 아주 드문 양념. 52개·r2.6→모래(1차 실측), 14개도 도드라짐(2차) → 9개·r≤1.0
+  for (let i = 0; i < 9; i++) {
     const x = rand() * TILE;
     const y = rand() * TILE;
-    const r = 0.6 + rand() * 0.7;
-    ctx.fillStyle = `rgba(255,255,255,${0.7 + rand() * 0.3})`;
+    const r = 0.5 + rand() * 0.5;
+    ctx.fillStyle = `rgba(255,255,255,${0.6 + rand() * 0.3})`;
     ctx.beginPath();
     // 살짝 길쭉한 타원 + 랜덤 회전 — 원형 도트의 기계적 인상 방지
     ctx.ellipse(x, y, r * (0.8 + rand() * 0.6), r, rand() * Math.PI, 0, Math.PI * 2);

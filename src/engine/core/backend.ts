@@ -30,6 +30,8 @@ export interface StrokeContext {
   flecks: number;
   /** 종이 결을 색 백화로(불투명 유지, 유화) — false면 알파 침식(수채 등) */
   grainLift: boolean;
+  /** 붓 방향 밝은 스트릭 강도 0~1(유화) — GL 전용(2D 폴백은 근사 생략) */
+  streaks: number;
 }
 
 /*
@@ -80,6 +82,54 @@ export interface RendererBackend {
   /** rAF마다 호출되는 시간 진행 훅 — 현재 두 구현 모두 미사용(false). 향후 시뮬 확장용 */
   tick(dtMs: number): boolean;
   dispose(): void;
+}
+
+/**
+ * 팁 하이라이트 스트릭 맵 — 붓 진행 방향(팁 x축)을 따라 끊어진 밝은 줄.
+ * 셰이더가 색을 흰색 쪽으로 lift(알파 아님 — 불투명 유지). 밝은 값은 wash(MAX)에서
+ * 살아남아 덧칠 내부에도 붓결이 유지된다(어두운 골은 MAX가 지움 — i-scream 비교 실측).
+ * 고정 시드(색 게이트 결정론). bristle 계열만 — 그 외 팁은 빈 맵.
+ */
+const tipHlCache = new Map<TipKind, HTMLCanvasElement>();
+
+export function makeTipHighlightCanvas(kind: TipKind, size = 128): HTMLCanvasElement {
+  let c = tipHlCache.get(kind);
+  if (c) return c;
+  c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d")!;
+  if (kind === "bristle" || kind === "bristle-bold") {
+    const r = size / 2;
+    let seed = 137;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    ctx.lineCap = "round";
+    // 8줄 — 붓털이 갈라지는 위/아래쪽이 진하고 중앙은 드물게
+    for (let i = 0; i < 8; i++) {
+      const yn = 0.1 + (i / 7) * 0.8; // 0.1~0.9
+      const y = size * yn + (rand() - 0.5) * 5;
+      const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
+      if (half < 6) continue;
+      const edgeBoost = 0.45 + Math.abs(yn - 0.5) * 1.1; // 가장자리 줄이 더 뚜렷
+      ctx.lineWidth = 1.4 + rand() * 1.8;
+      // 끊어진 대시 — 이어진 줄은 기계적(마른 붓털은 스치다 끊긴다)
+      let x = r - half + rand() * 14;
+      while (x < r + half - 4) {
+        const seg = 10 + rand() * 26;
+        const alpha = (0.22 + rand() * 0.5) * edgeBoost;
+        ctx.strokeStyle = `rgba(255,255,255,${Math.min(0.85, alpha)})`;
+        ctx.beginPath();
+        ctx.moveTo(x, y + (rand() - 0.5) * 2);
+        ctx.lineTo(Math.min(x + seg, r + half), y + (rand() - 0.5) * 2);
+        ctx.stroke();
+        x += seg + 5 + rand() * 16;
+      }
+    }
+  }
+  tipHlCache.set(kind, c);
+  return c;
 }
 
 /** 팁 종류 → 방사형 그라디언트 스탬프(공용, Canvas2D/WebGL 텍스처 소스) */
@@ -248,7 +298,8 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const jr = brand() * half * 0.35;
         // 셰이드 채널(v<255 = 물감 명암). 딥 행은 고정 인덱스(3/8) — fine 팁 밴드와 정합.
         const deepRow = i === 1 || i === 4 || i === 6;
-        const v = deepRow ? 190 + Math.floor(brand() * 16) : 246 + Math.floor(brand() * 10);
+        // 골 옅게 — fine 팁(0.85~0.92 밴드)과 평균 셰이드 정합(색 게이트)
+        const v = deepRow ? 218 + Math.floor(brand() * 16) : 246 + Math.floor(brand() * 10);
         // 획 좌우 가장자리 밝은 테 — fine 팁(tipLoader)과 동일 처리(색 게이트 정합)
         const bny = Math.abs(y - r) / r;
         const bEdgeK = bny > 0.78 ? 1 - 0.45 * Math.min(1, (bny - 0.78) / 0.22) : 1;
@@ -273,7 +324,7 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       for (const gy of [0.26, 0.44, 0.6, 0.76]) {
         const y = size * gy;
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
-        ctx.strokeStyle = "rgba(168,168,168,1)";
+        ctx.strokeStyle = "rgba(206,206,206,1)";
         ctx.lineWidth = size * 0.06;
         ctx.beginPath();
         ctx.moveTo(r - half * 0.9, y);
@@ -328,7 +379,8 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         // 셰이드 바이모달: 깊은 골 행은 고정 인덱스(3/8) — Math.random() 확률 선택은
         // 페이지 로드마다 딥 행 개수가 달라져 평균 셰이드가 요동(색 게이트 flaky 실측)
         const deepRow = i === 1 || i === 4 || i === 6;
-        const fv = deepRow ? 166 + Math.floor(Math.random() * 17) : 246 + Math.floor(Math.random() * 10);
+        // 골 옅게(216~) — 질감은 밝은 스트릭이 주도(fine 팁 밴드 0.85~0.92와 정합)
+        const fv = deepRow ? 216 + Math.floor(Math.random() * 18) : 246 + Math.floor(Math.random() * 10);
         // 획 좌우 가장자리(팁 상하단 행) 물감 얇게 — 종이가 비쳐 밝은 테(i-scream).
         // 실루엣 후처리는 펜 뗄 때 팝인(사용자 실측) → 팁 베이크로 프리뷰=최종
         const ny = Math.abs(y - r) / r;

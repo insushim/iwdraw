@@ -73,6 +73,8 @@ export interface BrushConfig {
   /** 종이 결을 알파 침식 대신 "색 백화"(흰 캔버스가 물감에 배어남)로 — 획 불투명 유지.
    * 불투명 매체(유화)용: 알파 침식이면 겹친 획이 진해져 반투명 마커로 읽힌다(i-scream 대비 실측) */
   grainLift: boolean;
+  /** 붓 방향 밝은 스트릭(마른 붓털 하이라이트) 강도 0~1 — bristle 계열 전용, GL 셰이더 lift */
+  streaks: number;
 }
 
 const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
@@ -94,6 +96,7 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   fringe: 0,
   flecks: 0,
   grainLift: false,
+  streaks: 0,
 };
 
 /**
