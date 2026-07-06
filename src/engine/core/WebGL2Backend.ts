@@ -48,9 +48,10 @@ out vec4 frag;
 void main() {
   vec4 t = texture(u_tip, v_uv);
   float a = t.a * u_color.a;
-  // 종이 결: 골짜기에서 안료가 빠진다(알파 침식)
+  // 종이 결: 골짜기에서 안료가 빠진다(알파 침식). 계수 0.85는 백색 혼입 노이즈가
+  // 붓결 셰이드와 같은 진폭이 돼 줄무늬를 위장한다(실측) — 0.5로 은은하게.
   float g = texture(u_paper, v_px / 256.0).a * u_grain;
-  a *= 1.0 - g * 0.85;
+  a *= 1.0 - g * 0.5;
   // 임파스토 셰이드(t.r, 1=중립): 방향을 색 밝기로 "선택"한다(step) —
   // ① 크로스페이드(가중 평균)는 중간 회색에서 ±상쇄 널포인트(실측),
   // ② 팁에 밝은 밴드를 섞으면 모든 색이 회색빛(검정 실측). 둘 다 금지.
@@ -59,7 +60,7 @@ void main() {
   vec3 col = u_color.rgb;
   float dk = 1.0 - max(col.r, max(col.g, col.b)); // 검을수록 1
   vec3 darkened = col * f;
-  vec3 lightened = mix(col, vec3(1.0), (1.0 - f) * 0.8 * dk);
+  vec3 lightened = mix(col, vec3(1.0), (1.0 - f) * 1.1 * dk);
   col = mix(darkened, lightened, step(0.6, dk));
   frag = vec4(col * a, a);  // premultiplied
 }`;

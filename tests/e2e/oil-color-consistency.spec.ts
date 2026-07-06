@@ -40,29 +40,30 @@ test("유화 굵기(LOD 경계)에 따라 색이 달라지지 않는다", async 
   }
   await page.waitForTimeout(500);
 
-  const medians = await page.evaluate((fxs: number[]) => {
+  const means = await page.evaluate((fxs: number[]) => {
     const el = document.querySelector('canvas[aria-label="그림 캔버스"]') as HTMLCanvasElement;
     const ctx = el.getContext("2d")!;
     return fxs.map((fx) => {
       const cx = Math.round(el.width * fx);
-      // 획 중앙 세로 구간에서 넓게 샘플 → 채널별 중앙값(붓결 줄무늬·종이결 무시한 대표색)
-      const rs: number[] = [], gs: number[] = [], bs: number[] = [];
+      // 획 전폭 평균(붓결 밴드가 확률적으로 어디 걸리는지와 무관한 지각 대표색).
+      // 종이 픽셀은 제외: 노랑 획이므로 B<200 & R>150이면 획 내부로 판정.
+      let r = 0, g = 0, b = 0, n = 0;
       for (let fy = 0.25; fy <= 0.65; fy += 0.01) {
         const y = Math.round(el.height * fy);
-        const d = ctx.getImageData(cx - 3, y, 7, 1).data;
-        for (let i = 0; i < 7; i++) {
-          rs.push(d[i * 4]); gs.push(d[i * 4 + 1]); bs.push(d[i * 4 + 2]);
+        const d = ctx.getImageData(cx - 70, y, 140, 1).data;
+        for (let i = 0; i < 140; i++) {
+          const R = d[i * 4], G = d[i * 4 + 1], B = d[i * 4 + 2];
+          if (B < 200 && R > 150) { r += R; g += G; b += B; n++; }
         }
       }
-      const med = (a: number[]) => a.sort((p, q) => p - q)[Math.floor(a.length / 2)];
-      return [med(rs), med(gs), med(bs)] as const;
+      return n ? ([Math.round(r / n), Math.round(g / n), Math.round(b / n)] as const) : ([0, 0, 0] as const);
     });
   }, cases.map((c) => c[1]));
 
-  console.log("OILCOLOR:", cases.map(([sz], i) => `굵기${sz}=rgb(${medians[i].join(",")})`).join("  "));
-  // 채널별 최대-최소 편차 — 버그 시 R 편차 34, 정상 수렴 후 ≤7(SwiftShader 실측 여유 +5)
+  console.log("OILCOLOR:", cases.map(([sz], i) => `굵기${sz}=rgb(${means[i].join(",")})`).join("  "));
+  // 채널별 최대-최소 편차 — 버그 시(팁 평균 셰이드 불일치) R 편차 30+, 정상 ≤8 실측 + 여유
   for (let ch = 0; ch < 3; ch++) {
-    const vals = medians.map((m) => m[ch]);
-    expect(Math.max(...vals) - Math.min(...vals), `채널 ${"RGB"[ch]} 편차`).toBeLessThanOrEqual(12);
+    const vals = means.map((m) => m[ch]);
+    expect(Math.max(...vals) - Math.min(...vals), `채널 ${"RGB"[ch]} 편차`).toBeLessThanOrEqual(14);
   }
 });

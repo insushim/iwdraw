@@ -68,7 +68,7 @@ export class Canvas2DBackend implements RendererBackend {
       const dk = 1 - Math.max(color.r, color.g, color.b) / 255;
       if (dk > 0.6) {
         cx.globalCompositeOperation = "screen";
-        cx.globalAlpha = 0.3 * dk;
+        cx.globalAlpha = 0.45 * dk; // GL의 lighten 1.1 계수와 체감 정합(어두운 색 붓결)
         cx.drawImage(tip, 0, 0);
         cx.globalAlpha = 1;
         cx.globalCompositeOperation = "destination-in";

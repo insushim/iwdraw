@@ -211,17 +211,17 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       // 행의 jl/jr 지터가 너덜한 마른 붓끝을 만든다. 셰이드는 순백(255)이 아니라
       // fine 팁(바이모달 밴드) 중앙값과 같은 248(≈0.97) — wash MAX에서 튜브 중심은 이 타원이 항상
       // 이기므로, 255면 얇은 획만 순색이 돼 굵은 획과 색이 어긋난다(프로브 실측).
-      ctx.fillStyle = "rgba(248,248,248,1)";
+      ctx.fillStyle = "rgba(240,240,240,1)";
       ctx.beginPath();
       ctx.ellipse(r, r, r * 0.4, r * 0.5, 0, 0, Math.PI * 2);
       ctx.fill();
-      // 붓결 줄 3개: 불투명 셰이드(색이 살짝 어두워질 뿐 종이는 안 비침) — 좁고
-      // 깊게(190) 해야 얇은 획에서도 붓결이 보인다(평균 셰이드 영향은 미미)
-      for (const gy of [0.3, 0.52, 0.7]) {
+      // 붓결 줄 4개: 불투명 셰이드(색이 살짝 어두워질 뿐 종이는 안 비침) — fine 팁의
+      // 깊은 밴드(4줄, 0.60~0.72)와 면적·깊이를 맞춰 굵기 전환 시 평균 색이 같게 유지
+      for (const gy of [0.26, 0.44, 0.6, 0.76]) {
         const y = size * gy;
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
-        ctx.strokeStyle = "rgba(190,190,190,1)";
-        ctx.lineWidth = size * 0.035;
+        ctx.strokeStyle = "rgba(140,140,140,1)";
+        ctx.lineWidth = size * 0.06;
         ctx.beginPath();
         ctx.moveTo(r - half * 0.9, y);
         ctx.lineTo(r + half * 0.9, y);
@@ -272,9 +272,9 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.5;
         const jr = Math.random() * half * 0.5;
-        // 셰이드 바이모달: 대부분 중립 + 25%만 깊은 골 — 평균 ≈0.95(bold LOD와 색 일치)
+        // 셰이드 바이모달: 대부분 중립 + 25%만 깊은 골 — 평균(bold LOD와 색 일치)을
         // 유지하면서 붓결 대비는 살린다(균일 분포는 질감이 사라짐 — 실측)
-        const fv = Math.random() < 0.25 ? 210 + Math.floor(Math.random() * 16) : 246 + Math.floor(Math.random() * 10);
+        const fv = Math.random() < 0.3 ? 158 + Math.floor(Math.random() * 33) : 245 + Math.floor(Math.random() * 11);
         ctx.strokeStyle = `rgba(${fv},${fv},${fv},${0.82 + Math.random() * 0.18})`;
         ctx.lineWidth = 2.2 + Math.random() * 4.2;
         ctx.beginPath();

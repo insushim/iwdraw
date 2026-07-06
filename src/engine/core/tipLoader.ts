@@ -25,18 +25,16 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
   // 굵은 톤 밴드를 곱해 넓은 획에서도 임파스토 줄무늬가 보이게 한다(고정 시드 LCG)
   const BANDS = 12;
   let seed = 41;
+  // 어두운 밴드만 — 밝은 하이라이트 밴드를 팁에 섞으면 모든 색이 회색빛(검정 실측).
+  // 색 일관성(평균)과 붓결 대비(분산)는 분리해서 조절한다: 대부분 중립 + 4줄만
+  // 깊은 골(0.60~0.72) 바이모달 — i-scream 유화 수준 골 대비. 깊은 줄은 고정
+  // 인덱스(불균등 간격)로 보장 — 시드 난수에 맡기면 개수가 들쭉날쭉(실측).
+  const DEEP = new Set([1, 4, 6, 9]);
   const bandShade: number[] = [];
   for (let b = 0; b < BANDS; b++) {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    const pick = seed / 0x7fffffff;
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
     const rnd = seed / 0x7fffffff;
-    // 어두운 밴드만 — 밝은 하이라이트 밴드를 팁에 섞으면 모든 색이 회색빛(검정 실측).
-    // 색 일관성(평균)과 붓결 대비(분산)는 분리해서 조절한다:
-    //   평균 ≈0.95 = bold LOD와 색 일치(균일 0.90~1은 평균은 맞지만 대비 ±5%뿐이라
-    //   질감이 사라짐 — 2026-07-06 사용자 실측). → 대부분 중립(0.98~1) + 30%만
-    //   깊은 골(0.82~0.90)인 바이모달로 평균 0.95를 지키며 골은 뚜렷하게.
-    bandShade.push(pick < 0.3 ? 0.82 + rnd * 0.08 : 0.98 + rnd * 0.02);
+    bandShade.push(DEEP.has(b) ? 0.6 + rnd * 0.12 : 0.96 + rnd * 0.04);
   }
   for (let y = 0; y < size; y++) {
     // 밴드 사이 선형 보간 — 경계가 기계적인 평행선으로 보이지 않게
@@ -49,6 +47,9 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
       const i = (y * size + x) * 4;
       const lum = Math.max(px[i], px[i + 1], px[i + 2]);
       let a = lum <= FLOOR ? 0 : ((lum - FLOOR) / (255 - FLOOR)) * (px[i + 3] / 255) * 255;
+      // 깊은 골은 물감도 살짝 얇게(-8%) — 종이 결이 비쳐 마른 붓결이 산다.
+      // ⚠️ 강한 알파 골(≥30%)은 wash에서 획 전체 흰 줄이 된다(bristle-bold 실측) — 미세만.
+      if (band < 0.8) a *= 0.92;
       // CLAMP_TO_EDGE 스머 방지: 반지름 0.94~1.0 구간에서 페이드아웃
       const dn = Math.hypot(x - r + 0.5, y - r + 0.5) / r;
       if (dn > 1) a = 0;
