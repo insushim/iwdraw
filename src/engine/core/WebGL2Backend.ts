@@ -60,7 +60,11 @@ void main() {
   vec3 col = u_color.rgb;
   float dk = 1.0 - max(col.r, max(col.g, col.b)); // 검을수록 1
   vec3 darkened = col * f;
-  vec3 lightened = mix(col, vec3(1.0), (1.0 - f) * 1.1 * dk);
+  // 어두운 색 하이라이트는 상한 필수 — 깊은 골(f=0.6)에 비례 계수만 쓰면 골마다
+  // 37% 백색 혼입 → 검정이 회색빛 + 흰 줄 스팸(실기기 실측). 0.16 캡이면
+  // 결이 보이면서 검정은 검정으로 남는다.
+  float lift = min(0.16, (1.0 - f) * 0.5) * dk;
+  vec3 lightened = mix(col, vec3(1.0), lift);
   col = mix(darkened, lightened, step(0.6, dk));
   frag = vec4(col * a, a);  // premultiplied
 }`;

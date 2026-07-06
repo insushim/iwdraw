@@ -191,17 +191,25 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       // 행 전체를 어둡게(v=185~) 칠하는 것도 금지: multiply 틴트로 획이 통째로 회색빛(실측).
       ctx.clearRect(0, 0, size, size);
       ctx.lineCap = "round";
+      // 고정 시드 LCG — Math.random()이면 행 배치·딥 개수가 로드마다 달라져
+      // 평균 셰이드가 요동(굵기별 색 게이트 flaky 실측). 질감은 유지, 배치만 고정.
+      let boldSeed = 73;
+      const brand = () => {
+        boldSeed = (boldSeed * 1103515245 + 12345) & 0x7fffffff;
+        return boldSeed / 0x7fffffff;
+      };
       const boldRows = 8;
       for (let i = 0; i < boldRows; i++) {
-        const y = ((i + 0.5) / boldRows) * size + (Math.random() - 0.5) * 3;
+        const y = ((i + 0.5) / boldRows) * size + (brand() - 0.5) * 3;
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
-        const jl = Math.random() * half * 0.35;
-        const jr = Math.random() * half * 0.35;
-        // 셰이드 채널(v<255 = 물감 명암) — 옅게만. 방향(어둡게/밝게)은 렌더러가 색으로 선택.
-        const v = 216 + Math.floor(Math.random() * 40);
+        const jl = brand() * half * 0.35;
+        const jr = brand() * half * 0.35;
+        // 셰이드 채널(v<255 = 물감 명암). 딥 행은 고정 인덱스(3/8) — fine 팁 밴드와 정합.
+        const deepRow = i === 1 || i === 4 || i === 6;
+        const v = deepRow ? 166 + Math.floor(brand() * 17) : 246 + Math.floor(brand() * 10);
         ctx.strokeStyle = `rgba(${v},${v},${v},1)`;
         // 행 피치(size/8)보다 넓게 → 행 사이 알파 틈 없음(틈=종이 비침 흰 줄)
-        ctx.lineWidth = size * 0.13 + Math.random() * size * 0.05;
+        ctx.lineWidth = size * 0.13 + brand() * size * 0.05;
         ctx.beginPath();
         ctx.moveTo(r - half + jl, y);
         ctx.lineTo(r + half - jr, y);
@@ -272,9 +280,10 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.5;
         const jr = Math.random() * half * 0.5;
-        // 셰이드 바이모달: 대부분 중립 + 25%만 깊은 골 — 평균(bold LOD와 색 일치)을
-        // 유지하면서 붓결 대비는 살린다(균일 분포는 질감이 사라짐 — 실측)
-        const fv = Math.random() < 0.3 ? 158 + Math.floor(Math.random() * 33) : 245 + Math.floor(Math.random() * 11);
+        // 셰이드 바이모달: 깊은 골 행은 고정 인덱스(3/8) — Math.random() 확률 선택은
+        // 페이지 로드마다 딥 행 개수가 달라져 평균 셰이드가 요동(색 게이트 flaky 실측)
+        const deepRow = i === 1 || i === 4 || i === 6;
+        const fv = deepRow ? 166 + Math.floor(Math.random() * 17) : 246 + Math.floor(Math.random() * 10);
         ctx.strokeStyle = `rgba(${fv},${fv},${fv},${0.82 + Math.random() * 0.18})`;
         ctx.lineWidth = 2.2 + Math.random() * 4.2;
         ctx.beginPath();

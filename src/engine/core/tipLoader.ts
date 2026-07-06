@@ -47,9 +47,10 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
       const i = (y * size + x) * 4;
       const lum = Math.max(px[i], px[i + 1], px[i + 2]);
       let a = lum <= FLOOR ? 0 : ((lum - FLOOR) / (255 - FLOOR)) * (px[i + 3] / 255) * 255;
-      // 깊은 골은 물감도 살짝 얇게(-8%) — 종이 결이 비쳐 마른 붓결이 산다.
-      // ⚠️ 강한 알파 골(≥30%)은 wash에서 획 전체 흰 줄이 된다(bristle-bold 실측) — 미세만.
-      if (band < 0.8) a *= 0.92;
+      // 깊은 골은 물감도 살짝 얇게(-4%) — 종이 결이 비쳐 마른 붓결이 산다.
+      // ⚠️ 강한 알파 골(≥30%)은 wash에서 획 전체 흰 줄(bristle-bold 실측), -8%도
+      // 검정에선 종이 흰 줄로 읽힌다(실기기 실측) — 지각 하한까지만.
+      if (band < 0.8) a *= 0.96;
       // CLAMP_TO_EDGE 스머 방지: 반지름 0.94~1.0 구간에서 페이드아웃
       const dn = Math.hypot(x - r + 0.5, y - r + 0.5) / r;
       if (dn > 1) a = 0;
