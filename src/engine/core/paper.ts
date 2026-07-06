@@ -81,9 +81,10 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
     },
     grainLo: 0.55,
     grainHi: 0.85,
-    tintLo: 0.5,
+    // i-scream 유화 캔버스 수준으로 위브가 보이게(2026-07-06 사용자 요청: 캔버스 강화)
+    tintLo: 0.46,
     tintHi: 0.92,
-    tintAlpha: 30,
+    tintAlpha: 46,
   },
   cotton: {
     make() {
@@ -99,9 +100,10 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
     // 임계 상향 = 가장 깊은 골에만 침식 → 드문드문한 잔입자(granulation)
     grainLo: 0.58,
     grainHi: 0.9,
-    tintLo: 0.56,
+    // 수채용지 요철도 눈에 띄게(2026-07-06 사용자 요청) — 단 저주파 얼룩은 금지 배합 유지
+    tintLo: 0.52,
     tintHi: 0.94,
-    tintAlpha: 18,
+    tintAlpha: 32,
   },
   smooth: {
     make() {

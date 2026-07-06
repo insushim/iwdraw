@@ -99,9 +99,10 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       // 수채: 균일한 워시 플래토 + granulation. rim(가장자리 안료 몰림)은 dab이 아니라
       // 획 실루엣 기준이어야 하므로 endStroke의 applyWetEdge 후처리가 담당한다.
       // (dab에 rim을 베이크하면 wash(MAX) 누적에서 dab별 고리가 사슬로 남는다 — 실측)
+      // 플래토를 0.9까지 유지 — 0.82는 가장자리 페이드가 넓어 획이 번져 보인다(사용자 실측)
       const g = ctx.createRadialGradient(r, r, 0, r, r, r);
       g.addColorStop(0, "rgba(255,255,255,0.68)");
-      g.addColorStop(0.82, "rgba(255,255,255,0.68)");
+      g.addColorStop(0.9, "rgba(255,255,255,0.68)");
       g.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -208,17 +209,18 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       }
       // 몸통 채움 — 큰 bristle의 solid 타원과 동일 역할(알파 구멍 방지). 좌우 끝은
       // 행의 jl/jr 지터가 너덜한 마른 붓끝을 만든다. 셰이드는 순백(255)이 아니라
-      // fine 팁 평균과 같은 242(≈0.95) — wash MAX에서 튜브 중심은 이 타원이 항상
+      // fine 팁(바이모달 밴드) 중앙값과 같은 248(≈0.97) — wash MAX에서 튜브 중심은 이 타원이 항상
       // 이기므로, 255면 얇은 획만 순색이 돼 굵은 획과 색이 어긋난다(프로브 실측).
-      ctx.fillStyle = "rgba(242,242,242,1)";
+      ctx.fillStyle = "rgba(248,248,248,1)";
       ctx.beginPath();
       ctx.ellipse(r, r, r * 0.4, r * 0.5, 0, 0, Math.PI * 2);
       ctx.fill();
-      // 은은한 붓결 줄 2개: 불투명 셰이드(색이 살짝 어두워질 뿐 종이는 안 비침)
-      for (const gy of [0.36, 0.63]) {
+      // 붓결 줄 3개: 불투명 셰이드(색이 살짝 어두워질 뿐 종이는 안 비침) — 좁고
+      // 깊게(190) 해야 얇은 획에서도 붓결이 보인다(평균 셰이드 영향은 미미)
+      for (const gy of [0.3, 0.52, 0.7]) {
         const y = size * gy;
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
-        ctx.strokeStyle = "rgba(208,208,208,1)";
+        ctx.strokeStyle = "rgba(190,190,190,1)";
         ctx.lineWidth = size * 0.035;
         ctx.beginPath();
         ctx.moveTo(r - half * 0.9, y);
@@ -270,7 +272,9 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
         const jl = Math.random() * half * 0.5;
         const jr = Math.random() * half * 0.5;
-        const fv = 232 + Math.floor(Math.random() * 24); // 셰이드 평균 ≈0.95 — bold LOD와 색 일치
+        // 셰이드 바이모달: 대부분 중립 + 25%만 깊은 골 — 평균 ≈0.95(bold LOD와 색 일치)
+        // 유지하면서 붓결 대비는 살린다(균일 분포는 질감이 사라짐 — 실측)
+        const fv = Math.random() < 0.25 ? 210 + Math.floor(Math.random() * 16) : 246 + Math.floor(Math.random() * 10);
         ctx.strokeStyle = `rgba(${fv},${fv},${fv},${0.82 + Math.random() * 0.18})`;
         ctx.lineWidth = 2.2 + Math.random() * 4.2;
         ctx.beginPath();

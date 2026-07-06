@@ -28,11 +28,15 @@ function toAlphaMap(img: HTMLImageElement, size = 256): HTMLCanvasElement {
   const bandShade: number[] = [];
   for (let b = 0; b < BANDS; b++) {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    // 어두운 밴드만(0.90~1) — 밝은 하이라이트 밴드를 팁에 섞으면 모든 색이 회색빛이
-    // 된다(검정 실측). 어두운 색 처리는 셰이더에서 색 밝기로 방향만 선택한다.
-    // 평균은 0.95 부근 유지 — 0.74~1(평균 0.87)은 굵은 획만 14% 어두워져
-    // bold LOD(<40px)와 색이 어긋난다(2026-07-06 프로브 실측 220 vs 254).
-    bandShade.push(0.9 + (seed / 0x7fffffff) * 0.1);
+    const pick = seed / 0x7fffffff;
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    const rnd = seed / 0x7fffffff;
+    // 어두운 밴드만 — 밝은 하이라이트 밴드를 팁에 섞으면 모든 색이 회색빛(검정 실측).
+    // 색 일관성(평균)과 붓결 대비(분산)는 분리해서 조절한다:
+    //   평균 ≈0.95 = bold LOD와 색 일치(균일 0.90~1은 평균은 맞지만 대비 ±5%뿐이라
+    //   질감이 사라짐 — 2026-07-06 사용자 실측). → 대부분 중립(0.98~1) + 30%만
+    //   깊은 골(0.82~0.90)인 바이모달로 평균 0.95를 지키며 골은 뚜렷하게.
+    bandShade.push(pick < 0.3 ? 0.82 + rnd * 0.08 : 0.98 + rnd * 0.02);
   }
   for (let y = 0; y < size; y++) {
     // 밴드 사이 선형 보간 — 경계가 기계적인 평행선으로 보이지 않게
