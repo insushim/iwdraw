@@ -14,7 +14,7 @@ export class OilBrush extends BrushBase {
         spacing: 0.05,
         flow: 1,
         jitter: 0.015,
-        sizePressure: 0.45,
+        sizePressure: 0.28, // i-scream 유화는 획 폭이 거의 일정 — 속도 필압 출렁임 완화(0.45는 ±13%)
         alphaPressure: 0.1, // 유화 물감은 불투명 — 0.35는 마우스 필압(속도 0.35~0.85)에서
         // dab 알파 0.77까지 떨어져 겹친 획이 진해짐(i-scream 비교 실측). 마른 끝은 fringe 담당
         minSizeRatio: 0.6,
