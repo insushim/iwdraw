@@ -1,10 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useEditor } from "@/store/editor";
 import { rgbToCss } from "@/engine/types";
 import { BRUSH_SIZE_SCALE } from "@/engine/brushes";
 
-/* 브러시 크기(큰 슬라이더+실시간 미리보기 원) + 모드별 물양/보정 슬라이더 */
+const SIZE_MIN = 1;
+const SIZE_MAX = 128;
+
+/* 브러시 크기(큰 슬라이더+숫자 입력+실시간 미리보기 원) + 모드별 물양/보정 슬라이더 */
 export function BrushControls() {
   const size = useEditor((s) => s.size);
   const setSize = useEditor((s) => s.setSize);
@@ -22,6 +26,22 @@ export function BrushControls() {
 
   const preview = Math.max(4, Math.min(60, size * (BRUSH_SIZE_SCALE[brush] ?? 1)));
 
+  // 숫자 입력은 타이핑 중 빈 값/미완성 값을 허용해야 해서 로컬 텍스트로 들고,
+  // 유효한 값일 때만 즉시 반영. 슬라이더 등 외부 변경은 동기화.
+  const [sizeText, setSizeText] = useState(String(Math.round(size)));
+  useEffect(() => setSizeText(String(Math.round(size))), [size]);
+  const commitSize = (raw: string) => {
+    if (raw.trim() === "") return; // 지우고 다시 입력하는 중 — Number("")===0이라 1로 튀는 사고 방지
+    const n = Math.round(Number(raw));
+    if (!Number.isFinite(n)) return;
+    setSize(Math.max(SIZE_MIN, Math.min(SIZE_MAX, n)));
+  };
+  const nudgeSize = (d: number) => {
+    const next = Math.max(SIZE_MIN, Math.min(SIZE_MAX, Math.round(size) + d));
+    setSize(next);
+    setSizeText(String(next)); // effect 동기화는 한 프레임 늦어 연타 시 표시가 밀린다
+  };
+
   return (
     <div className="rounded-card bg-paper p-3 shadow-soft">
       <div className="flex items-center gap-3">
@@ -38,18 +58,49 @@ export function BrushControls() {
             }}
           />
         </div>
-        <label className="flex-1 text-sm text-ink-soft">
-          굵기 <span className="font-semibold text-ink">{Math.round(size)}</span>
+        <div className="flex-1 text-sm text-ink-soft">
+          <div className="flex items-center gap-1">
+            <span>굵기</span>
+            <button
+              onClick={() => nudgeSize(-1)}
+              aria-label="굵기 1 줄이기"
+              className="pressable ml-auto grid h-7 w-7 place-items-center rounded-full bg-cream text-base font-bold text-ink"
+            >
+              −
+            </button>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={SIZE_MIN}
+              max={SIZE_MAX}
+              value={sizeText}
+              onChange={(e) => {
+                setSizeText(e.target.value);
+                commitSize(e.target.value);
+              }}
+              onBlur={() => setSizeText(String(Math.round(size)))}
+              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+              aria-label="브러시 굵기 숫자 입력"
+              className="h-7 w-14 rounded-lg border border-cream-deep bg-paper text-center font-semibold text-ink [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <button
+              onClick={() => nudgeSize(1)}
+              aria-label="굵기 1 늘리기"
+              className="pressable grid h-7 w-7 place-items-center rounded-full bg-cream text-base font-bold text-ink"
+            >
+              +
+            </button>
+          </div>
           <input
             type="range"
-            min={1}
-            max={128}
+            min={SIZE_MIN}
+            max={SIZE_MAX}
             value={size}
             onChange={(e) => setSize(+e.target.value)}
             aria-label="브러시 굵기"
             className="mt-1 h-4 w-full cursor-pointer appearance-none rounded-full bg-cream-deep accent-coral"
           />
-        </label>
+        </div>
       </div>
 
       <label className="mt-3 block text-sm text-ink-soft">

@@ -20,7 +20,7 @@ test("유화 굵기(LOD 경계)에 따라 색이 달라지지 않는다", async 
   await page.getByRole("button", { name: "색 8", exact: true }).click(); // 노랑 255,200,74
 
   const box = (await canvas.boundingBox())!;
-  const sizeSlider = page.getByLabel("브러시 굵기");
+  const sizeSlider = page.getByLabel("브러시 굵기", { exact: true });
   // 15→22px(bold), 24→36px(bold), 30→45px(fine), 60→90px(fine)
   const cases: Array<[number, number]> = [
     [15, 0.15],
