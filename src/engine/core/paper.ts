@@ -60,6 +60,9 @@ interface PaperRecipe {
   tintLo: number;
   tintHi: number;
   tintAlpha: number;
+  /** 틴트 감마(<1 = 중간값을 끌어올려 고른 결) — 높은 알파+랜덤 강도는 진한 자국이
+   * 뭉쳐 "얼룩"으로 읽힌다(2026-07-07 사용자 실측) → 옅고 균일하게 넓게 깔기 */
+  tintGamma: number;
 }
 
 const RECIPES: Record<PaperKind, PaperRecipe> = {
@@ -81,10 +84,11 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
     },
     grainLo: 0.55,
     grainHi: 0.85,
-    // i-scream 유화 캔버스 수준으로 위브가 보이게(2026-07-06 사용자 요청: 캔버스 강화)
-    tintLo: 0.46,
+    // 위브는 보이되 "고르게 옅게" — 알파 46은 진한 줄 뭉침이 얼룩으로 읽힘(2026-07-07 실측)
+    tintLo: 0.5,
     tintHi: 0.92,
-    tintAlpha: 46,
+    tintAlpha: 28,
+    tintGamma: 0.7,
   },
   cotton: {
     make() {
@@ -100,10 +104,11 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
     // 임계 상향 = 가장 깊은 골에만 침식 → 드문드문한 잔입자(granulation)
     grainLo: 0.58,
     grainHi: 0.9,
-    // 수채용지 요철도 눈에 띄게(2026-07-06 사용자 요청) — 단 저주파 얼룩은 금지 배합 유지
-    tintLo: 0.52,
+    // 요철은 보이되 균일하게 — 알파 32는 입자 뭉침이 때 탄 종이로 읽힘(2026-07-07 실측)
+    tintLo: 0.56,
     tintHi: 0.94,
-    tintAlpha: 32,
+    tintAlpha: 17,
+    tintGamma: 0.7,
   },
   smooth: {
     make() {
@@ -119,6 +124,7 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
     tintLo: 0.6,
     tintHi: 0.96,
     tintAlpha: 9,
+    tintGamma: 1,
   },
 };
 
@@ -175,7 +181,7 @@ export function paperTintTile(kind: PaperKind = "linen"): HTMLCanvasElement {
   const ctx = tile.getContext("2d")!;
   const img = ctx.createImageData(TILE, TILE);
   for (let i = 0; i < f.length; i++) {
-    const d = smoothstep(r.tintLo, r.tintHi, f[i]);
+    const d = Math.pow(smoothstep(r.tintLo, r.tintHi, f[i]), r.tintGamma);
     const p = i * 4;
     img.data[p] = 92;
     img.data[p + 1] = 84;
