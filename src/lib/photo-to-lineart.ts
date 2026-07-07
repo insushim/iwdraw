@@ -20,8 +20,10 @@ export async function photoToLineart(
   const data = sctx.getImageData(0, 0, w, h);
   const px = data.data;
 
-  // 0) 그레이스케일 + "이미 도안"(선 작업물) 감지
+  // 0) 그레이스케일 + 채도 + "이미 도안"(선 작업물) 감지
   const gray = new Float32Array(w * h);
+  const satArr = new Float32Array(w * h);
+  const whiteMask = new Uint8Array(w * h);
   let whiteish = 0;
   let darkLine = 0;
   for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
@@ -29,16 +31,46 @@ export async function photoToLineart(
     gray[i] = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
     const mx = Math.max(r, g, b);
     const sat = mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx;
-    if (gray[i] > 0.88 && sat < 0.12) whiteish++;
+    satArr[i] = sat;
+    if (gray[i] > 0.88 && sat < 0.12) {
+      whiteish++;
+      whiteMask[i] = 1;
+    }
     if (gray[i] < 0.45 && sat < 0.3) darkLine++;
   }
   const whiteFrac = whiteish / gray.length;
   const darkFrac = darkLine / gray.length;
 
+  // 흰 배경 근처(반경 2)의 유채색 픽셀 = "컬러 선" 구조 증거(로고·클립아트).
+  // 색칠된 도안의 색 영역은 검은 선에 갇혀 있어 흰 배경과 거의 안 닿는다 — 이 차이로 구분.
+  // 반경 1이면 안티앨리어싱 밴드(1px 중간톤)에 가려 인접 판정이 절반쯤 새서 경계값이 된다(실측).
+  let coloredEdge = 0;
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      const i = y * w + x;
+      if (satArr[i] < 0.3 || gray[i] >= 0.92) continue;
+      let nearWhite = 0;
+      for (let dy = -2; dy <= 2 && !nearWhite; dy++) {
+        const row = i + dy * w;
+        for (let dx = -2; dx <= 2; dx++) {
+          if (whiteMask[row + dx]) {
+            nearWhite = 1;
+            break;
+          }
+        }
+      }
+      coloredEdge += nearWhite;
+    }
+  }
+  const coloredEdgeFrac = coloredEdge / gray.length;
+
   const out = sctx.createImageData(w, h);
   const o = out.data;
 
-  if (whiteFrac > 0.5 && darkFrac > 0.003 && darkFrac < 0.25) {
+  // "이미 도안" 경로는 어두운 무채색 선이 컬러 선 구조를 지배할 때만 —
+  // 컬러 선 로고(레알마드리드 등)를 '색칠된 도안'으로 오판해 유채색 선을
+  // 통째로 지우고 점선만 남기던 버그(2026-07-07 실사용 보고) 방지.
+  if (whiteFrac > 0.5 && darkFrac > 0.003 && darkFrac < 0.25 && darkFrac > coloredEdgeFrac * 1.2) {
     // ── 이미 도안(흰 배경+검은 선, 색칠 포함 가능) → 엣지 검출 대신 어두운 무채색만 유지.
     // Sobel을 다시 돌리면 선 양쪽에 이중 윤곽이 생겨 선이 진해지고 두꺼워진다
     // ("다시 선따기 하니 더 진해짐" 2026-07-07 사용자 실측) — 이 경로는 멱등.
@@ -62,8 +94,10 @@ export async function photoToLineart(
   // 1) 약한 블러(노이즈 억제) — 사진 경로
   const blurred = boxBlur(gray, w, h, 1);
   const coarse = boxBlur(gray, w, h, 3); // 굵은 윤곽용(2스케일)
+  const satBlur = boxBlur(satArr, w, h, 1); // 채도 채널 — 노랑/금색은 luma 대비가 거의 없다
 
-  // 2) Sobel 엣지 강도 — 미세(r1) + 굵은 윤곽(r3) 2스케일 결합(선따기 강화)
+  // 2) Sobel 엣지 강도 — 미세(r1) + 굵은 윤곽(r3) + 채도 3채널 결합(선따기 강화).
+  // 흰 배경 위 노랑(luma Δ≈0.11)은 밝기 엣지가 안 잡혀 점선이 되던 것을 채도 엣지로 보완.
   const edge = new Float32Array(w * h);
   const sobel = (f: Float32Array, i: number) => {
     const gx =
@@ -75,7 +109,7 @@ export async function photoToLineart(
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x;
-      edge[i] = Math.max(sobel(blurred, i), sobel(coarse, i) * 1.15);
+      edge[i] = Math.max(sobel(blurred, i), sobel(coarse, i) * 1.15, sobel(satBlur, i) * 0.9);
     }
   }
 
