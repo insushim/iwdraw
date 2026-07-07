@@ -39,10 +39,11 @@ function latticeNoise(size: number, cells: number, rand: () => number): Float32A
   return out;
 }
 
-/** 가로/세로 씨실·날실 스트라이프(린넨 위브) — wrap 스무딩 */
-function weaveLine(size: number, rand: () => number): Float32Array {
+/** 가로/세로 씨실·날실 스트라이프(린넨 위브) — wrap 스무딩.
+ * spread<1이면 올 굵기 편차를 0.5 중심으로 압축 — 진한 올 뭉침(얼룩) 억제(표시 틴트용) */
+function weaveLine(size: number, rand: () => number, spread = 1): Float32Array {
   const raw = new Float32Array(size);
-  for (let i = 0; i < size; i++) raw[i] = rand();
+  for (let i = 0; i < size; i++) raw[i] = 0.5 + (rand() - 0.5) * spread;
   const out = new Float32Array(size);
   for (let i = 0; i < size; i++) {
     out[i] = (raw[(i - 1 + size) % size] + raw[i] * 2 + raw[(i + 1) % size]) / 4;
@@ -63,6 +64,12 @@ interface PaperRecipe {
   /** 틴트 감마(<1 = 중간값을 끌어올려 고른 결) — 높은 알파+랜덤 강도는 진한 자국이
    * 뭉쳐 "얼룩"으로 읽힌다(2026-07-07 사용자 실측) → 옅고 균일하게 넓게 깔기 */
   tintGamma: number;
+  /** 표시 틴트 전용 필드(없으면 침식 필드 공유) — 침식은 강약 대비가 필요하지만
+   * 표시는 균일해야 한다: 같은 필드를 쓰면 대비 클러스터가 얼룩으로 보인다(2026-07-07) */
+  makeTint?(): Float32Array;
+  /** 표시 틴트 타일 크기(기본 TILE) — 균일 직조는 특징 줄이 적어 256 반복이 격자로
+   * 읽힌다(린넨 실측) → 512로 반복 주기 완화 */
+  tintSize?: number;
 }
 
 const RECIPES: Record<PaperKind, PaperRecipe> = {
@@ -85,10 +92,26 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
     grainLo: 0.55,
     grainHi: 0.85,
     // 위브는 보이되 "고르게 옅게" — 알파 46은 진한 줄 뭉침이 얼룩으로 읽힘(2026-07-07 실측)
-    tintLo: 0.5,
-    tintHi: 0.92,
-    tintAlpha: 28,
+    tintLo: 0.52,
+    tintHi: 0.74,
+    tintAlpha: 26,
     tintGamma: 0.7,
+    // 표시 전용: 올 굵기 편차 압축(spread 0.4) — 실제 캔버스천처럼 균일한 직조
+    tintSize: 512,
+    makeTint() {
+      const rand = Math.random;
+      const S = 512;
+      const n2 = latticeNoise(S, 256, rand);
+      const rows = weaveLine(S, rand, 0.4);
+      const cols = weaveLine(S, rand, 0.4);
+      const f = new Float32Array(S * S);
+      for (let y = 0; y < S; y++)
+        for (let x = 0; x < S; x++) {
+          const i = y * S + x;
+          f[i] = 0.24 * n2[i] + 0.38 * rows[y] + 0.38 * cols[x];
+        }
+      return f;
+    },
   },
   cotton: {
     make() {
@@ -105,10 +128,19 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
     grainLo: 0.58,
     grainHi: 0.9,
     // 요철은 보이되 균일하게 — 알파 32는 입자 뭉침이 때 탄 종이로 읽힘(2026-07-07 실측)
-    tintLo: 0.56,
+    tintLo: 0.58,
     tintHi: 0.94,
-    tintAlpha: 17,
-    tintGamma: 0.7,
+    tintAlpha: 15,
+    tintGamma: 0.75,
+    // 표시 전용: 초고주파만 — 중간 크기(60cell) 성분은 옅은 반점 클러스터를 만든다
+    makeTint() {
+      const rand = Math.random;
+      const n2 = latticeNoise(TILE, 130, rand);
+      const n3 = latticeNoise(TILE, 190, rand);
+      const f = new Float32Array(TILE * TILE);
+      for (let i = 0; i < f.length; i++) f[i] = 0.65 * n2[i] + 0.35 * n3[i];
+      return f;
+    },
   },
   smooth: {
     make() {
@@ -129,6 +161,7 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
 };
 
 const fields = new Map<PaperKind, Float32Array>();
+const tintFields = new Map<PaperKind, Float32Array>();
 const grainTiles = new Map<PaperKind, HTMLCanvasElement>();
 const tintTiles = new Map<PaperKind, HTMLCanvasElement>();
 const tintPatterns = new Map<PaperKind, CanvasPattern>();
@@ -138,6 +171,16 @@ function field(kind: PaperKind): Float32Array {
   if (!f) {
     f = RECIPES[kind].make();
     fields.set(kind, f);
+  }
+  return f;
+}
+
+function tintField(kind: PaperKind): Float32Array {
+  let f = tintFields.get(kind);
+  if (!f) {
+    const r = RECIPES[kind];
+    f = r.makeTint ? r.makeTint() : field(kind);
+    tintFields.set(kind, f);
   }
   return f;
 }
@@ -175,11 +218,12 @@ export function paperTintTile(kind: PaperKind = "linen"): HTMLCanvasElement {
   let tile = tintTiles.get(kind);
   if (tile) return tile;
   const r = RECIPES[kind];
-  const f = field(kind);
+  const f = tintField(kind);
+  const size = r.makeTint ? (r.tintSize ?? TILE) : TILE;
   tile = document.createElement("canvas");
-  tile.width = tile.height = TILE;
+  tile.width = tile.height = size;
   const ctx = tile.getContext("2d")!;
-  const img = ctx.createImageData(TILE, TILE);
+  const img = ctx.createImageData(size, size);
   for (let i = 0; i < f.length; i++) {
     const d = Math.pow(smoothstep(r.tintLo, r.tintHi, f[i]), r.tintGamma);
     const p = i * 4;
