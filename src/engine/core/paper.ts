@@ -91,11 +91,12 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
     },
     grainLo: 0.55,
     grainHi: 0.85,
-    // 위브는 보이되 "고르게 옅게" — 알파 46은 진한 줄 뭉침이 얼룩으로 읽힘(2026-07-07 실측)
-    tintLo: 0.52,
-    tintHi: 0.74,
-    tintAlpha: 26,
-    tintGamma: 0.7,
+    // 위브는 "고르게 옅게" — 압축 필드(0.5±0.15)에서 임계가 평균보다 높으면(0.56~)
+    // 드문 교차점만 남아 패치 클러스터(얼룩 재발). 평균을 가로지르는 완만한 곡선이 정답
+    tintLo: 0.48,
+    tintHi: 0.68,
+    tintAlpha: 20,
+    tintGamma: 0.85,
     // 표시 전용: 올 굵기 편차 압축(spread 0.4) — 실제 캔버스천처럼 균일한 직조
     tintSize: 512,
     makeTint() {
@@ -108,7 +109,8 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
       for (let y = 0; y < S; y++)
         for (let x = 0; x < S; x++) {
           const i = y * S + x;
-          f[i] = 0.24 * n2[i] + 0.38 * rows[y] + 0.38 * cols[x];
+          // 노이즈는 양념(0.12) — 크면 올 사이가 뿌옇게 번진 얼룩으로 보인다(2026-07-07)
+          f[i] = 0.12 * n2[i] + 0.44 * rows[y] + 0.44 * cols[x];
         }
       return f;
     },
@@ -116,16 +118,16 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
   cotton: {
     make() {
       const rand = Math.random;
-      // 위브 없는 셀룰로스 요철 — 미세 입자만. 굵은 덩어리(저주파) 비중이 크면
-      // 얼룩처럼 보인다(2026-07-03·07-06 사용자 실측 2회 → 저주파 완전 제거)
-      const n2 = latticeNoise(TILE, 110, rand);
-      const n3 = latticeNoise(TILE, 60, rand);
+      // 위브 없는 셀룰로스 요철 — 초고주파 미세 입자만. 60cell(4px급) 성분은 깊은 골이
+      // 뭉쳐 획 안에 "점 클러스터"로 찍힌다(2026-07-07 사용자 실측 → 제거).
+      const n2 = latticeNoise(TILE, 130, rand);
+      const n3 = latticeNoise(TILE, 170, rand);
       const f = new Float32Array(TILE * TILE);
-      for (let i = 0; i < f.length; i++) f[i] = 0.75 * n2[i] + 0.25 * n3[i];
+      for (let i = 0; i < f.length; i++) f[i] = 0.8 * n2[i] + 0.2 * n3[i];
       return f;
     },
     // 임계 상향 = 가장 깊은 골에만 침식 → 드문드문한 잔입자(granulation)
-    grainLo: 0.58,
+    grainLo: 0.62,
     grainHi: 0.9,
     // 요철은 보이되 균일하게 — 알파 32는 입자 뭉침이 때 탄 종이로 읽힘(2026-07-07 실측)
     tintLo: 0.58,

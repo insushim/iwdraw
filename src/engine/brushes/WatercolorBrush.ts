@@ -19,7 +19,7 @@ export class WatercolorBrush extends BrushBase {
         alphaPressure: 0.5,
         minSizeRatio: 0.5,
         composite: "multiply",
-        paperGrain: 0.5, // 수채용지 요철(granulation) — 셰이더 침식 계수 하향(0.5)에 맞춰 상향
+        paperGrain: 0.32, // granulation은 은은하게 — 0.5는 획 안에 점이 도드라짐(2026-07-07 사용자 실측)
         strokeBlend: "wash", // 획 내부 균일(겹침 스캘럽 제거)
         washOpacity: 0.85, // 물양이 실제 농도를 담당(아래 makeDab) — 상한만 정의
         wetEdge: 0.75, // 마르며 실루엣 가장자리에 안료 몰림(endStroke 후처리)
