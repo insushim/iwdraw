@@ -131,6 +131,8 @@ export interface EngineEvents {
   colorUsed: { color: RGB };
   /** 스포이트로 캔버스에서 색을 찍음 — UI가 색 반영 후 이전 붓으로 복귀 */
   colorPicked: { color: RGB };
+  /** 뷰(핀치 줌/팬) 변경 — UI가 "화면 맞춤" 탈출 버튼 표시에 사용 */
+  viewChange: { scale: number };
 }
 
 export type EngineEventName = keyof EngineEvents;

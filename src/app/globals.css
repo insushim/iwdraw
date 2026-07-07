@@ -80,6 +80,22 @@ body {
   -webkit-touch-callout: none;
 }
 
+/*
+ * 에디터 전역: 브라우저 핀치줌 차단(팬/스크롤은 허용).
+ * 데스크톱 크로뮴(웨일북)은 뷰포트 메타(user-scalable=no)를 무시해서 툴바·여백에서
+ * 시작한 핀치가 페이지 줌을 건다 — 캔버스 위 핀치는 touch-action:none이 소비해
+ * 되돌릴 수 없어 "확대가 안 풀려요"로 갇힌다(2026-07-07 웨일북 실사용 보고).
+ */
+.editor-no-pinch {
+  touch-action: pan-x pan-y;
+}
+.editor-no-pinch * {
+  touch-action: inherit;
+}
+.editor-no-pinch .canvas-surface {
+  touch-action: none; /* 캔버스는 엔진이 전부 처리 */
+}
+
 /* 스크롤바 (교실 크롬북) */
 ::-webkit-scrollbar {
   width: 10px;

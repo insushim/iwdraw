@@ -197,11 +197,13 @@ export class ArtEngine {
     // 팬 클램프: 캔버스 가장자리가 뷰포트 안으로 들어오지 못하게(빈 흰 영역 방지)
     this.view.ox = clamp(this.view.ox, this.width * (1 - newScale), 0);
     this.view.oy = clamp(this.view.oy, this.height * (1 - newScale), 0);
+    this.emit("viewChange", { scale: newScale });
     this.requestComposite();
   }
 
   resetView(): void {
     this.view = { scale: 1, ox: 0, oy: 0 };
+    this.emit("viewChange", { scale: 1 });
     this.requestComposite();
   }
 

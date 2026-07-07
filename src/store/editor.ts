@@ -37,6 +37,8 @@ export interface EditorState {
   latencyMs: number;
   usingWebGL2: boolean;
   restoreAvailable: number | null;
+  /** 핀치 줌 배율(1=원본) — 1 초과면 "화면 맞춤" 탈출 버튼 표시 */
+  viewScale: number;
 
   // ── 바인딩 ──
   attach: (engine: ArtEngine) => void;
@@ -65,6 +67,7 @@ export interface EditorState {
   setLayerOpacity: (id: string, o: number) => void;
   setLayerBlend: (id: string, b: BlendMode) => void;
   dismissRestore: () => void;
+  resetView: () => void;
 }
 
 let unsub: Array<() => void> = [];
@@ -94,11 +97,13 @@ export const useEditor = create<EditorState>((set, get) => ({
   latencyMs: 0,
   usingWebGL2: false,
   restoreAvailable: null,
+  viewScale: 1,
 
   attach: (engine) => {
     unsub.forEach((u) => u());
     unsub = [
       engine.on("historyChange", ({ canUndo, canRedo }) => set({ canUndo, canRedo })),
+      engine.on("viewChange", ({ scale }) => set({ viewScale: scale })),
       engine.on("layersChange", ({ layers, activeId }) =>
         set({ layers, activeLayerId: activeId }),
       ),
@@ -131,6 +136,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       usingWebGL2: engine.usingWebGL2,
       layers: stack.info,
       activeLayerId: stack.activeId,
+      viewScale: 1,
     });
     // UI(스토어)에 남아있는 설정을 새 엔진에 전부 푸시 — 페이지 이동 후 재마운트 시
     // 엔진이 기본값(검정 연필 18)으로 그리던 버그(UI 표시와 실제 그리기 불일치)
@@ -223,4 +229,5 @@ export const useEditor = create<EditorState>((set, get) => ({
     void get().engine?.discardRestore();
     set({ restoreAvailable: null });
   },
+  resetView: () => get().engine?.resetView(),
 }));

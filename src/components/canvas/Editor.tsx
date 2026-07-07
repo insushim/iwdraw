@@ -49,6 +49,8 @@ export function Editor({ lineartSrc, baseSrc, initialMode, room, onSave, who, ba
   const toggleJunior = useEditor((s) => s.toggleJunior);
   const restoreAt = useEditor((s) => s.restoreAvailable);
   const dismissRestore = useEditor((s) => s.dismissRestore);
+  const viewScale = useEditor((s) => s.viewScale);
+  const resetView = useEditor((s) => s.resetView);
   const newDrawing = useEditor((s) => s.newDrawing);
   // 새 그림 2단계 확인(아동 오조작 방지): 첫 클릭 → "정말요?" 3초, 그 안에 재클릭 시 실행
   const [confirmNew, setConfirmNew] = useState(false);
@@ -106,7 +108,10 @@ export function Editor({ lineartSrc, baseSrc, initialMode, room, onSave, who, ba
     "pressable touch-target flex items-center justify-center gap-1 rounded-full bg-paper px-3 py-2 text-sm font-semibold text-ink-soft shadow-soft";
 
   return (
-    <div className="flex h-dvh flex-col bg-cream">
+    // editor-no-pinch: 데스크톱 크로뮴(웨일북)은 뷰포트 메타 줌 잠금을 무시 — 툴바·여백에서
+    // 시작한 핀치가 "브라우저 페이지 줌"을 걸면 캔버스(touch-action:none) 위 핀치로는 못 되돌려
+    // 갇힌다(2026-07-07 실사용 보고). 에디터 전역에서 핀치줌 제스처 자체를 차단.
+    <div className="editor-no-pinch flex h-dvh flex-col bg-cream">
       {/* ── 상단바: 모드 탭이 중앙, 저장이 가장 눈에 띄게 ── */}
       <header className="flex items-center gap-2 px-3 py-2">
         <Link href={backHref} className="pressable touch-target grid place-items-center rounded-full bg-paper px-3 text-xl shadow-soft" aria-label="나가기">
@@ -239,6 +244,16 @@ export function Editor({ lineartSrc, baseSrc, initialMode, room, onSave, who, ba
             >
               <Icon name="redo" className="h-6 w-6" />
             </button>
+            {viewScale > 1.01 && (
+              <button
+                onClick={resetView}
+                aria-label="화면 맞춤"
+                title="확대 풀고 화면에 맞추기"
+                className="pressable flex h-12 items-center gap-1 rounded-full bg-sky px-4 font-display text-sm text-white shadow-lift"
+              >
+                🔍 화면 맞춤 ×{viewScale.toFixed(1)}
+              </button>
+            )}
           </div>
           {room && <CollabOverlay cursors={collab.cursors} engine={engine} />}
         </div>
