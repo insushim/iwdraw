@@ -19,6 +19,7 @@ export type IconName =
   | "oilpastel"
   | "glow"
   | "rainbow"
+  | "smudge"
   | "eraser"
   | "fill"
   | "undo"
@@ -130,6 +131,24 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M12.2 21.5a3.8 3.8 0 0 1 7.6 0" stroke="#5BB8F5" strokeWidth="3.2" />
       <ellipse cx="5.5" cy="22.5" rx="3.2" ry="2.2" fill="#fff" stroke={INK} strokeWidth="1.2" />
       <ellipse cx="26.5" cy="22.5" rx="3.2" ry="2.2" fill="#fff" stroke={INK} strokeWidth="1.2" />
+    </g>
+  ),
+  smudge: (
+    // 손가락이 물감을 문질러 끌고 가는 스와이프
+    <g fill="none" strokeLinecap="round">
+      <path
+        d="M5 22c4-1.5 7-1 10 .5"
+        stroke="#5BB8F5"
+        strokeWidth="5.5"
+        opacity="0.45"
+      />
+      <path d="M4.5 22.5c3-1 5.5-.8 8 .3" stroke="#5BB8F5" strokeWidth="2.6" opacity="0.8" />
+      <path
+        d="M17.5 25.5c-2.2-1.6-2.6-4.2-.8-6.6l4.6-6.2a2.6 2.6 0 0 1 4.2 3l-2.4 3.4c2.8-.6 5 .8 5.4 3.4.3 2-.8 3.7-2.8 4.8-2.6 1.4-6 .9-8.2-1.8z"
+        fill="#FFD8A8"
+        stroke={INK}
+        strokeWidth="1.6"
+      />
     </g>
   ),
   eraser: (

@@ -235,10 +235,11 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
     case "chunk": {
       // 오일파스텔: 거의 꽉 찬 중심 + 부슬거리는 가장자리 — 진하고 크리미
       ctx.clearRect(0, 0, size, size);
+      // 몸통 알파 1(불투명 매체) — 0.9~0.95는 겹친 획이 진해짐(유화와 동일 버그 클래스)
       const g = ctx.createRadialGradient(r, r, 0, r, r, r);
-      g.addColorStop(0, "rgba(255,255,255,0.95)");
-      g.addColorStop(0.65, "rgba(255,255,255,0.9)");
-      g.addColorStop(0.85, "rgba(255,255,255,0.35)");
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.65, "rgba(255,255,255,1)");
+      g.addColorStop(0.85, "rgba(255,255,255,0.4)");
       g.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = g;
       ctx.beginPath();

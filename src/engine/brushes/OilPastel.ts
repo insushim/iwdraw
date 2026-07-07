@@ -12,11 +12,12 @@ export class OilPastel extends BrushBase {
         flow: 1,
         jitter: 0.06,
         sizePressure: 0.4,
-        alphaPressure: 0.25,
+        alphaPressure: 0.1, // 불투명 매체 — 0.25는 마우스 필압에서 겹침 진해짐(유화와 동일 버그 클래스)
         minSizeRatio: 0.65,
         composite: "source-over",
         rotationFollowsStroke: true,
-        paperGrain: 0.45, // 0.25는 민무늬 "진한 마커"로 읽힘(사용자 실측) — 종이 골 침식으로 파스텔 질감
+        paperGrain: 0.45, // 0.25는 민무늬 "진한 마커"로 읽힘(사용자 실측)
+        grainLift: true, // 불투명 매체 — 결은 알파 구멍이 아니라 백화(겹침 진해짐 방지, 유화와 동일)
         strokeBlend: "wash", // 크리미한 덩어리 질감이 획 전체에 유지
         washOpacity: 1,
       },

@@ -146,9 +146,11 @@ export class Canvas2DBackend implements RendererBackend {
     target.globalCompositeOperation =
       this.ctx.composite === "multiply"
         ? "multiply"
-        : this.ctx.composite === "lighter"
-          ? "lighter"
-          : "source-over";
+        : this.ctx.composite === "darken"
+          ? "darken"
+          : this.ctx.composite === "lighter"
+            ? "lighter"
+            : "source-over";
     target.drawImage(src, 0, 0);
     target.restore();
   }
@@ -182,9 +184,11 @@ export class Canvas2DBackend implements RendererBackend {
     this.layerCtx.globalCompositeOperation =
       this.ctx.composite === "multiply"
         ? "multiply"
-        : this.ctx.composite === "lighter"
-          ? "lighter"
-          : "source-over";
+        : this.ctx.composite === "darken"
+          ? "darken"
+          : this.ctx.composite === "lighter"
+            ? "lighter"
+            : "source-over";
     this.layerCtx.drawImage(this.strokeBuf, 0, 0);
     this.layerCtx.restore();
     this.ctx = null;

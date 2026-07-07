@@ -16,6 +16,7 @@ const BRUSH_ICON: Partial<Record<BrushId, IconName>> = {
   oilpastel: "oilpastel",
   glow: "glow",
   rainbow: "rainbow",
+  smudge: "smudge",
   eraser: "eraser",
   fill: "fill",
 };

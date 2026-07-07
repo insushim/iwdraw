@@ -69,6 +69,8 @@ export const BRUSH_META: BrushMeta[] = [
   { id: "oilpastel", label: "오일파스텔", junior: false },
   { id: "glow", label: "글로우", junior: false },
   { id: "rainbow", label: "무지개", junior: true },
+  // 번짐: dab 브러시가 아니라 레이어 직접 편집 도구(SmudgeTool) — createBrush 미등록 의도
+  { id: "smudge", label: "번짐", junior: false },
   { id: "eraser", label: "지우개", junior: true },
 ];
 

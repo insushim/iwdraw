@@ -23,7 +23,7 @@ export type TipKind =
   | "glow";
 
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
-export type DabComposite = "source-over" | "multiply" | "lighter" | "destination-out";
+export type DabComposite = "source-over" | "multiply" | "darken" | "lighter" | "destination-out";
 
 export interface BrushConfig {
   id: BrushId;

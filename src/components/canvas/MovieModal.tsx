@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ArtEngine } from "@/engine/ArtEngine";
 import { createBrush } from "@/engine/brushes";
+import { smearSegment } from "@/engine/tools/SmudgeTool";
 import { floodFill } from "@/engine/brushes/FillTool";
 import { playMovie, recordMovie, type MovieSpeed, type ReplayHandle } from "@/engine/export/TimelapseExporter";
 import { Button } from "@/components/ui";
@@ -145,6 +146,15 @@ function replayOne(
     ctx.putImageData(img, 0, 0);
     return;
   }
+  if (stroke.brush === "smudge") {
+    // 번짐: 엔진과 동일한 smearSegment로 재생(레이어 직접 편집 도구)
+    const pts = stroke.points.slice(0, Math.max(2, Math.ceil(stroke.points.length * progress)));
+    let prev = { x: pts[0].x, y: pts[0].y };
+    for (let i = 1; i < pts.length; i++) {
+      prev = smearSegment(ctx, prev, pts[i], stroke.settings.size * 1.6, stroke.settings.opacity);
+    }
+    return;
+  }
   const brush = createBrush(stroke.brush);
   const pts = stroke.points.slice(0, Math.max(2, Math.ceil(stroke.points.length * progress)));
   if (pts.length < 1) return;
@@ -152,7 +162,8 @@ function replayOne(
   ctx.save();
   ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
   if (stroke.brush === "eraser") ctx.globalCompositeOperation = "destination-out";
-  else if (stroke.brush === "marker" || stroke.brush === "watercolor") ctx.globalCompositeOperation = "multiply";
+  else if (stroke.brush === "marker") ctx.globalCompositeOperation = "darken";
+  else if (stroke.brush === "watercolor") ctx.globalCompositeOperation = "multiply";
   else if (stroke.brush === "glow") ctx.globalCompositeOperation = "lighter";
 
   let dabs = brush.begin(pts[0], stroke.settings);

@@ -14,6 +14,7 @@ export type BrushId =
   | "oilpastel"
   | "glow"
   | "rainbow"
+  | "smudge"
   | "eraser"
   | "fill"
   | "stamp"

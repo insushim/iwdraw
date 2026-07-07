@@ -10,6 +10,9 @@ export interface PointerCallbacks {
   onDown(p: StrokePoint, e: PointerEvent): void;
   onMove(points: StrokePoint[], e: PointerEvent): void;
   onUp(p: StrokePoint, e: PointerEvent): void;
+  /** 진행 중 획 폐기 — 두 번째 손가락(핀치 의도) 감지 시. 커밋(onUp)하면 첫
+   * 손가락의 점/짧은 획이 캔버스에 남는다(웨일북 실측 2026-07-07) */
+  onCancel(): void;
   /** 멀티터치 → 제스처로 위임할지 판단(두 손가락 이상) */
   onGesture(active: PointerEvent[], e: PointerEvent, phase: "start" | "move" | "end"): void;
 }
@@ -69,11 +72,12 @@ export class PointerHandler {
     this.active.set(e.pointerId, e);
 
     if (this.active.size >= 2) {
-      // 멀티터치 → 제스처. 진행 중 스트로크는 그리던 포인터의 마지막 점에서 마감
-      // (두 번째 손가락 좌표로 onUp하면 긴 직선이 커밋되는 사고 방지).
+      // 멀티터치 → 제스처. 진행 중 스트로크는 "폐기" — 첫 손가락은 핀치의 절반이지
+      // 그리기 의도가 아니다. 커밋하면 점이 찍힌다(웨일북 두 손가락 확대 실측).
       if (this.drawing) {
         this.drawing = false;
-        this.cb.onUp(this.lastDrawPoint ?? this.toStrokePoint(e), e);
+        this.drawingPointerId = -1;
+        this.cb.onCancel();
       }
       this.cb.onGesture([...this.active.values()], e, "start");
       return;

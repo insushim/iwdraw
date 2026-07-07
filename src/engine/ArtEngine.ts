@@ -20,6 +20,7 @@ import { LayerStack } from "./core/LayerStack";
 import { History } from "./core/History";
 import { StrokeRecorder } from "./core/StrokeRecorder";
 import { AutoSave, type SavedState } from "./core/AutoSave";
+import { smearSegment } from "./tools/SmudgeTool";
 import { drawPaperTint, type PaperKind } from "./core/paper";
 import { tilesForRect, copyTiles, TileSnapshotCommand, type TileRect } from "./core/tiles";
 import type { Layer } from "./core/LayerStack";
@@ -126,6 +127,7 @@ export class ArtEngine {
         onDown: (p) => this.strokeBegin(p),
         onMove: (pts) => this.strokeMove(pts),
         onUp: (p) => this.strokeEnd(p),
+        onCancel: () => this.strokeCancel(),
         onGesture: (active, _e, phase) =>
           this.gestures.update(
             active.map((a) => ({ clientX: a.clientX, clientY: a.clientY })),
@@ -135,10 +137,21 @@ export class ArtEngine {
       },
     );
 
+    // 탭 숨김/닫힘 시 디바운스 대기 중인 자동저장 즉시 플러시 — 마지막 획 후 5초 안에
+    // 닫으면 최근 획이 유실되던 구멍(2026-07-07). pagehide는 모바일 사파리 포함 최후 보루
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.flushAutoSave);
+      window.addEventListener("pagehide", this.flushAutoSave);
+    }
+
     this.startLoop();
     this.emitLayers();
     this.emitHistory();
   }
+
+  private flushAutoSave = (): void => {
+    if (document.visibilityState === "hidden") void this.autosave.flush();
+  };
 
   /* ── 이벤트 브리지 ── */
   on<K extends EngineEventName>(name: K, fn: EngineListener<K>): () => void {
@@ -173,11 +186,16 @@ export class ArtEngine {
     const rect = this.cm.display.getBoundingClientRect();
     const px = ((cx - rect.left) / rect.width) * this.width;
     const py = ((cy - rect.top) / rect.height) * this.height;
-    const newScale = clamp(this.view.scale * scale, 0.5, 8);
+    // 최소 1배(화면 맞춤): 1 미만이면 캔버스 밖 흰 영역이 생기는데, 사용자는 그걸
+    // 종이로 알고 칠한다 — "축소하면 화면 밖은 색칠이 안 됨" 리포트(2026-07-07 웨일북)
+    const newScale = clamp(this.view.scale * scale, 1, 8);
     // 핀치 중심 고정
     this.view.ox = px - ((px - this.view.ox) * newScale) / this.view.scale + dx;
     this.view.oy = py - ((py - this.view.oy) * newScale) / this.view.scale + dy;
     this.view.scale = newScale;
+    // 팬 클램프: 캔버스 가장자리가 뷰포트 안으로 들어오지 못하게(빈 흰 영역 방지)
+    this.view.ox = clamp(this.view.ox, this.width * (1 - newScale), 0);
+    this.view.oy = clamp(this.view.oy, this.height * (1 - newScale), 0);
     this.requestComposite();
   }
 
@@ -260,6 +278,11 @@ export class ArtEngine {
       this.doFill(p);
       return;
     }
+    // 번짐(스머지)은 dab 파이프라인이 아니라 레이어 직접 편집
+    if (this.brushId === "smudge") {
+      this.smudgeBegin(p);
+      return;
+    }
     this.brush = createBrush(this.brushId);
     this.quickShapeApplied = false;
     this.curPoints = [this.stabilizer.begin(p)];
@@ -279,6 +302,10 @@ export class ArtEngine {
   }
 
   private strokeMove(points: StrokePoint[]): void {
+    if (this.smudging) {
+      this.smudgeMove(points);
+      return;
+    }
     if (!this.brush || this.replaying) return;
     let lastSp: StrokePoint | null = null;
     for (const raw of points) {
@@ -294,6 +321,10 @@ export class ArtEngine {
   }
 
   private strokeEnd(p: StrokePoint): void {
+    if (this.smudging) {
+      this.smudgeEnd(p);
+      return;
+    }
     if (!this.brush || this.replaying) return;
     this.clearHold();
     const sp = this.stabilizer.push(p);
@@ -317,6 +348,93 @@ export class ArtEngine {
       this.cm.backend.endStroke();
     }
     this.finalizeStroke(this.quickShapeApplied);
+  }
+
+  /** 진행 중 획 폐기(핀치 진입 등) — 레이어·히스토리·레코더에 아무것도 남기지 않는다.
+   * ⚠️ Canvas2D 폴백의 지우개(레이어 직접)는 취소 불가 — 그 경우 이미 지운 만큼은 남는다 */
+  private strokeCancel(): void {
+    if (this.replaying) return;
+    if (!this.brush && !this.smudging) return;
+    this.clearHold();
+    // 레이어를 직접 고치는 도구(번짐, Canvas2D 지우개)는 begin 스냅샷으로 원복
+    if (this.beforeFull && (this.smudging || this.brush?.cfg.composite === "destination-out")) {
+      this.layers.active.ctx.putImageData(
+        new ImageData(this.beforeFull.slice(), this.width, this.height),
+        0,
+        0,
+      );
+    }
+    this.cm.backend.cancelStroke();
+    this.brush = null;
+    this.smudging = false;
+    this.smudgeLast = null;
+    this.curPoints = [];
+    this.beforeFull = null;
+    this.quickShapeApplied = false;
+    this.requestComposite(); // 라이브 프리뷰에 떠 있던 획 지우기
+  }
+
+  /* ── 번짐(스머지) — 레이어 픽셀을 문질러 끌고 간다(SmudgeTool 공용 헬퍼) ── */
+  private smudging = false;
+  private smudgeLast: { x: number; y: number } | null = null;
+
+  private smudgeSize(): number {
+    return this.settings.size * 1.6; // 문지름 폭은 넉넉하게(손가락 체감)
+  }
+
+  private smudgeBegin(p: StrokePoint): void {
+    this.smudging = true;
+    this.smudgeLast = { x: p.x, y: p.y };
+    this.curPoints = [p];
+    this.beforeFull = this.snapshotActiveLayer(); // 직접 편집이라 undo 스냅샷은 시작 시
+    this.strokeBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  }
+
+  private smudgeMove(points: StrokePoint[]): void {
+    if (!this.smudgeLast) return;
+    const ctx = this.layers.active.ctx;
+    for (const p of points) {
+      this.curPoints.push(p);
+      this.smudgeLast = smearSegment(
+        ctx,
+        this.smudgeLast,
+        p,
+        this.smudgeSize(),
+        this.settings.opacity,
+        (x, y, d) => this.trackDirty(x, y, d),
+      );
+    }
+    this.requestComposite();
+  }
+
+  private smudgeEnd(p: StrokePoint): void {
+    this.smudgeMove([p]);
+    this.smudging = false;
+    this.smudgeLast = null;
+    const bb = this.strokeBBox;
+    if (isFinite(bb.minX) && this.beforeFull) {
+      const layer = this.layers.active;
+      const x = Math.max(0, Math.floor(bb.minX));
+      const y = Math.max(0, Math.floor(bb.minY));
+      const w = Math.min(this.width - x, Math.ceil(bb.maxX - x));
+      const h = Math.min(this.height - y, Math.ceil(bb.maxY - y));
+      const tiles = tilesForRect(x, y, w, h, this.width, this.height);
+      const after = copyTiles(layer.ctx.getImageData(0, 0, this.width, this.height).data, this.width, tiles);
+      const before = copyTiles(this.beforeFull, this.width, tiles);
+      this.pushTileCommand(layer, tiles, before, after);
+      // 무비 재생용 기록(재생도 같은 smearSegment 사용). 협동 브로드캐스트는 안 함 —
+      // 원격 레이어 분리 구조에서 남의 픽셀을 문지를 수 없다(의도).
+      this.recorder.record({
+        brush: this.brushId,
+        settings: { ...this.settings },
+        layerId: layer.id,
+        points: this.curPoints,
+        symmetry: this.symmetry,
+      });
+    }
+    this.beforeFull = null;
+    this.curPoints = [];
+    this.scheduleAutoSave();
   }
 
   private snapshotActiveLayer(): Uint8ClampedArray {
@@ -796,6 +914,11 @@ export class ArtEngine {
     cancelAnimationFrame(this.rafId);
     this.clearHold();
     this.pointer.destroy();
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.flushAutoSave);
+      window.removeEventListener("pagehide", this.flushAutoSave);
+    }
+    void this.autosave.flush(); // 재마운트(가로/세로 전환 등) 시점의 대기분도 보존
     this.autosave.destroy();
     this.cm.destroy();
     this.layers.destroy();

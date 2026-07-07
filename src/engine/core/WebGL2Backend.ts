@@ -379,9 +379,11 @@ export class WebGL2Backend implements RendererBackend {
         ? "destination-out"
         : c === "multiply"
           ? "multiply"
-          : c === "lighter"
-            ? "lighter"
-            : "source-over";
+          : c === "darken"
+            ? "darken"
+            : c === "lighter"
+              ? "lighter"
+              : "source-over";
     target.drawImage(this.glCanvas, 0, 0);
     target.restore();
   }
@@ -414,6 +416,8 @@ export class WebGL2Backend implements RendererBackend {
       layerCtx.globalCompositeOperation = "destination-out";
     } else if (this.ctx.composite === "multiply") {
       layerCtx.globalCompositeOperation = "multiply";
+    } else if (this.ctx.composite === "darken") {
+      layerCtx.globalCompositeOperation = "darken";
     } else if (this.ctx.composite === "lighter") {
       layerCtx.globalCompositeOperation = "lighter";
     }
