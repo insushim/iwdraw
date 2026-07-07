@@ -24,7 +24,7 @@ export function LayerPanel() {
   const setBlend = useEditor((s) => s.setLayerBlend);
   const [open, setOpen] = useState(false);
 
-  const drawable = layers.filter((l) => !l.isLineart);
+  const drawable = layers.filter((l) => !l.isLineart && !l.isBase);
 
   return (
     <div className="rounded-card bg-paper shadow-soft">
@@ -47,12 +47,13 @@ export function LayerPanel() {
         <div className="space-y-2 border-t border-cream-deep p-3">
           {[...layers].reverse().map((l) => {
             const active = l.id === activeId;
+            const locked = l.isLineart || l.isBase;
             return (
               <div
                 key={l.id}
                 className={`rounded-2xl border p-2 ${
                   active ? "border-coral bg-coral-soft" : "border-cream-deep bg-cream"
-                } ${l.isLineart ? "opacity-90" : ""}`}
+                } ${locked ? "opacity-90" : ""}`}
               >
                 <div className="flex items-center gap-1.5">
                   <button
@@ -63,14 +64,15 @@ export function LayerPanel() {
                     <Icon name={l.visible ? "eye" : "eyeOff"} className="h-5 w-5" />
                   </button>
                   <button
-                    onClick={() => !l.isLineart && setActive(l.id)}
+                    onClick={() => !locked && setActive(l.id)}
                     className="flex-1 truncate text-left text-sm font-semibold text-ink"
-                    disabled={l.isLineart}
+                    disabled={locked}
                   >
                     {l.name}
                     {l.isLineart && <span className="ml-1 text-xs text-ink-faint">(도안·잠금)</span>}
+                    {l.isBase && <span className="ml-1 text-xs text-ink-faint">(원본·잠금)</span>}
                   </button>
-                  {!l.isLineart && drawable.length > 1 && (
+                  {!locked && drawable.length > 1 && (
                     <button
                       onClick={() => removeLayer(l.id)}
                       aria-label="레이어 삭제"
@@ -80,7 +82,7 @@ export function LayerPanel() {
                     </button>
                   )}
                 </div>
-                {!l.isLineart && (
+                {!locked && (
                   <div className="mt-2 flex items-center gap-2">
                     <input
                       type="range"

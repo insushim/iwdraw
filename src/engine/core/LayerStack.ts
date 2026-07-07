@@ -36,18 +36,23 @@ export class LayerStack {
   }
 
   get info(): LayerInfo[] {
-    return this.layers.map(({ id, name, visible, opacity, blend, isLineart }) => ({
+    return this.layers.map(({ id, name, visible, opacity, blend, isLineart, isBase }) => ({
       id,
       name,
       visible,
       opacity,
       blend,
       isLineart,
+      isBase,
     }));
   }
 
   get active(): Layer {
-    return this.layers.find((l) => l.id === this.activeId) ?? this.layers[0];
+    return (
+      this.layers.find((l) => l.id === this.activeId) ??
+      this.layers.find((l) => !this.isLocked(l)) ??
+      this.layers[0]
+    );
   }
 
   /** 색칠 모드용 라인아트 레이어(잠금·최상단·multiply) */
@@ -55,8 +60,17 @@ export class LayerStack {
     return this.layers.find((l) => l.isLineart);
   }
 
+  /** 그대로 이어 그리기 원본 레이어(잠금·최하단) — 지우개가 원본을 못 지우게 분리 */
+  get base(): Layer | undefined {
+    return this.layers.find((l) => l.isBase);
+  }
+
+  private isLocked(l: Layer): boolean {
+    return l.isLineart || l.isBase;
+  }
+
   addLayer(name?: string, isLineart = false): Layer | null {
-    const drawable = this.layers.filter((l) => !l.isLineart).length;
+    const drawable = this.layers.filter((l) => !this.isLocked(l)).length;
     if (!isLineart && drawable >= MAX_LAYERS) return null;
     const canvas = this.newCanvas();
     const layer: Layer = {
@@ -66,6 +80,7 @@ export class LayerStack {
       opacity: 1,
       blend: isLineart ? "multiply" : "normal",
       isLineart,
+      isBase: false,
       canvas,
       ctx: canvas.getContext("2d")!,
     };
@@ -81,19 +96,39 @@ export class LayerStack {
     return layer;
   }
 
+  /** 원본 레이어 생성(없으면) — 항상 맨 아래, 활성 레이어는 바뀌지 않는다 */
+  addBase(name = "원본"): Layer {
+    const existing = this.base;
+    if (existing) return existing;
+    const canvas = this.newCanvas();
+    const layer: Layer = {
+      id: nanoid(8),
+      name,
+      visible: true,
+      opacity: 1,
+      blend: "normal",
+      isLineart: false,
+      isBase: true,
+      canvas,
+      ctx: canvas.getContext("2d")!,
+    };
+    this.layers.unshift(layer);
+    return layer;
+  }
+
   removeLayer(id: string): boolean {
     const idx = this.layers.findIndex((l) => l.id === id);
     if (idx === -1) return false;
-    if (this.layers[idx].isLineart) return false; // 라인아트는 모드 전환으로만 제거
-    if (this.layers.filter((l) => !l.isLineart).length <= 1) return false; // 최소 1장
+    if (this.isLocked(this.layers[idx])) return false; // 라인아트·원본은 직접 삭제 불가
+    if (this.layers.filter((l) => !this.isLocked(l)).length <= 1) return false; // 최소 1장
     this.layers.splice(idx, 1);
-    if (this.activeId === id) this.activeId = this.layers.find((l) => !l.isLineart)!.id;
+    if (this.activeId === id) this.activeId = this.layers.find((l) => !this.isLocked(l))!.id;
     return true;
   }
 
   setActive(id: string): void {
     const l = this.layers.find((x) => x.id === id);
-    if (l && !l.isLineart) this.activeId = id;
+    if (l && !this.isLocked(l)) this.activeId = id;
   }
 
   setVisible(id: string, v: boolean): void {
@@ -108,16 +143,17 @@ export class LayerStack {
 
   setBlend(id: string, b: BlendMode): void {
     const l = this.layers.find((x) => x.id === id);
-    if (l && !l.isLineart) l.blend = b;
+    if (l && !this.isLocked(l)) l.blend = b;
   }
 
   reorder(id: string, toIndex: number): void {
     const idx = this.layers.findIndex((l) => l.id === id);
-    if (idx === -1 || this.layers[idx].isLineart) return;
+    if (idx === -1 || this.isLocked(this.layers[idx])) return;
     const [l] = this.layers.splice(idx, 1);
     const lineIdx = this.layers.findIndex((x) => x.isLineart);
     const max = lineIdx === -1 ? this.layers.length : lineIdx;
-    this.layers.splice(Math.max(0, Math.min(max, toIndex)), 0, l);
+    const min = this.layers.length > 0 && this.layers[0].isBase ? 1 : 0; // 원본 아래로는 못 내림
+    this.layers.splice(Math.max(min, Math.min(max, toIndex)), 0, l);
   }
 
   clearActive(): void {
@@ -126,7 +162,7 @@ export class LayerStack {
   }
 
   clearAll(): void {
-    for (const l of this.layers) if (!l.isLineart) l.ctx.clearRect(0, 0, this.width, this.height);
+    for (const l of this.layers) if (!this.isLocked(l)) l.ctx.clearRect(0, 0, this.width, this.height);
   }
 
   /**

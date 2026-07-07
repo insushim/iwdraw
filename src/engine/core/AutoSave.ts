@@ -11,8 +11,17 @@ export interface SavedState {
   width: number;
   height: number;
   mode: string;
-  /** 레이어별 PNG blob(합성 전 원본 보존) */
-  layers: { id: string; name: string; visible: boolean; opacity: number; blend: string; png: Blob }[];
+  /** 레이어별 PNG blob(합성 전 원본 보존). isLineart/isBase는 복원 시 역할(잠금·위치·blend) 재현용 */
+  layers: {
+    id: string;
+    name: string;
+    visible: boolean;
+    opacity: number;
+    blend: string;
+    isLineart?: boolean;
+    isBase?: boolean;
+    png: Blob;
+  }[];
   /** 무비 모드용 스트로크 로그 JSON */
   recorder: string;
 }
@@ -36,18 +45,27 @@ function openDb(): Promise<IDBDatabase> {
 export class AutoSave {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly debounceMs: number;
+  private readonly maxWaitMs: number;
   private pending: (() => SavedState) | null = null;
   private saving = false;
+  /** 첫 schedule 시각 — 디바운스가 계속 리셋돼도 maxWait을 넘기면 강제 플러시 */
+  private pendingSince = 0;
 
-  constructor(debounceMs = 5000) {
+  constructor(debounceMs = 5000, maxWaitMs = 15000) {
     this.debounceMs = debounceMs;
+    this.maxWaitMs = maxWaitMs;
   }
 
   /** 상태 스냅샷 팩토리를 등록 — 디바운스 후 1회만 실제 저장 */
   schedule(snapshot: () => SavedState): void {
+    if (!this.pending) this.pendingSince = Date.now();
     this.pending = snapshot;
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.flush(), this.debounceMs);
+    // 쉼 없이 그리면 디바운스가 무한 리셋 → 세션 내내 저장 0회(실측: 웨일북 화면 꺼짐 통유실).
+    // 대기 시작 후 maxWait을 넘기면 디바운스를 무시하고 즉시 저장.
+    const elapsed = Date.now() - this.pendingSince;
+    const delay = elapsed >= this.maxWaitMs ? 0 : Math.min(this.debounceMs, this.maxWaitMs - elapsed);
+    this.timer = setTimeout(() => void this.flush(), delay);
   }
 
   async flush(): Promise<void> {

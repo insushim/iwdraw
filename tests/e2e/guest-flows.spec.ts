@@ -71,7 +71,12 @@ test("빈 캔버스: 가로/세로 방향을 바꿀 수 있다", async ({ page }
   const toggle = page.getByRole("button", { name: "캔버스 방향 바꾸기" });
   await expect(toggle).toBeVisible();
   await toggle.click();
-  await expect(page.getByText(/세로/)).toBeVisible();
+  // 라벨 텍스트는 lg 미만에서 숨겨지므로(hidden lg:inline) 실제 캔버스 방향으로 검증
+  const canvas = page.getByLabel("그림 캔버스");
+  await expect(async () => {
+    const box = await canvas.boundingBox();
+    expect(box && box.height > box.width).toBe(true);
+  }).toPass();
 });
 
 test("요금제: 무료/Pro 카드가 보인다", async ({ page }) => {

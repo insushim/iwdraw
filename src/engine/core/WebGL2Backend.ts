@@ -144,6 +144,12 @@ export class WebGL2Backend implements RendererBackend {
   private ctx: StrokeContext | null = null;
   /** 종이 결 모듈레이션 등 2D 포스트프로세스용(지연 생성) */
   private post2d: CanvasRenderingContext2D | null = null;
+  private lostCb: (() => void) | null = null;
+  private handleLost = (e: Event) => {
+    e.preventDefault();
+    this.ctx = null;
+    this.lostCb?.();
+  };
 
   constructor(
     private readonly width: number,
@@ -156,6 +162,8 @@ export class WebGL2Backend implements RendererBackend {
     if (!gl) throw new Error("WebGL2 컨텍스트 생성 실패");
     this.gl = gl;
     this.glCanvas = glCanvas;
+    // GL 컨텍스트는 이 내부 캔버스에 있다 — 로스 감지도 여기(display 캔버스는 2D라 이 이벤트가 안 옴)
+    glCanvas.addEventListener("webglcontextlost", this.handleLost);
 
     this.dabProg = link(gl, QUAD_VS, DAB_FS);
     this.copyProg = link(gl, FULLSCREEN_VS, COPY_FS);
@@ -431,7 +439,14 @@ export class WebGL2Backend implements RendererBackend {
     this.ctx = null;
   }
 
+  /** 컨텍스트 로스 콜백(화면 꺼짐→GPU 리셋 등) — CanvasManager가 백엔드 핫스왑에 사용 */
+  onContextLost(cb: () => void): void {
+    this.lostCb = cb;
+  }
+
   dispose(): void {
+    this.glCanvas.removeEventListener("webglcontextlost", this.handleLost);
+    this.lostCb = null;
     const gl = this.gl;
     gl.deleteProgram(this.dabProg);
     gl.deleteProgram(this.copyProg);

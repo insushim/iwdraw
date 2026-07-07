@@ -772,11 +772,11 @@ export class ArtEngine {
     this.requestComposite();
   }
 
-  /** 새 그림: 그리기 레이어를 1장으로 줄여 비우고 히스토리·기록·자동저장 초기화(도안은 유지) */
+  /** 새 그림: 그리기 레이어를 1장으로 줄여 비우고 히스토리·기록·자동저장 초기화(도안·원본은 유지) */
   newDrawing(): void {
-    const drawables = this.layers.info.filter((l) => !l.isLineart);
+    const drawables = this.layers.info.filter((l) => !l.isLineart && !l.isBase);
     for (const l of drawables.slice(1)) this.layers.removeLayer(l.id);
-    const first = this.layers.info.find((l) => !l.isLineart);
+    const first = this.layers.info.find((l) => !l.isLineart && !l.isBase);
     if (first) {
       this.layers.setActive(first.id);
       this.layers.setVisible(first.id, true);
@@ -836,16 +836,23 @@ export class ArtEngine {
     this.requestComposite();
   }
 
-  /** 이미지를 활성(그림) 레이어에 그대로 깔기 — "그대로 이어 그리기"(내 작업 이어서) */
+  /**
+   * 이미지를 잠금 원본 레이어(최하단)에 깔기 — "그대로 이어 그리기"(내 작업 이어서).
+   * 그리기 레이어에 깔면 지우개가 원본(도안 포함)까지 뚫어버린다(실사용 보고 2026-07-07)
+   * — 원본은 별도 잠금 레이어, 이번 세션 획만 그리기 레이어에.
+   */
   async loadBaseImage(src: string): Promise<void> {
     const img = await loadImage(src);
-    const layer = this.layers.active;
+    const layer = this.layers.addBase();
+    layer.ctx.clearRect(0, 0, this.width, this.height);
     const scale = Math.min(this.width / img.width, this.height / img.height);
     const dw = img.width * scale;
     const dh = img.height * scale;
     layer.ctx.drawImage(img, (this.width - dw) / 2, (this.height - dh) / 2, dw, dh);
+    this.emitLayers();
     this.requestComposite();
-    this.scheduleAutoSave();
+    // 여기서 scheduleAutoSave 금지 — 재진입 직후 초기 로드가 이전 저장본(복구 배너 대상)을
+    // 원본만 있는 상태로 덮어쓴다. 저장은 사용자의 실제 획(endStroke 등)부터.
   }
 
   /* ── 렌더 루프 ── */
@@ -915,6 +922,8 @@ export class ArtEngine {
         visible: l.visible,
         opacity: l.opacity,
         blend: l.blend,
+        isLineart: l.isLineart,
+        isBase: l.isBase,
         png: dataURLToBlobSync(l.canvas.toDataURL("image/png")),
       })),
       recorder: this.recorder.serialize(),
@@ -932,14 +941,21 @@ export class ArtEngine {
     const state = await this.autosave.restore();
     if (!state) return false;
     for (const saved of state.layers) {
-      const layer =
-        this.layers.list.find((l) => l.id === saved.id) ?? this.layers.addLayer(saved.name);
+      // 역할(도안/원본)로 먼저 매칭 — 재마운트로 id가 바뀌어도 잠금 레이어가
+      // 일반 레이어로 둔갑해 지우개에 뚫리는 사고 방지
+      const layer = saved.isLineart
+        ? (this.layers.lineart ?? this.layers.addLayer(saved.name, true))
+        : saved.isBase
+          ? this.layers.addBase(saved.name)
+          : (this.layers.list.find((l) => l.id === saved.id && !l.isLineart && !l.isBase) ??
+            this.layers.addLayer(saved.name));
       if (!layer) continue;
       const img = await blobToImage(saved.png);
       layer.ctx.clearRect(0, 0, this.width, this.height);
       layer.ctx.drawImage(img, 0, 0);
       this.layers.setVisible(layer.id, saved.visible);
       this.layers.setOpacity(layer.id, saved.opacity);
+      this.layers.setBlend(layer.id, saved.blend as LayerInfo["blend"]);
     }
     this.recorder.load(state.recorder);
     this.emitLayers();

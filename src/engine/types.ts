@@ -79,6 +79,8 @@ export interface LayerInfo {
   blend: BlendMode;
   /** 색칠 모드 라인아트 레이어 — 잠금(그리기 불가), 항상 최상단 multiply */
   isLineart: boolean;
+  /** 그대로 이어 그리기 원본 레이어 — 잠금(그리기·지우기 불가), 항상 최하단 */
+  isBase: boolean;
 }
 
 /** StrokeRecorder 로그의 한 항목(무비 모드/타임랩스 재생용) */
