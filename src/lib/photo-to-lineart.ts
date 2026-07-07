@@ -20,54 +20,105 @@ export async function photoToLineart(
   const data = sctx.getImageData(0, 0, w, h);
   const px = data.data;
 
-  // 1) 그레이스케일 + 약한 블러(노이즈 억제)
+  // 0) 그레이스케일 + "이미 도안"(선 작업물) 감지
   const gray = new Float32Array(w * h);
+  let whiteish = 0;
+  let darkLine = 0;
   for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
-    gray[i] = (px[p] * 0.299 + px[p + 1] * 0.587 + px[p + 2] * 0.114) / 255;
+    const r = px[p], g = px[p + 1], b = px[p + 2];
+    gray[i] = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+    const mx = Math.max(r, g, b);
+    const sat = mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx;
+    if (gray[i] > 0.88 && sat < 0.12) whiteish++;
+    if (gray[i] < 0.45 && sat < 0.3) darkLine++;
   }
-  const blurred = boxBlur(gray, w, h, 1);
+  const whiteFrac = whiteish / gray.length;
+  const darkFrac = darkLine / gray.length;
 
-  // 2) Sobel 엣지 강도
+  const out = sctx.createImageData(w, h);
+  const o = out.data;
+
+  if (whiteFrac > 0.5 && darkFrac > 0.003 && darkFrac < 0.25) {
+    // ── 이미 도안(흰 배경+검은 선, 색칠 포함 가능) → 엣지 검출 대신 어두운 무채색만 유지.
+    // Sobel을 다시 돌리면 선 양쪽에 이중 윤곽이 생겨 선이 진해지고 두꺼워진다
+    // ("다시 선따기 하니 더 진해짐" 2026-07-07 사용자 실측) — 이 경로는 멱등.
+    // 유채색(색칠)은 흰색으로 → 깨끗한 새 도안이 된다.
+    for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+      const mx = Math.max(px[p], px[p + 1], px[p + 2]);
+      const sat = mx === 0 ? 0 : (mx - Math.min(px[p], px[p + 1], px[p + 2])) / mx;
+      // 어둡고(≤0.62) 채도 낮은(선) 픽셀만 잉크로 — 임계 부근은 부드럽게
+      const t = (0.62 - gray[i]) / 0.14;
+      const ink = sat < 0.3 ? Math.max(0, Math.min(1, t)) : 0;
+      const v = Math.round(255 * (1 - ink));
+      o[p] = v;
+      o[p + 1] = v;
+      o[p + 2] = v;
+      o[p + 3] = 255;
+    }
+    sctx.putImageData(out, 0, 0);
+    return canvasToBlob(src);
+  }
+
+  // 1) 약한 블러(노이즈 억제) — 사진 경로
+  const blurred = boxBlur(gray, w, h, 1);
+  const coarse = boxBlur(gray, w, h, 3); // 굵은 윤곽용(2스케일)
+
+  // 2) Sobel 엣지 강도 — 미세(r1) + 굵은 윤곽(r3) 2스케일 결합(선따기 강화)
   const edge = new Float32Array(w * h);
+  const sobel = (f: Float32Array, i: number) => {
+    const gx =
+      -f[i - w - 1] - 2 * f[i - 1] - f[i + w - 1] + f[i - w + 1] + 2 * f[i + 1] + f[i + w + 1];
+    const gy =
+      -f[i - w - 1] - 2 * f[i - w] - f[i - w + 1] + f[i + w - 1] + 2 * f[i + w] + f[i + w + 1];
+    return Math.sqrt(gx * gx + gy * gy);
+  };
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x;
-      const gx =
-        -blurred[i - w - 1] - 2 * blurred[i - 1] - blurred[i + w - 1] +
-        blurred[i - w + 1] + 2 * blurred[i + 1] + blurred[i + w + 1];
-      const gy =
-        -blurred[i - w - 1] - 2 * blurred[i - w] - blurred[i - w + 1] +
-        blurred[i + w - 1] + 2 * blurred[i + w] + blurred[i + w + 1];
-      edge[i] = Math.sqrt(gx * gx + gy * gy);
+      edge[i] = Math.max(sobel(blurred, i), sobel(coarse, i) * 1.15);
     }
   }
 
-  // 3) 적응형 임계값(전역 평균+표준편차 기반)
+  // 3) 적응형 임계값(전역 평균+표준편차 기반) — 0.5→0.35: 약한 윤곽까지 살림(선따기 강화)
   let mean = 0;
   for (let i = 0; i < edge.length; i++) mean += edge[i];
   mean /= edge.length;
   let variance = 0;
   for (let i = 0; i < edge.length; i++) variance += (edge[i] - mean) ** 2;
   const std = Math.sqrt(variance / edge.length);
-  const threshold = mean + std * 0.5;
+  const threshold = mean + std * 0.35;
 
-  // 4) 검은 선/흰 배경 출력 (안티앨리어싱: 임계 부근 부드럽게)
-  const out = sctx.createImageData(w, h);
-  const o = out.data;
+  // 4) 검은 선/흰 배경 (임계 부근 부드럽게) + 3×3 반강도 팽창으로 선을 또렷하게
   const soft = Math.max(0.02, std * 0.4);
-  for (let i = 0, p = 0; i < edge.length; i++, p += 4) {
-    const t = (edge[i] - threshold) / soft;
-    const ink = Math.max(0, Math.min(1, t)); // 0=배경 1=선
-    const v = Math.round(255 * (1 - ink));
-    o[p] = v;
-    o[p + 1] = v;
-    o[p + 2] = v;
-    o[p + 3] = 255;
+  const ink = new Float32Array(w * h);
+  for (let i = 0; i < edge.length; i++) {
+    ink[i] = Math.max(0, Math.min(1, (edge[i] - threshold) / soft));
   }
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      let mx = 0;
+      for (const d of [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1]) {
+        if (ink[i + d] > mx) mx = ink[i + d];
+      }
+      const v = Math.round(255 * (1 - Math.max(ink[i], mx * 0.55)));
+      const p = i * 4;
+      o[p] = v;
+      o[p + 1] = v;
+      o[p + 2] = v;
+      o[p + 3] = 255;
+    }
+  }
+  // 가장자리 1px는 흰색으로
+  for (let i = 0, p = 3; i < gray.length; i++, p += 4) if (o[p] === 0) { o[p] = 255; o[p - 1] = o[p - 2] = o[p - 3] = 255; }
   sctx.putImageData(out, 0, 0);
 
+  return canvasToBlob(src);
+}
+
+function canvasToBlob(c: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    src.toBlob((b) => (b ? resolve(b) : reject(new Error("변환 실패"))), "image/webp", 0.9);
+    c.toBlob((b) => (b ? resolve(b) : reject(new Error("변환 실패"))), "image/webp", 0.9);
   });
 }
 

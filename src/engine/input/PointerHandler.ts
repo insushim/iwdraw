@@ -26,6 +26,12 @@ export class PointerHandler {
   /** 속도 기반 필압 시뮬 상태(마우스·손가락) */
   private lastMove: { x: number; y: number; t: number } | null = null;
   private speedEma = 0;
+  /** 필압 반영(펜 실필압 + 마우스/손가락 속도 시뮬) on/off — off면 균일 획 */
+  private pressureEnabled = true;
+
+  setPressureEnabled(on: boolean): void {
+    this.pressureEnabled = on;
+  }
   /** 그리던 포인터의 마지막 점 — 멀티터치 전환 시 두 번째 손가락 좌표로 점프 커밋되는 것 방지 */
   private lastDrawPoint: StrokePoint | null = null;
 
@@ -44,7 +50,9 @@ export class PointerHandler {
   private toStrokePoint(e: PointerEvent): StrokePoint {
     const { x, y } = this.toLocal(e.clientX, e.clientY);
     let pressure: number;
-    if (e.pointerType === "pen" && e.pressure > 0) {
+    if (!this.pressureEnabled) {
+      pressure = 0.7; // 균일 획(필압 끔) — 웨일북처럼 펜 필압이 안 오는 기기 대응
+    } else if (e.pointerType === "pen" && e.pressure > 0) {
       pressure = e.pressure; // 스타일러스: 실제 필압
     } else {
       // 마우스/손가락: 속도 기반 필압 시뮬(EMA) — 느리면 굵고 진하게

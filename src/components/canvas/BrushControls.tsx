@@ -17,6 +17,8 @@ export function BrushControls() {
   const color = useEditor((s) => s.color);
   const mode = useEditor((s) => s.mode);
   const brush = useEditor((s) => s.brush);
+  const pressureOn = useEditor((s) => s.pressureOn);
+  const togglePressure = useEditor((s) => s.togglePressure);
 
   const preview = Math.max(4, Math.min(60, size * (BRUSH_SIZE_SCALE[brush] ?? 1)));
 
@@ -90,6 +92,26 @@ export function BrushControls() {
           className="mt-1 h-4 w-full cursor-pointer appearance-none rounded-full bg-cream-deep accent-leaf"
         />
       </label>
+
+      {/* 필압: 펜 실필압 + 마우스/손가락 속도 시뮬. 필압이 안 오는 기기(웨일북 등)는 끄면 균일 획 */}
+      <div className="mt-3 flex items-center justify-between text-sm text-ink-soft">
+        <span>✍️ 필압 (누르는 세기·속도 반영)</span>
+        <button
+          onClick={togglePressure}
+          role="switch"
+          aria-checked={pressureOn}
+          aria-label="필압 켜기/끄기"
+          className={`pressable relative h-6 w-11 rounded-full transition-colors ${
+            pressureOn ? "bg-leaf" : "bg-cream-deep"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
+              pressureOn ? "left-[22px]" : "left-0.5"
+            }`}
+          />
+        </button>
+      </div>
     </div>
   );
 }

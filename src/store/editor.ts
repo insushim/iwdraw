@@ -17,6 +17,10 @@ export interface EditorState {
   brush: BrushId;
   color: RGB;
   recentColors: RGB[];
+  /** 필압 반영(펜 실필압+속도 시뮬) — 웨일북처럼 필압이 안 오는 기기는 끄면 균일 획 */
+  pressureOn: boolean;
+  /** 스포이트 진입 전 붓 — 색 찍으면 자동 복귀 */
+  prevBrush: BrushId | null;
   size: number;
   opacity: number;
   water: number;
@@ -42,6 +46,7 @@ export interface EditorState {
   setMode: (m: Mode) => void;
   setBrush: (b: BrushId) => void;
   setColor: (c: RGB) => void;
+  togglePressure: () => void;
   setSize: (n: number) => void;
   setOpacity: (n: number) => void;
   setWater: (n: number) => void;
@@ -73,6 +78,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   brush: "pencil",
   color: DEFAULT_PALETTE_INK,
   recentColors: [],
+  pressureOn: true,
+  prevBrush: null,
   size: 18,
   opacity: 1,
   water: 0.6,
@@ -97,6 +104,24 @@ export const useEditor = create<EditorState>((set, get) => ({
       ),
       engine.on("strokeLatency", ({ ms }) => set({ latencyMs: Math.round(ms) })),
       engine.on("restoreAvailable", ({ savedAt }) => set({ restoreAvailable: savedAt })),
+      // 최근 색은 "실제로 그린 색"만 — setColor 시점 기록은 밝기 슬라이더 드래그가 도배(실측)
+      engine.on("colorPicked", ({ color: c }) => {
+        // 스포이트: 색 반영 후 이전 붓으로 자동 복귀
+        get().engine?.setColor(c);
+        const prev = get().prevBrush;
+        if (prev) {
+          get().engine?.setBrush(prev);
+          set({ color: c, brush: prev, prevBrush: null });
+        } else {
+          set({ color: c });
+        }
+      }),
+      engine.on("colorUsed", ({ color: c }) => {
+        const key = (r: RGB) => `${r.r},${r.g},${r.b}`;
+        set((s) => ({
+          recentColors: [c, ...s.recentColors.filter((r) => key(r) !== key(c))].slice(0, 8),
+        }));
+      }),
     ];
     // 엔진 constructor가 이미 emit한 초기 상태를 직접 동기화(구독이 늦게 붙어 놓침)
     const stack = engine.getLayers();
@@ -123,6 +148,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     engine.setStabilize(s.stabilize);
     engine.setSymmetry(s.symmetry);
     engine.setQuickShape(s.quickShape);
+    engine.setPressureEnabled(s.pressureOn);
     void engine.checkRestore();
   },
 
@@ -140,14 +166,21 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
   setBrush: (b) => {
     get().engine?.setBrush(b);
-    set({ brush: b });
+    // 스포이트 진입 시 이전 붓 기억(색 찍으면 자동 복귀), 스포이트→스포이트는 유지
+    set((s) => ({
+      brush: b,
+      prevBrush: b === "eyedropper" ? (s.brush === "eyedropper" ? s.prevBrush : s.brush) : null,
+    }));
   },
   setColor: (c) => {
     get().engine?.setColor(c);
+    set({ color: c }); // 최근 색 기록은 colorUsed(실제로 그린 순간) 구독이 담당
+  },
+  togglePressure: () => {
     set((s) => {
-      const key = (x: RGB) => `${x.r},${x.g},${x.b}`;
-      const recent = [c, ...s.recentColors.filter((r) => key(r) !== key(c))].slice(0, 8);
-      return { color: c, recentColors: recent };
+      const on = !s.pressureOn;
+      get().engine?.setPressureEnabled(on);
+      return { pressureOn: on };
     });
   },
   setSize: (n) => {

@@ -25,6 +25,11 @@ export function DrawClient() {
     templateParam === "custom" && typeof window !== "undefined"
       ? sessionStorage.getItem("arton.customLineart") ?? undefined
       : templateParam;
+  // 그대로 이어 그리기: 변환 없이 그림 레이어에 까는 원본(게스트, sessionStorage)
+  const baseSrc =
+    params.get("base") === "custom" && typeof window !== "undefined"
+      ? sessionStorage.getItem("arton.customBase") ?? undefined
+      : undefined;
   const modeParam = params.get("mode");
   const initialMode = MODES.includes(modeParam as Mode) ? (modeParam as Mode) : undefined;
   const room = params.get("room") ?? undefined;
@@ -65,6 +70,7 @@ export function DrawClient() {
     <>
       <Editor
         lineartSrc={template}
+        baseSrc={baseSrc}
         initialMode={initialMode}
         room={room}
         onSave={session ? handleSave : undefined}

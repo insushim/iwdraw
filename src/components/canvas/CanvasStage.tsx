@@ -16,6 +16,8 @@ import { fitAspectHelper } from "@/lib/aspect";
 export interface CanvasStageProps {
   /** 색칠 모드 초기 도안 URL */
   lineartSrc?: string;
+  /** 그대로 이어 그리기 — 변환 없이 그림 레이어에 까는 원본 이미지 */
+  baseSrc?: string;
   /** 초기 모드(랜딩에서 ?mode=... 로 진입) */
   initialMode?: Mode;
   /** 빈 캔버스 방향 */
@@ -37,6 +39,7 @@ function loadImageSize(src: string): Promise<number> {
 
 export function CanvasStage({
   lineartSrc,
+  baseSrc,
   initialMode,
   orientation = "landscape",
   onEngineReady,
@@ -53,13 +56,14 @@ export function CanvasStage({
     (async () => {
       let aspect: number;
       if (lineartSrc) aspect = await loadImageSize(lineartSrc);
+      else if (baseSrc) aspect = await loadImageSize(baseSrc);
       else aspect = orientation === "portrait" ? 1152 / 1536 : 1536 / 1152;
       if (!cancelled) setSize(fitCanvasSize(aspect));
     })();
     return () => {
       cancelled = true;
     };
-  }, [lineartSrc, orientation]);
+  }, [lineartSrc, baseSrc, orientation]);
 
   // 2단계: 크기 확정 후 엔진 마운트
   useEffect(() => {
@@ -80,6 +84,10 @@ export function CanvasStage({
     if (lineartSrc) {
       store.setMode("coloring");
       void engine.loadLineart(lineartSrc);
+    } else if (baseSrc) {
+      // 그대로 이어 그리기 — 원본을 그림 레이어에 깔고 자유 그리기 모드
+      if (initialMode) store.setMode(initialMode);
+      void engine.loadBaseImage(baseSrc);
     } else if (initialMode) {
       store.setMode(initialMode);
     }

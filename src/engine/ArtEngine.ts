@@ -32,6 +32,7 @@ import { Stabilizer, strengthToStreamline } from "./input/Stabilizer";
 import { mirrorPoint } from "./tools/Symmetry";
 import { detectShape, QUICKSHAPE_HOLD_MS } from "./tools/QuickShape";
 import type { StrokeContext } from "./core/backend";
+import { blendToComposite } from "./core/backend";
 import type { TipKind } from "./brushes/BrushBase";
 import { loadTipOverrides } from "./core/tipLoader";
 
@@ -242,6 +243,9 @@ export class ArtEngine {
   setQuickShape(on: boolean): void {
     this.quickShapeEnabled = on;
   }
+  setPressureEnabled(on: boolean): void {
+    this.pointer.setPressureEnabled(on);
+  }
 
   /* ── 스트로크 파이프라인 ── */
   /** 모드가 캔버스(종이)를 결정 — 유화=린넨천, 수채=수채용지, 그 외=매끈한 도화지 */
@@ -281,6 +285,11 @@ export class ArtEngine {
     // 번짐(스머지)은 dab 파이프라인이 아니라 레이어 직접 편집
     if (this.brushId === "smudge") {
       this.smudgeBegin(p);
+      return;
+    }
+    // 스포이트: 탭 지점의 화면 색을 찍어 알린다(그리지 않음)
+    if (this.brushId === "eyedropper") {
+      this.emit("colorPicked", { color: this.pickColor(p.x, p.y) });
       return;
     }
     this.brush = createBrush(this.brushId);
@@ -437,6 +446,34 @@ export class ArtEngine {
     this.scheduleAutoSave();
   }
 
+  /** 스포이트 — 보이는 레이어들을 흰 종이 위에 합성한 색(종이 결 틴트는 제외: 그리기 색 기준) */
+  private pickCtx: CanvasRenderingContext2D | null = null;
+
+  private pickColor(x: number, y: number): RGB {
+    if (!this.pickCtx) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 1;
+      this.pickCtx = c.getContext("2d", { willReadFrequently: true })!;
+    }
+    const ctx = this.pickCtx;
+    const sx = Math.max(0, Math.min(this.width - 1, Math.round(x)));
+    const sy = Math.max(0, Math.min(this.height - 1, Math.round(y)));
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 1, 1);
+    for (const layer of this.layers.list) {
+      if (!layer.visible) continue;
+      ctx.globalAlpha = layer.opacity;
+      ctx.globalCompositeOperation = blendToComposite(layer.blend);
+      ctx.drawImage(layer.canvas, sx, sy, 1, 1, 0, 0, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    const d = ctx.getImageData(0, 0, 1, 1).data;
+    return { r: d[0], g: d[1], b: d[2] };
+  }
+
   private snapshotActiveLayer(): Uint8ClampedArray {
     return new Uint8ClampedArray(
       this.layers.active.ctx.getImageData(0, 0, this.width, this.height).data,
@@ -528,6 +565,7 @@ export class ArtEngine {
       symmetry: this.symmetry,
       points: this.curPoints,
     });
+    if (this.brushId !== "eraser") this.emit("colorUsed", { color: this.settings.color });
     this.brush = null;
     this.curPoints = [];
     this.scheduleAutoSave();
@@ -690,6 +728,7 @@ export class ArtEngine {
     const after = copyTiles(img.data, this.width, tiles);
     const before = copyTiles(beforeFull, this.width, tiles);
     this.pushTileCommand(layer, tiles, before, after);
+    this.emit("colorUsed", { color: this.settings.color });
     this.recorder.record({
       brush: "fill",
       settings: { ...this.settings },
@@ -795,6 +834,18 @@ export class ArtEngine {
     la.ctx.drawImage(img, (this.width - dw) / 2, (this.height - dh) / 2, dw, dh);
     this.emitLayers();
     this.requestComposite();
+  }
+
+  /** 이미지를 활성(그림) 레이어에 그대로 깔기 — "그대로 이어 그리기"(내 작업 이어서) */
+  async loadBaseImage(src: string): Promise<void> {
+    const img = await loadImage(src);
+    const layer = this.layers.active;
+    const scale = Math.min(this.width / img.width, this.height / img.height);
+    const dw = img.width * scale;
+    const dh = img.height * scale;
+    layer.ctx.drawImage(img, (this.width - dw) / 2, (this.height - dh) / 2, dw, dh);
+    this.requestComposite();
+    this.scheduleAutoSave();
   }
 
   /* ── 렌더 루프 ── */

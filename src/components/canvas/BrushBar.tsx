@@ -19,6 +19,7 @@ const BRUSH_ICON: Partial<Record<BrushId, IconName>> = {
   smudge: "smudge",
   eraser: "eraser",
   fill: "fill",
+  eyedropper: "picker",
 };
 
 /*
@@ -36,6 +37,7 @@ export function BrushBar() {
       label: b.label,
     })),
     { id: "fill", label: "페인트통" },
+    { id: "eyedropper", label: "스포이트" },
   ];
 
   return (

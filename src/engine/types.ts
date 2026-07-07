@@ -15,6 +15,7 @@ export type BrushId =
   | "glow"
   | "rainbow"
   | "smudge"
+  | "eyedropper"
   | "eraser"
   | "fill"
   | "stamp"
@@ -123,6 +124,11 @@ export interface EngineEvents {
   restoreAvailable: { savedAt: number };
   strokeCommitted: StrokeCommitted;
   pointerMoved: { x: number; y: number };
+  /** 색이 실제로 캔버스에 쓰임(획 커밋·페인트통) — 최근 색 기록용.
+   * setColor 시점에 기록하면 밝기 슬라이더 드래그가 최근 색을 도배한다(2026-07-07 실측) */
+  colorUsed: { color: RGB };
+  /** 스포이트로 캔버스에서 색을 찍음 — UI가 색 반영 후 이전 붓으로 복귀 */
+  colorPicked: { color: RGB };
 }
 
 export type EngineEventName = keyof EngineEvents;

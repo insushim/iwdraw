@@ -71,11 +71,21 @@ export function ColoringGallery() {
     return () => window.removeEventListener("paste", onPaste);
   }, []);
 
-  const startWith = async (kind: "lineart" | "underlay") => {
+  const startWith = async (kind: "lineart" | "underlay" | "continue") => {
     if (!pending) return;
     setConverting(true);
     setError(null);
     try {
+      if (kind === "continue") {
+        // 그대로 이어 그리기: 변환 없이 원본을 그림 레이어에 깔고 계속 그린다
+        // (작업하던 그림을 다시 선따기 하면 선이 이중으로 진해지는 문제의 정공법)
+        const dataUrl = await blobToDataUrl(pending.file);
+        sessionStorage.setItem("arton.customBase", dataUrl);
+        URL.revokeObjectURL(pending.url);
+        setPending(null);
+        router.push("/draw?base=custom");
+        return;
+      }
       const blob =
         kind === "lineart" ? await photoToLineart(pending.file) : await photoToUnderlay(pending.file);
       const dataUrl = await blobToDataUrl(blob);
@@ -223,7 +233,7 @@ export function ColoringGallery() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={pending.url} alt="가져온 그림" className="max-h-56 w-auto rounded-lg" />
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <button
                 onClick={() => startWith("lineart")}
                 disabled={converting}
@@ -242,6 +252,16 @@ export function ColoringGallery() {
                 <span className="font-display text-lg">🖊️ 밑그림 따라 그리기</span>
                 <span className="mt-1 block text-sm text-white/85">
                   옅게 깔린 그림 위에 내가 직접 선을 따요
+                </span>
+              </button>
+              <button
+                onClick={() => startWith("continue")}
+                disabled={converting}
+                className="pressable rounded-card bg-leaf px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
+              >
+                <span className="font-display text-lg">🎨 그대로 이어 그리기</span>
+                <span className="mt-1 block text-sm text-white/85">
+                  그리던 그림을 그대로 불러와 계속 그려요
                 </span>
               </button>
             </div>
