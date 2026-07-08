@@ -23,6 +23,8 @@ export interface EditorProps {
   lineartSrc?: string;
   /** 그대로 이어 그리기 — 변환 없이 그림 레이어에 까는 원본 이미지 */
   baseSrc?: string;
+  /** 진입마다 고유한 토큰(URL의 ?v=) — 같은 커스텀 이미지 URL 재진입 시 강제 재마운트용 */
+  navKey?: string;
   initialMode?: import("@/engine/types").Mode;
   /** 협동 방 코드 */
   room?: string;
@@ -40,7 +42,7 @@ export interface EditorProps {
  *  헤더 = 뒤로 · 로고 · [모드 탭] · 방향/무비/저학년 · 저장(주요 버튼)
  *  본체 = 좌 도구 레일(세로) · 캔버스(플로팅 되돌리기/다시) · 우 색/굵기/마법/레이어
  */
-export function Editor({ lineartSrc, baseSrc, initialMode, room, onSave, who, backHref = "/", galleryHref }: EditorProps) {
+export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave, who, backHref = "/", galleryHref }: EditorProps) {
   useKeyboard();
   const engineRef = useRef<ArtEngine | null>(null);
   const [engine, setEngine] = useState<ArtEngine | null>(null);
@@ -215,7 +217,17 @@ export function Editor({ lineartSrc, baseSrc, initialMode, room, onSave, who, ba
         {/* 중앙: 캔버스 + 플로팅 되돌리기/다시 */}
         <div className="relative order-1 min-h-0 flex-1 md:order-2">
           <CanvasStage
-            key={lineartSrc ? `t:${lineartSrc}` : baseSrc ? `b:${baseSrc.slice(0, 64)}` : `o:${orientation}`}
+            // navKey(진입 고유 토큰)가 있으면 그것으로 key 고정 — 커스텀 이미지는 dataURL 앞부분이
+            // 같아(같은 크기) slice(0,64) 충돌 → 2회차 재마운트 실패하던 버그의 근본 수정.
+            key={
+              navKey
+                ? `v:${navKey}`
+                : lineartSrc
+                  ? `t:${lineartSrc}`
+                  : baseSrc
+                    ? `b:${baseSrc.slice(0, 64)}`
+                    : `o:${orientation}`
+            }
             lineartSrc={lineartSrc}
             baseSrc={baseSrc}
             initialMode={initialMode}

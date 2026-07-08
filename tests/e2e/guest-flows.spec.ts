@@ -85,3 +85,64 @@ test("요금제: 무료/Pro 카드가 보인다", async ({ page }) => {
   await expect(page.getByText("월 4,900원", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "요금제" })).toBeVisible();
 });
+
+// 회귀: 이어그리기 두 번째 진입이 무반응이던 버그(2026-07-08). 같은 크기 이미지의
+// dataURL 앞부분이 같아 CanvasStage key가 충돌 → 재마운트 실패. 진입마다 고유 v 토큰으로 수정.
+test("이어그리기: 두 번 연속 진입해도 매번 새 캔버스로 열린다", async ({ page }) => {
+  await page.goto("/coloring");
+  // 같은 400x300 PNG 두 장(내용만 다름) → 구버전이면 key 충돌
+  const [a, b] = await page.evaluate(() => {
+    const mk = (bg: string) => {
+      const c = document.createElement("canvas");
+      c.width = 400;
+      c.height = 300;
+      const x = c.getContext("2d")!;
+      x.fillStyle = bg;
+      x.fillRect(0, 0, 400, 300);
+      return c.toDataURL("image/png");
+    };
+    return [mk("#dd3333"), mk("#22aa22")];
+  });
+  const dataUrlToBuf = (d: string) => Buffer.from(d.split(",")[1], "base64");
+
+  const continueWith = async (dataUrl: string) => {
+    await page.setInputFiles('input[type="file"]', {
+      name: "cont.png",
+      mimeType: "image/png",
+      buffer: dataUrlToBuf(dataUrl),
+    });
+    await page.getByRole("button", { name: /그대로 이어 그리기/ }).click();
+    await page.waitForURL(/\/draw\?base=custom/);
+    return new URL(page.url()).searchParams.get("v");
+  };
+  const bgColor = async () => {
+    await expect(page.getByLabel("그림 캔버스")).toBeVisible();
+    await page.waitForTimeout(700);
+    return page.getByLabel("그림 캔버스").evaluate((c: HTMLCanvasElement) => {
+      const g = document.createElement("canvas");
+      g.width = c.width;
+      g.height = c.height;
+      const x = g.getContext("2d")!;
+      x.drawImage(c, 0, 0);
+      const d = x.getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data;
+      return { r: d[0], g: d[1], b: d[2] };
+    });
+  };
+
+  const v1 = await continueWith(a);
+  const c1 = await bgColor();
+  expect(c1.r).toBeGreaterThan(150); // 빨강 A
+
+  await page.goBack();
+  await expect(page.getByRole("button", { name: /내 사진·그림으로/ })).toBeVisible();
+
+  const v2 = await continueWith(b);
+  const c2 = await bgColor();
+  expect(c2.g).toBeGreaterThan(120); // 초록 B — 두 번째도 새 이미지 로드
+  expect(c2.r).toBeLessThan(150);
+
+  // 진입마다 고유 토큰 → 항상 새 네비게이션/재마운트 보장(수정의 핵심)
+  expect(v1).toBeTruthy();
+  expect(v2).toBeTruthy();
+  expect(v1).not.toBe(v2);
+});

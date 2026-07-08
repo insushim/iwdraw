@@ -76,6 +76,10 @@ export function ColoringGallery() {
     setConverting(true);
     setError(null);
     try {
+      // 매 진입마다 고유 토큰(v) — 두 번째 이어그리기/선따기가 첫 번째와 URL·컴포넌트 key가
+      // 같아 라우터 캐시가 이전 캔버스를 재사용, 새 이미지가 안 열리던 버그의 정공법
+      // (2026-07-08 실사용 보고: 같은 크기 이미지의 dataURL 앞부분이 동일 → key 충돌).
+      const v = Date.now().toString(36);
       if (kind === "continue") {
         // 그대로 이어 그리기: 변환 없이 원본을 그림 레이어에 깔고 계속 그린다
         // (작업하던 그림을 다시 선따기 하면 선이 이중으로 진해지는 문제의 정공법)
@@ -83,7 +87,7 @@ export function ColoringGallery() {
         sessionStorage.setItem("arton.customBase", dataUrl);
         URL.revokeObjectURL(pending.url);
         setPending(null);
-        router.push("/draw?base=custom");
+        router.push(`/draw?base=custom&v=${v}`);
         return;
       }
       const blob =
@@ -92,7 +96,7 @@ export function ColoringGallery() {
       sessionStorage.setItem("arton.customLineart", dataUrl);
       URL.revokeObjectURL(pending.url);
       setPending(null);
-      router.push("/draw?template=custom&mode=coloring");
+      router.push(`/draw?template=custom&mode=coloring&v=${v}`);
     } catch {
       setError("사진을 도안으로 바꾸지 못했어요. 다른 사진을 써 보세요.");
     } finally {
