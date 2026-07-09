@@ -167,6 +167,14 @@ function polyStroke(pts: [number, number][], close = false, perEdge = 14): Pt[] 
   return out;
 }
 
+/** 타원 호 점열(extra-templates의 arc와 동일 규칙) */
+function arcPts(cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, n = 20): Pt[] {
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const a = a0 + ((a1 - a0) * i) / n;
+    return { x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) };
+  });
+}
+
 /** 실서비스와 같은 손그림 변형 풀(SVG 템플릿은 DOM 필요라 테스트에선 변형만) */
 const VARIANT_POOL: SketchTemplate[] = EXTRA_SKETCH_VARIANTS.map((v) => ({
   stampId: v.stampId,
@@ -235,6 +243,57 @@ describe("손그림 변형 템플릿", () => {
       jitter(polyStroke([[150, 170], [190, 250]]), 4, 66),
     ];
     expect(recognizeAgainst(strokes, VARIANT_POOL)[0]?.stampId).toBe("person");
+  });
+
+  it("3차 확장 대표 소재가 132종 중 상위 후보로 인식된다(유사형태 충돌 점검)", () => {
+    // 각 소재의 대표 스케치를 지터해 표본과 다르게 — 상위 3위 안에 정답이 있으면 통과
+    const near = (kind: string, strokes: Pt[][], seed: number) => {
+      const jittered = strokes.map((s, i) => jitter(s, 6, seed + i));
+      const out = recognizeAgainst(jittered, VARIANT_POOL);
+      const rank = out.findIndex((c) => c.stampId === kind);
+      expect(rank, `${kind} not in top: ${out.map((c) => c.stampId).join(",")}`).toBeGreaterThanOrEqual(0);
+      expect(rank, `${kind} rank ${rank}`).toBeLessThan(3);
+    };
+    const circleAt = (cx: number, cy: number, r: number) =>
+      Array.from({ length: 32 }, (_, i) => {
+        const t = (i / 32) * Math.PI * 2;
+        return { x: cx + Math.cos(t) * r, y: cy + Math.sin(t) * r };
+      });
+    // 거미: 몸 원 + 다리 8
+    near(
+      "spider",
+      [
+        circleAt(50, 52, 18),
+        polyStroke([[32, 46], [8, 34]]),
+        polyStroke([[32, 52], [6, 54]]),
+        polyStroke([[32, 58], [10, 74]]),
+        polyStroke([[34, 64], [22, 88]]),
+        polyStroke([[68, 46], [92, 34]]),
+        polyStroke([[68, 52], [94, 54]]),
+        polyStroke([[68, 58], [90, 74]]),
+        polyStroke([[66, 64], [78, 88]]),
+      ],
+      101,
+    );
+    // 자전거: 바퀴 두 원 + 프레임
+    near(
+      "bicycle",
+      [circleAt(24, 66, 20), circleAt(76, 66, 20), polyStroke([[24, 66], [42, 30], [66, 30], [76, 66], [42, 30]])],
+      110,
+    );
+    // 햄버거: 층 구조
+    near(
+      "hamburger",
+      [
+        [...arcPts(50, 34, 40, 22, Math.PI, Math.PI * 2, 16)],
+        polyStroke([[10, 44], [90, 44]]),
+        polyStroke([[12, 56], [88, 56]]),
+        [...arcPts(50, 66, 38, 14, 0, Math.PI, 14), ...polyStroke([[88, 66], [12, 66]])],
+      ],
+      120,
+    );
+    // 텐트: 삼각 + 입구
+    near("tent", [polyStroke([[50, 12], [12, 88], [88, 88]], true), polyStroke([[50, 40], [38, 88], [62, 88]], true)], 130);
   });
 
   it("같은 스탬프의 표본이 여러 개여도 후보엔 스탬프당 1개(최고점)만", () => {
