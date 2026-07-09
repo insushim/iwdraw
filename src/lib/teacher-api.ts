@@ -79,6 +79,26 @@ export async function regenerateCode(id: string): Promise<string | null> {
   }
 }
 
+export interface StudentRow {
+  id: string;
+  nickname: string;
+  created_at: number;
+  artwork_count: number;
+  last_artwork_at: number | null;
+}
+
+/** 학급 학생(별명) 명단 — 아이가 별명을 까먹으면 선생님이 찾아 알려준다 */
+export async function listStudents(classId: string): Promise<StudentRow[]> {
+  if (!hasBackend()) return [];
+  try {
+    const res = await apiFetch(`/classes/${classId}/students`);
+    if (!res.ok) return [];
+    return (await res.json()) as StudentRow[];
+  } catch {
+    return [];
+  }
+}
+
 export async function listArtworks(classId: string): Promise<ArtworkRow[]> {
   if (!hasBackend()) return [];
   try {

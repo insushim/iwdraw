@@ -7,6 +7,7 @@ import { ArtonLogo } from "@/components/arton-logo";
 import { CLASS_CODE_LENGTH, hasHangul, isValidClassCode, normalizeClassCode } from "@/lib/class-code";
 import { suggestNickname, validateNickname } from "@/lib/nickname";
 import { joinClass } from "@/lib/join-client";
+import { getRememberedNickname } from "@/lib/student-session";
 import { hasBackend } from "@/lib/backend";
 
 type Step = "code" | "nickname";
@@ -21,10 +22,16 @@ export function JoinClient() {
   const [busy, setBusy] = useState(false);
   // 한글 IME 감지 — 코드 문자셋이 영문·숫자뿐이라 한글은 조용히 걸러진다(한/영 전환 안내)
   const [imeWarn, setImeWarn] = useState(false);
+  // 이 기기에서 이 학급에 마지막으로 쓴 별명 — 있으면 기본값(같은 학생으로 이어짐).
+  // 별명을 까먹고 매번 새로 만들면 학급 학생 수가 계속 늘어난다(2026-07-09 보고)
+  const [savedNick, setSavedNick] = useState<string | null>(null);
 
   useEffect(() => {
-    if (step === "nickname" && !nickname) setNickname(suggestNickname());
-  }, [step, nickname]);
+    if (step !== "nickname") return;
+    const saved = isValidClassCode(code) ? getRememberedNickname(code) : null;
+    setSavedNick(saved);
+    if (!nickname) setNickname(saved ?? suggestNickname());
+  }, [step, code, nickname]);
 
   const enter = async () => {
     const v = validateNickname(nickname);
@@ -112,9 +119,32 @@ export function JoinClient() {
                   🎲
                 </button>
               </div>
+              {/* 별명 기억 안내 — 같은 별명 = 같은 학생으로 이어짐 */}
+              {savedNick && nickname.trim() === savedNick && (
+                <p className="mt-3 rounded-card bg-leaf-soft px-3 py-2 text-center text-sm font-semibold text-leaf-deep" role="status">
+                  🧢 지난번에 이 별명으로 들어왔어요 — 그대로 들어가면 내 작품이 이어져요!
+                </p>
+              )}
+              {savedNick && nickname.trim() !== savedNick && (
+                <div className="mt-3 rounded-card bg-sun-soft px-3 py-2 text-center text-sm" role="status">
+                  <p className="font-semibold text-ink">
+                    ⚠️ 지난번 별명은 <b>{savedNick}</b>이에요. 새 별명으로 들어가면{" "}
+                    <b>새 학생으로 등록</b>돼요!
+                  </p>
+                  <button
+                    onClick={() => {
+                      setNickname(savedNick);
+                      setError(null);
+                    }}
+                    className="pressable mt-1.5 rounded-full bg-paper px-3 py-1 text-sm font-bold text-leaf-deep shadow-soft"
+                  >
+                    지난번 별명({savedNick}) 쓰기
+                  </button>
+                </div>
+              )}
               {error && <p className="mt-3 text-center text-sm font-semibold text-danger">{error}</p>}
               <Button onClick={enter} disabled={busy} size="lg" tone="leaf" className="mt-6 w-full">
-                {busy ? "입장 중…" : "그리러 가기 🎨"}
+                {busy ? "입장 중…" : savedNick && nickname.trim() === savedNick ? "이어서 그리러 가기 🎨" : "그리러 가기 🎨"}
               </Button>
               <button
                 onClick={() => setStep("code")}

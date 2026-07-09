@@ -9,9 +9,11 @@ import { GALLERY_GRID, GallerySizeControl, useGallerySize } from "@/components/g
 import {
   deleteArtwork,
   listArtworks,
+  listStudents,
   signedUrl,
   type ArtworkRow,
   type ClassRow,
+  type StudentRow,
 } from "@/lib/teacher-api";
 
 /* 학급 갤러리: 날짜별 작품 목록 + 필요 없는 작품 삭제(큐레이션) + 작품집 A4 인쇄.
@@ -50,11 +52,15 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
   };
   const [delError, setDelError] = useState(false);
   const [dlError, setDlError] = useState(false);
+  // 학생 별명 명단 — 아이가 별명을 까먹으면 여기서 찾아 알려준다(접이식)
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const list = await listArtworks(klass.id);
+    const [list, roster] = await Promise.all([listArtworks(klass.id), listStudents(klass.id)]);
     setItems(list);
+    setStudents(roster);
     setLoading(false);
     // 썸네일 서명 URL 병렬 로드
     const entries = await Promise.all(
@@ -123,6 +129,44 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
         <p className="mb-3 rounded-card bg-danger-soft px-4 py-2 text-sm font-semibold text-danger" role="status">
           작품을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.
         </p>
+      )}
+
+      {/* 학생 별명 명단 — 별명을 까먹은 아이에게 알려주는 용도(접이식) */}
+      {students.length > 0 && (
+        <div className="mb-4 rounded-card bg-paper shadow-soft">
+          <button
+            onClick={() => setRosterOpen((o) => !o)}
+            aria-expanded={rosterOpen}
+            className="pressable flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <span className="font-display text-base text-ink">
+              👧 우리 반 별명 <span className="text-sm font-normal text-ink-faint">{students.length}명</span>
+            </span>
+            <span className="text-ink-faint">{rosterOpen ? "▲ 접기" : "▼ 펼치기"}</span>
+          </button>
+          {rosterOpen && (
+            <div className="border-t border-cream-deep px-4 pb-4 pt-3">
+              <p className="mb-2 text-xs text-ink-faint">
+                아이가 별명을 까먹었을 때 여기서 찾아 알려주세요 — 같은 별명으로 들어와야 같은
+                학생으로 이어져요. 작품 0점은 별명을 잘못 만들고 나간 경우일 수 있어요.
+              </p>
+              <ul className="flex flex-wrap gap-1.5">
+                {students.map((s) => (
+                  <li
+                    key={s.id}
+                    className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                      s.artwork_count > 0 ? "bg-sky-soft text-sky-deep" : "bg-cream text-ink-faint"
+                    }`}
+                    title={`들어온 날 ${dayStamp(s.created_at)} · 작품 ${s.artwork_count}점`}
+                  >
+                    {s.nickname}
+                    <span className="ml-1 text-xs font-normal opacity-70">{s.artwork_count}점</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 삭제 임박(30일 이내) 안내 — 작품집 인쇄로 남기도록 유도 */}

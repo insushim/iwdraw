@@ -1,6 +1,6 @@
 "use client";
 
-import { setStudentSession, type StudentSession } from "./student-session";
+import { rememberNickname, setStudentSession, type StudentSession } from "./student-session";
 import { hasBackend } from "./backend";
 import { apiFetch } from "./api";
 
@@ -44,6 +44,8 @@ export async function joinClass(code: string, nickname: string): Promise<JoinRes
       classCode: code,
     };
     setStudentSession(session);
+    // 이 기기에 별명 기억 — 다음 입장 때 기본값으로 채워 같은 학생으로 이어지게
+    rememberNickname(code, session.nickname);
     return { ok: true, session };
   } catch {
     return { ok: false, error: "네트워크 오류예요" };

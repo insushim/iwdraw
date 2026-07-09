@@ -343,6 +343,27 @@ app.get("/api/classes/:id/artworks", requireTeacher, async (c) => {
   );
 });
 
+/* 학급 학생(별명) 명단 — 아이가 별명을 까먹으면 선생님이 여기서 찾아 알려준다.
+ * 작품 수·마지막 활동을 함께 줘 재입장 실수로 생긴 "빈 학생"도 구분 가능. */
+app.get("/api/classes/:id/students", requireTeacher, async (c) => {
+  const teacherId = c.get("teacherId");
+  const id = c.req.param("id");
+  const owned = await c.env.DB.prepare("SELECT id FROM classes WHERE id = ? AND teacher_id = ?")
+    .bind(id, teacherId)
+    .first();
+  if (!owned) return c.json({ error: "not_found" }, 404);
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.id, s.nickname, s.created_at,
+            COUNT(a.id) AS artwork_count, MAX(a.created_at) AS last_artwork_at
+     FROM students s LEFT JOIN artworks a ON a.student_id = s.id
+     WHERE s.class_id = ?
+     GROUP BY s.id ORDER BY s.created_at ASC`,
+  )
+    .bind(id)
+    .all();
+  return c.json(results ?? []);
+});
+
 app.patch("/api/artworks/:id", requireTeacher, async (c) => {
   const teacherId = c.get("teacherId");
   const id = c.req.param("id");
