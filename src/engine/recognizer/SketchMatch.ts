@@ -6,9 +6,11 @@ import { EXTRA_SKETCH_VARIANTS } from "./extra-templates";
  * 뚝딱그림(SketchSuggest) 인식 코어 — $P 포인트클라우드 매칭.
  * 러프 스케치(스트로크 점 구름)를 스탬프 40종 템플릿과 비교해 후보를 낸다.
  * 획 순서·방향·개수 무관(점 구름), ML·네트워크 없음 — 웨일북에서도 수 ms.
- * 템플릿 3원: ① StampTool SVG path 샘플링 ② 손그림 변형 표본(extra-templates)
- * ③ 아이가 수락한 스케치를 기기별 localStorage에 적립(쓸수록 그 아이 스타일에 적응).
+ * 템플릿 2원: ① StampTool SVG path 샘플링 ② 손그림 변형 표본(extra-templates).
  * 같은 스탬프에 표본이 여러 개면 최고점만 취한다.
+ * ⚠️ "수락 스케치 학습"(localStorage 개인 표본)은 2026-07-09 도입 당일 제거 —
+ * 교실 웨일북은 여러 학생이 공유하는 기기라 한 아이의 장난 수락이 다음 학생의
+ * 인식을 오염시킨다(사용자 결정). 인식률은 변형 표본 확충으로만 올린다.
  */
 
 export interface Pt {
@@ -20,7 +22,8 @@ export interface Pt {
 const N = 48;
 /** 이 점수 미만이면 후보로 안 띄움(오탐이 아이 흐름을 끊는 게 최악) */
 export const SUGGEST_MIN_SCORE = 0.42;
-export const SUGGEST_TOP = 3;
+/** 후보 칩 수 — 카테고리 82종으로 늘며 정답이 3등 밖으로 밀리는 일이 잦아 5로 확대 */
+export const SUGGEST_TOP = 5;
 
 /* ── 전처리: 리샘플 → 원점 이동 → 등비 스케일 ── */
 
@@ -111,8 +114,11 @@ export function preparePointCloud(strokes: Pt[][]): Pt[] {
 
 /* ── $P 그리디 클라우드 매칭 ── */
 
-/** 한 방향 그리디 매칭 비용(가중 평균 거리). start = 시작 인덱스(여러 시작점 시도용) */
-function cloudCost(a: Pt[], b: Pt[], start: number): number {
+/** 한 방향 그리디 매칭 비용(가중 평균 거리). start = 시작 인덱스(여러 시작점 시도용).
+ * limit = early-abandon 상한(합 공간) — 넘는 순간 중단하고 부분합(≥limit)을 돌려준다.
+ * 템플릿 82종×표본 160개 시대의 필수 최적화(웨일북 실측 대비): 나쁜 매칭 대부분이
+ * 초반 몇 점에서 잘린다. 반환값이 limit 이상이면 "limit보다 나쁘다"만 보장. */
+function cloudCost(a: Pt[], b: Pt[], start: number, limit: number): number {
   const n = a.length;
   const matched = new Array<boolean>(n).fill(false);
   let sum = 0;
@@ -122,7 +128,10 @@ function cloudCost(a: Pt[], b: Pt[], start: number): number {
     let bestJ = -1;
     for (let j = 0; j < n; j++) {
       if (matched[j]) continue;
-      const d = Math.hypot(a[i].x - b[j].x, a[i].y - b[j].y);
+      // 제곱거리로 최솟값 탐색(hypot보다 수 배 빠름) — sqrt는 승자 1회만
+      const dx = a[i].x - b[j].x;
+      const dy = a[i].y - b[j].y;
+      const d = dx * dx + dy * dy;
       if (d < best) {
         best = d;
         bestJ = j;
@@ -131,14 +140,17 @@ function cloudCost(a: Pt[], b: Pt[], start: number): number {
     matched[bestJ] = true;
     // 초반 매칭에 가중치(원 논문의 confidence weight)
     const w = 1 - ((i - start + n) % n) / n;
-    sum += w * best;
+    sum += w * Math.sqrt(best);
+    if (sum >= limit) return sum;
     i = (i + 1) % n;
   } while (i !== start);
   return sum;
 }
 
-/** 양방향 + √n개 시작점 중 최소 — 정규화 좌표계 평균거리 스케일 (테스트용 export) */
-export function cloudDistance(a: Pt[], b: Pt[]): number {
+/** 양방향 + √n개 시작점 중 최소 — 정규화 좌표계 평균거리 스케일 (테스트용 export).
+ * dMax(평균거리 상한)를 주면 그보다 나쁜 매칭은 조기 중단 — 반환값 ≥ dMax는
+ * "후보 아님"만 의미(정확한 거리 아님). 순위가 필요한 상위권엔 영향 없음. */
+export function cloudDistance(a: Pt[], b: Pt[], dMax = Infinity): number {
   // 구성상 둘 다 N점이지만, 어긋나면 그리디가 undefined를 밟는다 — 짧은 쪽 기준 방어
   if (a.length !== b.length) {
     const m = Math.min(a.length, b.length);
@@ -147,9 +159,9 @@ export function cloudDistance(a: Pt[], b: Pt[]): number {
   }
   const n = a.length;
   const step = Math.max(1, Math.floor(Math.sqrt(n)));
-  let min = Infinity;
+  let min = dMax * n; // 합 공간 상한(현재까지 최솟값이 곧 다음 호출의 abandon 한계)
   for (let s = 0; s < n; s += step) {
-    min = Math.min(min, cloudCost(a, b, s), cloudCost(b, a, s));
+    min = Math.min(min, cloudCost(a, b, s, min), cloudCost(b, a, s, min));
   }
   // cloudCost는 가중치 합(∑w ≈ n/2 + …)이라 점수화 전에 n으로 정규화
   return min / n;
@@ -208,70 +220,6 @@ function buildTemplates(): SketchTemplate[] {
   return templates;
 }
 
-/* ── 개인 학습 템플릿: 수락한 스케치를 그 기기의 표본으로 적립 ──
- * 아이 그림은 어디에도 전송하지 않는다 — localStorage에 정규화 점 구름만 저장. */
-
-const LEARN_KEY = "arton.sketchLearn.v1";
-/** 스탬프당 최근 수락 표본 수(FIFO) — 40스탬프 × 3 × 48점 ≈ 수십 KB 상한 */
-const LEARN_MAX_PER_STAMP = 3;
-
-type LearnStore = Record<string, number[][]>; // stampId → [x0,y0,x1,y1,…] 플랫 배열들
-
-let personal: SketchTemplate[] | null = null;
-
-function readLearnStore(): LearnStore {
-  try {
-    const raw = localStorage.getItem(LEARN_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function unflatten(flat: number[]): Pt[] {
-  const out: Pt[] = [];
-  for (let i = 0; i + 1 < flat.length; i += 2) out.push({ x: flat[i], y: flat[i + 1] });
-  return out;
-}
-
-function loadPersonalTemplates(): SketchTemplate[] {
-  if (personal) return personal;
-  if (typeof localStorage === "undefined") return [];
-  const out: SketchTemplate[] = [];
-  for (const [stampId, clouds] of Object.entries(readLearnStore())) {
-    const label = getStamp(stampId)?.label;
-    if (!label || !Array.isArray(clouds)) continue;
-    for (const flat of clouds) {
-      if (!Array.isArray(flat) || flat.length < 16 || flat.some((n) => typeof n !== "number")) continue;
-      out.push({ stampId, label, cloud: unflatten(flat) });
-    }
-  }
-  personal = out;
-  return personal;
-}
-
-/** 제안 수락 시 호출 — 이 스케치를 해당 스탬프의 개인 표본으로 저장(근사 중복은 스킵) */
-export function learnAccepted(stampId: string, rawStrokes: Pt[][]): void {
-  if (typeof localStorage === "undefined" || !getStamp(stampId)) return;
-  const cloud = preparePointCloud(rawStrokes);
-  if (cloud.length < 8) return;
-  const store = readLearnStore();
-  const list = Array.isArray(store[stampId]) ? store[stampId] : [];
-  for (const flat of list) {
-    if (Array.isArray(flat) && cloudDistance(cloud, unflatten(flat)) < 0.05) return; // 이미 비슷한 표본
-  }
-  list.push(cloud.flatMap((p) => [Math.round(p.x * 1000) / 1000, Math.round(p.y * 1000) / 1000]));
-  while (list.length > LEARN_MAX_PER_STAMP) list.shift();
-  store[stampId] = list;
-  try {
-    localStorage.setItem(LEARN_KEY, JSON.stringify(store));
-  } catch {
-    // 사파리 프라이빗 모드 등 — 학습만 포기, 인식은 정상
-  }
-  personal = null; // 다음 인식 때 재로드
-}
-
 /* ── 공개 API ── */
 
 export interface SketchTemplate {
@@ -285,10 +233,13 @@ export interface SketchTemplate {
 export function recognizeAgainst(rawStrokes: Pt[][], tmpls: SketchTemplate[]): SketchSuggestion[] {
   if (rawStrokes.reduce((a, s) => a + s.length, 0) < 8) return [];
   const cloud = preparePointCloud(rawStrokes);
-  // 스탬프당 표본이 여러 개(SVG·손그림 변형·개인 학습) — 최고점 하나만 남긴다
+  // 후보 하한(MIN_SCORE)보다 나쁜 거리는 정밀할 필요가 없다 — early-abandon 상한.
+  // 상한에 잘린 표본은 score ≤ MIN이 보장돼 어차피 필터에서 떨어진다(순위 왜곡 없음)
+  const dMax = (1 - SUGGEST_MIN_SCORE) / 2.2 + 1e-4;
+  // 스탬프당 표본이 여러 개(SVG·손그림 변형) — 최고점 하나만 남긴다
   const best = new Map<string, SketchSuggestion>();
   for (const t of tmpls) {
-    const d = cloudDistance(cloud, t.cloud);
+    const d = cloudDistance(cloud, t.cloud, dMax);
     // 정규화 공간 평균거리 → 점수. 완전일치 d≈0, 무관 d≈0.5+
     const score = Math.max(0, 1 - d * 2.2);
     const prev = best.get(t.stampId);
@@ -300,9 +251,9 @@ export function recognizeAgainst(rawStrokes: Pt[][], tmpls: SketchTemplate[]): S
 
 /**
  * 스케치(획 배열) → 상위 후보. 점수 하한 미달이면 빈 배열.
- * 계산량: ~75템플릿(SVG 40+변형 33+개인 ≤120) × √48 시작점 × 48² 그리디 ≈ 수 ms
+ * 계산량: 템플릿 수 × √48 시작점 × 48² 그리디 ≈ 수~수십 ms
  * (스트로크 종료 후 debounce idle에서만 호출)
  */
 export function recognizeSketch(rawStrokes: Pt[][]): SketchSuggestion[] {
-  return recognizeAgainst(rawStrokes, [...buildTemplates(), ...loadPersonalTemplates()]);
+  return recognizeAgainst(rawStrokes, buildTemplates());
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useEditor } from "@/store/editor";
 import type { SymmetryMode } from "@/engine/types";
+import type { ShapeInsertKind } from "@/engine/tools/ShapeInsert";
 import { Icon, type IconName } from "./icons";
 
 const SYMS: { id: SymmetryMode; label: string; icon: IconName }[] = [
@@ -12,16 +13,44 @@ const SYMS: { id: SymmetryMode; label: string; icon: IconName }[] = [
   { id: "quad", label: "4방", icon: "symQuad" },
 ];
 
+/* 도형 삽입: 버튼을 고르고 캔버스를 드래그하면 그 자리·그 크기로 그려진다
+ * (예전 "그리면 자동으로 도형 스냅"은 오인식이 잦아 폐기 — 2026-07-09) */
+const SHAPES: { id: ShapeInsertKind; label: string; icon: ReactNode }[] = [
+  { id: "line", label: "직선", icon: <path d="M4 20L20 4" /> },
+  { id: "rect", label: "네모", icon: <rect x="4" y="5.5" width="16" height="13" rx="1" /> },
+  { id: "ellipse", label: "동그라미", icon: <circle cx="12" cy="12" r="8" /> },
+  { id: "triangle", label: "세모", icon: <path d="M12 4.5l8.5 15h-17z" /> },
+  {
+    id: "star",
+    label: "별",
+    icon: <path d="M12 3.5l2.3 5 5.5.6-4.1 3.7 1.1 5.4-4.8-2.7-4.8 2.7 1.1-5.4-4.1-3.7 5.5-.6z" />,
+  },
+  {
+    id: "heart",
+    label: "하트",
+    icon: (
+      <path d="M12 20s-6.5-4.2-8.6-8.2C2.2 9 3.5 6 6.4 6c1.8 0 3 1 3.9 2.3.9-1.3 2.1-2.3 3.9-2.3 2.9 0 4.2 3 3 5.8C15.5 15.8 12 20 12 20z" />
+    ),
+  },
+];
+
+/** 받침 유무에 맞는 "가/이" 조사 — 저학년이 읽는 문구 */
+function withGa(word: string): string {
+  const last = word.charCodeAt(word.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return `${word}가`;
+  return (last - 0xac00) % 28 === 0 ? `${word}가` : `${word}이`;
+}
+
 /*
- * 보조 도구 패널(우측): 도형보정 · 대칭 · 전체 지우기.
+ * 보조 도구 패널(우측): 도형 그리기 · 대칭 · 전체 지우기.
  * (되돌리기/다시는 캔버스 위 플로팅 버튼, 저장은 헤더로 이동)
  */
 export function ActionRail() {
   const clearActive = useEditor((s) => s.clearActive);
   const symmetry = useEditor((s) => s.symmetry);
   const setSymmetry = useEditor((s) => s.setSymmetry);
-  const quickShape = useEditor((s) => s.quickShape);
-  const toggleQuickShape = useEditor((s) => s.toggleQuickShape);
+  const shapeInsert = useEditor((s) => s.shapeInsert);
+  const setShapeInsert = useEditor((s) => s.setShapeInsert);
   const sketchSuggest = useEditor((s) => s.sketchSuggest);
   const toggleSketchSuggest = useEditor((s) => s.toggleSketchSuggest);
   const suggestSuppressed = useEditor((s) => s.suggestSuppressed);
@@ -58,25 +87,45 @@ export function ActionRail() {
         </span>
       </button>
 
-      {/* 도형보정 */}
-      <button
-        onClick={toggleQuickShape}
-        aria-pressed={quickShape}
-        title="삐뚤게 그려도 반듯한 도형으로 바꿔줘요"
-        className={`pressable mt-2 flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold ${
-          quickShape ? "bg-sky-soft text-sky-deep ring-2 ring-sky" : "bg-cream text-ink-soft hover:bg-cream-deep"
-        }`}
-      >
-        <Icon name="shapes" className="h-6 w-6" />
-        도형 반듯하게
-        <span
-          className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold ${
-            quickShape ? "bg-sky text-white" : "bg-cream-deep text-ink-faint"
-          }`}
-        >
-          {quickShape ? "켬" : "끔"}
-        </span>
-      </button>
+      {/* 도형 그리기 — 고르고 캔버스를 드래그하면 그 크기로 그려져요 */}
+      <div className="mt-2">
+        <span className="text-xs font-semibold text-ink-faint">도형 그리기</span>
+        <div className="mt-1 grid grid-cols-3 gap-1">
+          {SHAPES.map((sh) => {
+            const active = shapeInsert === sh.id;
+            return (
+              <button
+                key={sh.id}
+                onClick={() => setShapeInsert(active ? null : sh.id)}
+                aria-pressed={active}
+                title={active ? "도형 그리기 끄기" : `캔버스를 드래그하면 ${withGa(sh.label)} 그려져요`}
+                className={`pressable flex flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold ${
+                  active ? "bg-sky-soft text-sky-deep ring-2 ring-sky" : "bg-cream text-ink-soft hover:bg-cream-deep"
+                }`}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  aria-hidden
+                >
+                  {sh.icon}
+                </svg>
+                {sh.label}
+              </button>
+            );
+          })}
+        </div>
+        {shapeInsert && (
+          <p className="mt-1 text-[11px] leading-snug text-sky-deep">
+            캔버스를 드래그하면 그 자리에 그 크기로 그려져요!
+          </p>
+        )}
+      </div>
 
       {/* 대칭 */}
       <div className="mt-2">

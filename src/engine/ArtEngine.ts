@@ -24,15 +24,21 @@ import { smearSegment } from "./tools/SmudgeTool";
 import { drawPaperTint, type PaperKind } from "./core/paper";
 import { tilesForRect, copyTiles, TileSnapshotCommand, type TileRect } from "./core/tiles";
 import type { Layer } from "./core/LayerStack";
-import { BrushBase, createBrush } from "./brushes";
+import { BrushBase, createBrush, STROKE_BRUSHES } from "./brushes";
 import { buildBarrierFromLineart, floodFill } from "./brushes/FillTool";
 import { PointerHandler } from "./input/PointerHandler";
 import { Gestures } from "./input/Gestures";
 import { Stabilizer, strengthToStreamline } from "./input/Stabilizer";
 import { mirrorPoint } from "./tools/Symmetry";
 import { detectShape, QUICKSHAPE_HOLD_MS } from "./tools/QuickShape";
+import {
+  shapeInsertPoints,
+  densifyShape,
+  SHAPE_MIN_DRAG,
+  type ShapeInsertKind,
+} from "./tools/ShapeInsert";
 import { drawStampOnCtx, getStamp } from "./tools/StampTool";
-import { recognizeSketch, learnAccepted } from "./recognizer/SketchMatch";
+import { recognizeSketch } from "./recognizer/SketchMatch";
 import type { StrokeContext } from "./core/backend";
 import { blendToComposite } from "./core/backend";
 import type { TipKind } from "./brushes/BrushBase";
@@ -83,6 +89,9 @@ export class ArtEngine {
   quickShapeEnabled = false;
   /** 뚝딱그림(스케치 인식 → 스탬프 제안) — 색칠 모드에선 자동 비활성 */
   sketchSuggestEnabled = true;
+  /** 도형 삽입 모드 — 켜져 있으면 드래그가 그리기 대신 도형 배치가 된다 */
+  shapeInsertKind: ShapeInsertKind | null = null;
+  private shapeDrag: { x0: number; y0: number; x1: number; y1: number } | null = null;
 
   private brush: BrushBase | null = null;
   private curPoints: StrokePoint[] = [];
@@ -259,6 +268,11 @@ export class ArtEngine {
     if (on) this.resetSuggest();
   }
   private suggestSuppressed = false;
+  setShapeInsert(kind: ShapeInsertKind | null): void {
+    this.shapeInsertKind = kind;
+    this.shapeDrag = null;
+    this.requestComposite(); // 진행 중이던 미리보기 정리
+  }
   setQuickShape(on: boolean): void {
     this.quickShapeEnabled = on;
   }
@@ -296,6 +310,15 @@ export class ArtEngine {
 
   private strokeBegin(p: StrokePoint): void {
     if (this.replaying) return;
+    // 도형 삽입: 드래그 = 도형 배치(미리보기), 커밋은 strokeEnd에서
+    if (this.shapeInsertKind) {
+      // 스트로크형 브러시로만 그린다(포인터·페인트통 등이면 UI가 브러시를 바꿔줌)
+      if (STROKE_BRUSHES.includes(this.brushId)) {
+        this.shapeDrag = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+        this.requestComposite();
+      }
+      return;
+    }
     // 포인터(클릭 펜): 캔버스를 눌러도 아무것도 안 그린다 — 제안·버튼 클릭 중 오작화 방지
     if (this.brushId === "pointer") return;
     // 페인트통(fill)은 클릭 1회 처리
@@ -332,6 +355,13 @@ export class ArtEngine {
   }
 
   private strokeMove(points: StrokePoint[]): void {
+    if (this.shapeDrag) {
+      const last = points[points.length - 1];
+      this.shapeDrag.x1 = last.x;
+      this.shapeDrag.y1 = last.y;
+      this.requestComposite(); // 미리보기 갱신(compositeNow가 그림)
+      return;
+    }
     if (this.smudging) {
       this.smudgeMove(points);
       return;
@@ -351,6 +381,14 @@ export class ArtEngine {
   }
 
   private strokeEnd(p: StrokePoint): void {
+    if (this.shapeDrag) {
+      const d = this.shapeDrag;
+      this.shapeDrag = null;
+      d.x1 = p.x;
+      d.y1 = p.y;
+      this.commitShapeInsert(d);
+      return;
+    }
     if (this.smudging) {
       this.smudgeEnd(p);
       return;
@@ -384,6 +422,10 @@ export class ArtEngine {
    * ⚠️ Canvas2D 폴백의 지우개(레이어 직접)는 취소 불가 — 그 경우 이미 지운 만큼은 남는다 */
   private strokeCancel(): void {
     if (this.replaying) return;
+    if (this.shapeDrag) {
+      this.shapeDrag = null;
+      this.requestComposite(); // 미리보기 지우기
+    }
     if (!this.brush && !this.smudging) return;
     this.clearHold();
     // 레이어를 직접 고치는 도구(번짐, Canvas2D 지우개)는 begin 스냅샷으로 원복
@@ -805,14 +847,58 @@ export class ArtEngine {
       symmetry: "none",
       extra: { stamp: { id: stampId, cx, cy, size } },
     });
-    // 수락한 스케치를 이 기기의 개인 표본으로 적립 — 쓸수록 그 아이 그림체에 적응
-    learnAccepted(stampId, this.suggestStrokes);
     this.resetSuggest();
     this.requestComposite();
     this.scheduleAutoSave();
   }
 
   dismissSuggestion(): void {
+    this.resetSuggest();
+  }
+
+  /* ── 도형 삽입 커밋 — 드래그 영역의 도형을 "합성 스트로크"로 그린다 ──
+   * 실제 브러시 파이프라인(begin/move/end → finalizeStroke)을 그대로 타므로
+   * undo·무비 기록·협동 전송·대칭(paintDabs가 미러)·자동저장이 일반 획과 동일. */
+  private commitShapeInsert(d: { x0: number; y0: number; x1: number; y1: number }): void {
+    const kind = this.shapeInsertKind;
+    if (
+      !kind ||
+      this.brush ||
+      this.smudging ||
+      Math.max(Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0)) < SHAPE_MIN_DRAG // 톡 친 것
+    ) {
+      this.requestComposite();
+      return;
+    }
+    const path = densifyShape(shapeInsertPoints(kind, d.x0, d.y0, d.x1, d.y1), 3);
+    if (path.length < 2) return;
+    const t0 = performance.now();
+    const pts: StrokePoint[] = path.map((q, i) => ({
+      x: q.x,
+      y: q.y,
+      pressure: 0.85,
+      t: t0 + i * 3,
+    }));
+    this.brush = createBrush(this.brushId);
+    this.quickShapeApplied = false;
+    this.curPoints = [pts[0]];
+    this.strokeStartTs = t0;
+    this.firstDabLatency = -1;
+    this.strokeBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    // strokeBegin과 동일한 undo before 규칙(지우개류는 레이어 직접 편집이라 선캡처)
+    this.beforeFull =
+      this.brush.cfg.composite === "destination-out" ? this.snapshotActiveLayer() : null;
+    this.cm.backend.beginStroke(this.brushContext());
+    this.paintDabs(this.brush.begin(pts[0], this.settings), pts[0]);
+    for (let i = 1; i < pts.length; i++) {
+      this.curPoints.push(pts[i]);
+      this.paintDabs(this.brush.move(pts[i]), pts[i]);
+    }
+    this.paintDabs(this.brush.end(), pts[pts.length - 1]);
+    if (!this.beforeFull) this.beforeFull = this.snapshotActiveLayer();
+    this.cm.backend.endStroke();
+    this.finalizeStroke(false);
+    // 반듯한 도형은 뚝딱그림 대상이 아니다 — finalize의 trackSuggest 그룹을 즉시 해제
     this.resetSuggest();
   }
 
@@ -1100,6 +1186,33 @@ export class ArtEngine {
         ctx.lineTo(this.width, this.height / 2);
       }
       ctx.stroke();
+      ctx.restore();
+    }
+    // 도형 삽입 미리보기(표시 전용) — 실제 커밋될 색·비슷한 굵기로, 대칭 복제 포함
+    if (this.shapeDrag && this.shapeInsertKind) {
+      const d = this.shapeDrag;
+      const pts = shapeInsertPoints(this.shapeInsertKind, d.x0, d.y0, d.x1, d.y1);
+      const variants =
+        this.symmetry === "none"
+          ? [pts]
+          : (() => {
+              const per = pts.map((p) =>
+                mirrorPoint({ x: p.x, y: p.y, pressure: 1, t: 0 }, this.symmetry, this.width, this.height),
+              );
+              return per[0].map((_, k) => per.map((mp) => mp[k]));
+            })();
+      ctx.save();
+      const c = this.settings.color;
+      ctx.strokeStyle = `rgb(${c.r},${c.g},${c.b})`;
+      ctx.globalAlpha = Math.min(1, this.settings.opacity) * 0.75;
+      ctx.lineWidth = Math.max(2, this.settings.size);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      for (const poly of variants) {
+        ctx.beginPath();
+        poly.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+      }
       ctx.restore();
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);

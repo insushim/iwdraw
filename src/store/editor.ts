@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 import type { ArtEngine } from "@/engine/ArtEngine";
+import { STROKE_BRUSHES } from "@/engine/brushes";
+import type { ShapeInsertKind } from "@/engine/tools/ShapeInsert";
 import type {
   BlendMode,
   BrushId,
@@ -34,7 +36,8 @@ export interface EditorState {
   water: number;
   stabilize: number;
   symmetry: SymmetryMode;
-  quickShape: boolean;
+  /** 도형 삽입 모드(드래그로 크기·위치 배치) — null이면 꺼짐 */
+  shapeInsert: ShapeInsertKind | null;
   /** 뚝딱그림: 스케치 인식 → 스탬프 제안 */
   sketchSuggest: boolean;
   /** 협동 방 억제 — 치환이 원격에 전파 안 돼 캔버스가 갈라진다(토글보다 우선) */
@@ -68,7 +71,7 @@ export interface EditorState {
   setWater: (n: number) => void;
   setStabilize: (n: number) => void;
   setSymmetry: (m: SymmetryMode) => void;
-  toggleQuickShape: () => void;
+  setShapeInsert: (k: ShapeInsertKind | null) => void;
   toggleSketchSuggest: () => void;
   setSuggestSuppressed: (on: boolean) => void;
   acceptSuggestion: (stampId: string) => void;
@@ -106,7 +109,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   water: 0.6,
   stabilize: 3,
   symmetry: "none",
-  quickShape: false,
+  shapeInsert: null,
   sketchSuggest: true,
   suggestSuppressed: false,
   suggestions: [],
@@ -179,7 +182,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     engine.setWater(s.water);
     engine.setStabilize(s.stabilize);
     engine.setSymmetry(s.symmetry);
-    engine.setQuickShape(s.quickShape);
+    engine.setShapeInsert(s.shapeInsert);
     engine.setSketchSuggest(s.sketchSuggest);
     engine.setSuggestSuppressed(s.suggestSuppressed);
     engine.setPressureEnabled(s.pressureOn);
@@ -193,16 +196,18 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 
   setMode: (m) => {
-    get().engine?.setMode(m);
-    // 모드 전환 시 엔진이 기본 브러시를 바꾸므로 미러링
     const eng = get().engine;
-    set({ mode: m, brush: eng?.brushId ?? get().brush });
+    eng?.setMode(m);
+    eng?.setShapeInsert(null); // 모드 전환 = 도형 모드 해제
+    set({ mode: m, brush: eng?.brushId ?? get().brush, shapeInsert: null });
   },
   setBrush: (b) => {
     get().engine?.setBrush(b);
+    get().engine?.setShapeInsert(null); // 붓을 고르면 도형 모드 해제(그리기로 복귀)
     // 스포이트 진입 시 이전 붓 기억(색 찍으면 자동 복귀), 스포이트→스포이트는 유지
     set((s) => ({
       brush: b,
+      shapeInsert: null,
       prevBrush: b === "eyedropper" ? (s.brush === "eyedropper" ? s.prevBrush : s.brush) : null,
     }));
   },
@@ -237,10 +242,11 @@ export const useEditor = create<EditorState>((set, get) => ({
     get().engine?.setSymmetry(m);
     set({ symmetry: m });
   },
-  toggleQuickShape: () => {
-    const q = !get().quickShape;
-    get().engine?.setQuickShape(q);
-    set({ quickShape: q });
+  setShapeInsert: (k) => {
+    // 스트로크형 붓이어야 도형이 그려진다 — 포인터/페인트통/스포이트/번짐이면 연필로 전환
+    if (k && !STROKE_BRUSHES.includes(get().brush)) get().setBrush("pencil");
+    get().engine?.setShapeInsert(k);
+    set({ shapeInsert: k });
   },
   toggleSketchSuggest: () => {
     const on = !get().sketchSuggest;

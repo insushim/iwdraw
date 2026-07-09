@@ -5,8 +5,9 @@ import { getStamp, type StampDef } from "@/engine/tools/StampTool";
 
 /*
  * 뚝딱그림 제안 바 — 캔버스 상단 중앙 플로팅.
- * 스케치 인식 후보(최대 3개)를 스탬프 미리보기로 보여주고,
+ * 스케치 인식 후보(최대 5개)를 스탬프 미리보기로 보여주고,
  * 탭하면 스케치가 그 스탬프로 뿅 바뀐다(자동 교체 없음 — 아이가 직접 선택).
+ * 좁은 화면은 가로 스크롤(max-w + overflow-x).
  */
 export function SuggestBar() {
   const suggestions = useEditor((s) => s.suggestions);
@@ -18,7 +19,7 @@ export function SuggestBar() {
 
   return (
     <div
-      className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-paper px-3 py-1.5 shadow-lift"
+      className="absolute left-1/2 top-3 z-10 flex max-w-[92%] -translate-x-1/2 items-center gap-1.5 overflow-x-auto rounded-full bg-paper px-3 py-1.5 shadow-lift"
       role="dialog"
       aria-label="뚝딱그림 제안"
     >
@@ -34,7 +35,7 @@ export function SuggestBar() {
             onClick={() => accept(sug.stampId)}
             title={`${withRo(sug.label)} 뚝딱 바꾸기`}
             aria-label={`${withRo(sug.label)} 바꾸기`}
-            className="pressable touch-target flex flex-col items-center rounded-2xl bg-cream px-2.5 py-1 hover:bg-cream-deep"
+            className="pressable touch-target flex shrink-0 flex-col items-center rounded-2xl bg-cream px-2.5 py-1 hover:bg-cream-deep"
           >
             <StampPreview def={def} ink={`rgb(${color.r},${color.g},${color.b})`} className="h-8 w-8" />
             <span className="text-[10px] font-semibold text-ink-soft">{sug.label}</span>
@@ -45,7 +46,7 @@ export function SuggestBar() {
         onClick={dismiss}
         aria-label="제안 닫기"
         title="아니에요, 내 그림 그대로 둘래요"
-        className="pressable touch-target grid h-11 w-11 place-items-center rounded-full text-ink-faint hover:bg-cream"
+        className="pressable touch-target grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-faint hover:bg-cream"
       >
         ✕
       </button>
