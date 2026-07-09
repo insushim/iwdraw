@@ -1,3 +1,8 @@
+/*
+ * ⚠️ 비활성 라우트(2026-07-09 사용자 결정: 당분간 유료화 안 함).
+ * 폴더명이 `_pricing`이라 Next 앱 라우터가 무시한다 — 유료화를 되살리려면
+ * 폴더를 `pricing`으로 되돌리고, 랜딩(page.tsx)·교사 페이지의 요금제 링크를 복원할 것.
+ */
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArtonLogo } from "@/components/arton-logo";

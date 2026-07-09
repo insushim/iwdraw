@@ -28,6 +28,9 @@ const AUTH_RATE_MAX = 10; // 교사 로그인·가입 시도 상한/윈도우(�
 const AUTH_MARKER = "__AUTH__"; // join_attempts 재사용 시 교사 인증 시도 표식
 const MODES = ["sketch", "watercolor", "oil", "coloring"];
 const MAX_BYTES = 8 * 1024 * 1024;
+const DAY_MS = 86_400_000;
+const RETENTION_MS = 180 * DAY_MS; // 작품 보관 기간(6개월). 이후 매일 cron이 영구 삭제.
+const WARN_MS = 30 * DAY_MS; // 삭제 30일 전부터 선생님께 임박 안내(대시보드/갤러리 배지).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SESSION_TTL_SEC = 60 * 60 * 24 * 30; // 30일
 const STUDENT_TTL_SEC = 60 * 60 * 6; // 6시간
@@ -233,14 +236,17 @@ app.get("/api/teacher/me", async (c) => {
 // ══════════════════════ 교사: 학급 ══════════════════════
 app.get("/api/classes", requireTeacher, async (c) => {
   const teacherId = c.get("teacherId");
+  // expiring_soon = 삭제 30일 이내 작품 수(created_at ≤ now−150일). 대시보드 임박 배너용.
+  const warnBefore = Date.now() - (RETENTION_MS - WARN_MS);
   const { results } = await c.env.DB.prepare(
-    `SELECT c.id, c.name, c.code, c.is_active, c.created_at, COUNT(s.id) AS student_count
+    `SELECT c.id, c.name, c.code, c.is_active, c.created_at, COUNT(s.id) AS student_count,
+       (SELECT COUNT(*) FROM artworks a WHERE a.class_id = c.id AND a.created_at <= ?) AS expiring_soon
      FROM classes c LEFT JOIN students s ON s.class_id = c.id
      WHERE c.teacher_id = ?
      GROUP BY c.id ORDER BY c.created_at DESC`,
   )
-    .bind(teacherId)
-    .all<{ id: string; name: string; code: string; is_active: number; created_at: number; student_count: number }>();
+    .bind(warnBefore, teacherId)
+    .all<{ id: string; name: string; code: string; is_active: number; created_at: number; student_count: number; expiring_soon: number }>();
   return c.json(
     (results ?? []).map((r) => ({ ...r, is_active: !!r.is_active })),
   );
@@ -327,8 +333,14 @@ app.get("/api/classes/:id/artworks", requireTeacher, async (c) => {
      WHERE a.class_id = ? ORDER BY a.created_at DESC`,
   )
     .bind(id)
-    .all<{ is_approved: number; [k: string]: unknown }>();
-  return c.json((results ?? []).map((r) => ({ ...r, is_approved: !!r.is_approved })));
+    .all<{ is_approved: number; created_at: number; [k: string]: unknown }>();
+  return c.json(
+    (results ?? []).map((r) => ({
+      ...r,
+      is_approved: !!r.is_approved,
+      expires_at: r.created_at + RETENTION_MS, // 이 시각 이후 cron이 영구 삭제
+    })),
+  );
 });
 
 app.patch("/api/artworks/:id", requireTeacher, async (c) => {
@@ -348,6 +360,34 @@ app.patch("/api/artworks/:id", requireTeacher, async (c) => {
     .bind(body.is_approved ? 1 : 0, id, teacherId)
     .run();
   if (!res.meta.changes) return c.json({ error: "not_found" }, 404);
+  return c.json({ ok: true });
+});
+
+// 작품 영구 삭제(교사 큐레이션) — 소유 학급의 작품만. 승인 게이트 대신 사후 정리 수단.
+// 원칙은 만료 purge와 동일: R2 객체 삭제가 성공해야 D1 행을 지운다(깨진 썸네일 orphan 방지),
+// D1은 likes+artworks를 batch로 원자 삭제.
+app.delete("/api/artworks/:id", requireTeacher, async (c) => {
+  const teacherId = c.get("teacherId");
+  const id = c.req.param("id");
+  const row = await c.env.DB.prepare(
+    `SELECT a.image_path, a.thumb_path, a.timelapse_path
+     FROM artworks a JOIN classes cl ON cl.id = a.class_id
+     WHERE a.id = ? AND cl.teacher_id = ?`,
+  )
+    .bind(id, teacherId)
+    .first<{ image_path: string; thumb_path: string; timelapse_path: string | null }>();
+  if (!row) return c.json({ error: "not_found" }, 404);
+  const paths = [row.image_path, row.thumb_path, ...(row.timelapse_path ? [row.timelapse_path] : [])];
+  try {
+    await Promise.all(paths.map((p) => c.env.BUCKET.delete(p)));
+  } catch {
+    // R2 삭제 실패 — D1을 지우지 않고 그대로 둔다(교사가 다시 시도 가능)
+    return c.json({ error: "storage" }, 500);
+  }
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM artwork_likes WHERE artwork_id = ?").bind(id),
+    c.env.DB.prepare("DELETE FROM artworks WHERE id = ?").bind(id),
+  ]);
   return c.json({ ok: true });
 });
 
@@ -581,21 +621,27 @@ app.post("/api/join", async (c) => {
     return c.json({ error: cls ? "inactive" : "invalid_code" }, 404);
   }
 
-  // 정원(Free 30 / Pro 200)
-  const teacher = await c.env.DB.prepare("SELECT plan FROM teachers WHERE id = ?")
-    .bind(cls.teacher_id)
-    .first<{ plan: string }>();
-  const cap = teacher?.plan === "pro" ? 200 : 30;
-  const cnt = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM students WHERE class_id = ?")
-    .bind(cls.id)
-    .first<{ n: number }>();
-  if ((cnt?.n ?? 0) >= cap) return c.json({ error: "full" }, 409);
-
-  // 학생 생성
-  const studentId = genId();
-  await c.env.DB.prepare("INSERT INTO students (id, class_id, nickname, avatar_seed) VALUES (?, ?, ?, ?)")
-    .bind(studentId, cls.id, nickname, genId().slice(0, 8))
-    .run();
+  // 같은 별명 재입장 = 기존 학생 재사용 — 매 입장마다 새 행이 쌓여 "20명 반이 정원 초과"가
+  // 나던 버그(2026-07-09 실사용 보고)의 정공법. 토큰(6h) 만료 후 재입장해도 내 작품·좋아요 유지.
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM students WHERE class_id = ? AND nickname = ?",
+  )
+    .bind(cls.id, nickname)
+    .first<{ id: string }>();
+  let studentId: string;
+  if (existing) {
+    studentId = existing.id; // 재입장은 정원 검사 없이 항상 허용
+  } else {
+    // 정원 100 고정 — 요금제 보류(2026-07-09)로 plan 구분 제거. 유료화 부활 시 plan별 cap 복원.
+    const cnt = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM students WHERE class_id = ?")
+      .bind(cls.id)
+      .first<{ n: number }>();
+    if ((cnt?.n ?? 0) >= 100) return c.json({ error: "full" }, 409);
+    studentId = genId();
+    await c.env.DB.prepare("INSERT INTO students (id, class_id, nickname, avatar_seed) VALUES (?, ?, ?, ?)")
+      .bind(studentId, cls.id, nickname, genId().slice(0, 8))
+      .run();
+  }
   await c.env.DB.prepare("INSERT INTO join_attempts (ip_hash, code_tried, success) VALUES (?, ?, 1)")
     .bind(ipHash, code)
     .run();
@@ -623,11 +669,25 @@ app.post("/api/artwork", async (c) => {
   if (!image || !thumb) return c.json({ error: "missing_files" }, 400);
   if (image.size > MAX_BYTES || thumb.size > MAX_BYTES) return c.json({ error: "too_large" }, 413);
 
-  // 토큰 위조 이중 방어: 학생이 실제 이 학급 소속인지 재확인
-  const student = await c.env.DB.prepare("SELECT id FROM students WHERE id = ? AND class_id = ?")
+  // 토큰 위조 이중 방어: 학생이 실제 이 학급 소속인지 + 학급이 열려 있는지 재확인.
+  // 승인 게이트 제거(즉시 전시) 후엔 업로드가 곧 공개라, 잠긴 학급으로의 제출을 서버에서 차단
+  const student = await c.env.DB.prepare(
+    `SELECT s.id, cl.is_active FROM students s JOIN classes cl ON cl.id = s.class_id
+     WHERE s.id = ? AND s.class_id = ?`,
+  )
     .bind(claims.student_id, claims.class_id)
-    .first();
+    .first<{ id: string; is_active: number }>();
   if (!student) return c.json({ error: "unauthorized" }, 401);
+  if (!student.is_active) return c.json({ error: "inactive" }, 403);
+
+  // 제출 rate limit(학생당 분당 5점) — 즉시 전시라 스팸이 갤러리를 그대로 덮는다(교차검증 발견).
+  // 정상 사용(작품 저장)은 분당 1~2회 수준이라 여유가 크다.
+  const recent = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM artworks WHERE student_id = ? AND created_at >= ?",
+  )
+    .bind(claims.student_id, Date.now() - 60_000)
+    .first<{ n: number }>();
+  if ((recent?.n ?? 0) >= 5) return c.json({ error: "rate_limited" }, 429);
 
   const artId = genId();
   const base = `${claims.class_id}/${claims.student_id}/${artId}`;
@@ -645,9 +705,11 @@ app.post("/api/artwork", async (c) => {
   }
 
   try {
+    // 승인 게이트 비활성(2026-07-09 사용자 결정): 제출 즉시 전시(is_approved=1).
+    // 되살리려면 아래 1을 0으로 — 조회(is_approved=1 필터)·PATCH 승인 엔드포인트·교사 UI는 보존됨.
     await c.env.DB.prepare(
       `INSERT INTO artworks (id, class_id, student_id, mode, image_path, thumb_path, timelapse_path, is_approved)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
     )
       .bind(artId, claims.class_id, claims.student_id, mode, imagePath, thumbPath, timelapsePath)
       .run();
@@ -674,4 +736,61 @@ app.get("/api/collab/:room", (c) => {
 
 app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
 
-export default app;
+// ══════════════════════ 만료 작품 정리(Cron Trigger) ══════════════════════
+// 매일 실행: created_at 이 보관기간(180일)을 넘긴 작품을 R2·D1에서 영구 삭제.
+// 안전 원칙:
+//  · cutoff = now − RETENTION_MS 보다 오래된 것만. 더 최신 작품은 절대 건드리지 않는다.
+//  · R2 객체 삭제가 성공한 배치만 D1 행을 지운다(깨진 이미지=D1 있는데 R2 없음 방지).
+//  · BATCH=90(D1 바인딩 파라미터 상한 100 이내) · 무료 플랜 subrequest(50) 대비 배치당 3개·상한 10.
+async function purgeExpiredArtworks(env: Env): Promise<{ deleted: number }> {
+  const cutoff = Date.now() - RETENTION_MS;
+  const MAX_BATCHES = 10;
+  // ⚠️ BATCH는 D1 바인딩 파라미터 상한(쿼리당 100)보다 작아야 한다. DELETE … IN (?×BATCH)가
+  // 100을 넘으면 R2는 이미 지운 뒤 D1 삭제가 throw → 깨진 썸네일 orphan + purge 영구정지.
+  const BATCH = 90;
+  let deleted = 0;
+
+  for (let i = 0; i < MAX_BATCHES; i++) {
+    const { results } = await env.DB.prepare(
+      "SELECT id, image_path, thumb_path, timelapse_path FROM artworks WHERE created_at < ? LIMIT ?",
+    )
+      .bind(cutoff, BATCH)
+      .all<{ id: string; image_path: string; thumb_path: string; timelapse_path: string | null }>();
+    const rows = results ?? [];
+    if (rows.length === 0) break;
+
+    // R2 키 수집 + 빈 값 방어(손상 행 하나가 배치 전체를 막는 poison pill 방지)
+    const keys = rows
+      .flatMap((r) => [r.image_path, r.thumb_path, r.timelapse_path])
+      .filter((k): k is string => typeof k === "string" && k.length > 0);
+    try {
+      await env.BUCKET.delete(keys); // 존재하지 않는 키는 무시(멱등). 실패 시 throw.
+    } catch {
+      break; // R2 삭제 실패 → 이 배치 D1 삭제 보류(다음 실행 재시도, R2없는데 D1남는 orphan 방지)
+    }
+
+    // likes→artworks를 batch()로 원자 삭제(한쪽만 실패해 부분상태 남는 것 방지).
+    // FK CASCADE는 D1에서 기본 미보장 → likes 명시 삭제 필수.
+    const ids = rows.map((r) => r.id);
+    const ph = ids.map(() => "?").join(",");
+    const res = await env.DB.batch([
+      env.DB.prepare(`DELETE FROM artwork_likes WHERE artwork_id IN (${ph})`).bind(...ids),
+      env.DB.prepare(`DELETE FROM artworks WHERE id IN (${ph})`).bind(...ids),
+    ]);
+    deleted += res[1]?.meta.changes ?? rows.length;
+    if (rows.length < BATCH) break;
+  }
+  return { deleted };
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled: (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(
+      purgeExpiredArtworks(env).then(
+        (r) => console.log(`[cron] purged ${r.deleted} expired artworks`),
+        (e) => console.error("[cron] purge failed", e),
+      ),
+    );
+  },
+} satisfies ExportedHandler<Env>;

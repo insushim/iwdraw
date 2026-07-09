@@ -52,7 +52,7 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
   }
 
   return (
-    <div className="w-full">
+    <div className="mx-auto w-full max-w-5xl">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-2xl text-ink">내 학급</h1>
         <button onClick={onSignOut} className="text-sm text-ink-faint hover:text-ink-soft">
@@ -76,6 +76,18 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
         </div>
       </Card>
 
+      {/* 삭제 임박 안내: 작품은 만든 지 180일 후 자동 삭제, 30일 전부터 알림 */}
+      {(() => {
+        const total = classes.reduce((s, c) => s + (c.expiring_soon ?? 0), 0);
+        if (total === 0) return null;
+        return (
+          <div className="mb-6 rounded-card border-2 border-sun bg-sun-soft px-4 py-3 text-sm text-ink">
+            🗓️ 곧 삭제될 작품이 <b>{total}점</b> 있어요. 작품은 만든 지 6개월(180일)이 지나면
+            자동으로 삭제돼요. 남기고 싶은 작품은 각 학급 <b>갤러리 → 🖨️ 작품집 인쇄</b>로 저장해 두세요.
+          </div>
+        );
+      })()}
+
       {loading ? (
         <div className="text-center text-ink-faint">불러오는 중…</div>
       ) : classes.length === 0 ? (
@@ -94,7 +106,14 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
                       <span className="rounded-full bg-cream-deep px-2 py-0.5 text-xs text-ink-soft">비활성</span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-ink-soft">학생 {c.student_count ?? 0}명</p>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    학생 {c.student_count ?? 0}명
+                    {(c.expiring_soon ?? 0) > 0 && (
+                      <span className="ml-2 rounded-full bg-sun-soft px-2 py-0.5 text-xs font-semibold text-ink">
+                        🗓️ {c.expiring_soon}점 곧 삭제
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div className="text-right">
                   <div className="font-display text-3xl tracking-widest text-coral">{c.code}</div>
@@ -138,8 +157,7 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
       )}
 
       <p className="mt-6 text-center text-sm text-ink-faint">
-        도안 관리는 <Link href="/coloring" className="underline">색칠 도안</Link>에서, 요금제는{" "}
-        <Link href="/pricing" className="underline">여기</Link>에서 볼 수 있어요.
+        도안 관리는 <Link href="/coloring" className="underline">색칠 도안</Link>에서 할 수 있어요.
       </p>
 
       {/* 전자칠판 대형 표시 */}

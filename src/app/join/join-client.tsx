@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui";
 import { ArtonLogo } from "@/components/arton-logo";
-import { CLASS_CODE_LENGTH, isValidClassCode, normalizeClassCode } from "@/lib/class-code";
+import { CLASS_CODE_LENGTH, hasHangul, isValidClassCode, normalizeClassCode } from "@/lib/class-code";
 import { suggestNickname, validateNickname } from "@/lib/nickname";
 import { joinClass } from "@/lib/join-client";
 import { hasBackend } from "@/lib/backend";
@@ -19,6 +19,8 @@ export function JoinClient() {
   const [nickname, setNickname] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 한글 IME 감지 — 코드 문자셋이 영문·숫자뿐이라 한글은 조용히 걸러진다(한/영 전환 안내)
+  const [imeWarn, setImeWarn] = useState(false);
 
   useEffect(() => {
     if (step === "nickname" && !nickname) setNickname(suggestNickname());
@@ -57,7 +59,10 @@ export function JoinClient() {
               <p className="mt-2 text-center text-ink-soft">선생님이 알려준 6자리 코드예요.</p>
               <input
                 value={code}
-                onChange={(e) => setCode(normalizeClassCode(e.target.value))}
+                onChange={(e) => {
+                  setImeWarn(hasHangul(e.target.value));
+                  setCode(normalizeClassCode(e.target.value));
+                }}
                 onKeyDown={(e) => e.key === "Enter" && isValidClassCode(code) && setStep("nickname")}
                 placeholder="ABC123"
                 autoFocus
@@ -65,6 +70,11 @@ export function JoinClient() {
                 maxLength={CLASS_CODE_LENGTH}
                 className="mt-6 w-full rounded-card border-2 border-cream-deep bg-cream px-5 py-4 text-center font-display text-3xl tracking-[0.3em] text-ink placeholder:tracking-normal placeholder:text-ink-faint focus:border-sky"
               />
+              {imeWarn && (
+                <p className="mt-3 text-center text-sm font-semibold text-coral" role="status">
+                  ⌨️ 한글로는 쓸 수 없어요 — <b>한/영 키</b>를 눌러 영어로 바꿔 주세요!
+                </p>
+              )}
               <Button
                 onClick={() => setStep("nickname")}
                 disabled={!isValidClassCode(code)}

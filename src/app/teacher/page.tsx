@@ -14,16 +14,14 @@ export default function TeacherPage() {
         <Link href="/">
           <ArtonLogo className="h-9" />
         </Link>
-        <Link href="/pricing" className="text-ink-soft hover:text-ink">
-          요금제
-        </Link>
+        {/* 요금제 링크는 유료화 보류로 숨김(라우트 = src/app/_pricing) */}
       </header>
 
-      <div className="mx-auto max-w-md px-6 py-12">
+      <div className="px-6 py-12">
         {configured ? (
           <TeacherAuth />
         ) : (
-          <div className="rounded-bubble bg-paper p-8 text-center shadow-soft">
+          <div className="mx-auto max-w-md rounded-bubble bg-paper p-8 text-center shadow-soft">
             <div className="text-5xl">🏫</div>
             <h1 className="mt-4 font-display text-2xl text-ink">교사 기능 준비 중</h1>
             <p className="mt-3 text-ink-soft">

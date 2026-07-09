@@ -46,6 +46,11 @@
     }
   ],
 
+  // Cron: 매일 03:17 KST(18:17 UTC)에 보관기간(180일) 지난 작품을 R2·D1에서 영구 삭제.
+  "triggers": {
+    "crons": ["17 18 * * *"]
+  },
+
   "observability": {
     "enabled": true
   }

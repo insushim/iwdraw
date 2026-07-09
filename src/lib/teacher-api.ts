@@ -12,6 +12,7 @@ export interface ClassRow {
   is_active: boolean;
   created_at: number;
   student_count?: number;
+  expiring_soon?: number; // 삭제 30일 이내 작품 수(대시보드 임박 배너용)
 }
 
 export interface ArtworkRow {
@@ -24,6 +25,7 @@ export interface ArtworkRow {
   like_count: number;
   created_at: number;
   nickname?: string;
+  expires_at?: number; // 이 시각 이후 자동 삭제(보관 180일). 30일 이내면 갤러리에 배지
 }
 
 export async function listClasses(): Promise<ClassRow[]> {
@@ -88,6 +90,18 @@ export async function listArtworks(classId: string): Promise<ArtworkRow[]> {
   }
 }
 
+/** 작품 영구 삭제(교사 큐레이션) — 원본·썸네일·타임랩스와 좋아요까지 지워진다 */
+export async function deleteArtwork(id: string): Promise<boolean> {
+  if (!hasBackend()) return false;
+  try {
+    const res = await apiFetch(`/artworks/${id}`, { method: "DELETE" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** (보존 — 승인 게이트 비활성 중이라 UI에선 미사용. 되살릴 때 그대로 사용) */
 export async function approveArtwork(id: string, approved: boolean): Promise<void> {
   if (!hasBackend()) return;
   try {

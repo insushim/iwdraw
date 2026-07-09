@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArtonLogo } from "@/components/arton-logo";
 import { getStudentSession } from "@/lib/student-session";
+import { groupByDay } from "@/lib/day-group";
+import { GALLERY_GRID, GallerySizeControl, useGallerySize } from "@/components/gallery-size";
 import {
   fetchStudentImage,
   listClassGallery,
@@ -12,8 +14,9 @@ import {
 } from "@/lib/student-api";
 
 /*
- * 학생용 학급 갤러리 — 선생님이 전시 승인한 작품만 보이고, 좋아요를 누를 수 있다.
- * 학생 세션(Bearer)이 필요해 이미지도 fetch→blob URL로 로드한다.
+ * 학생용 학급 갤러리 — 저장(제출)하면 바로 전시되고, 날짜별로 모아 보여주며 좋아요를
+ * 누를 수 있다. 학생 세션(Bearer)이 필요해 이미지도 fetch→blob URL로 로드한다.
+ * (승인 게이트는 비활성 — is_approved 분기는 되살릴 때를 위해 보존)
  */
 export function StudentGallery() {
   // 정적 export의 프리렌더(세션 없음)와 실제 클라이언트(세션 있음)가 통째로 다른
@@ -25,6 +28,7 @@ export function StudentGallery() {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [big, setBig] = useState<GalleryItem | null>(null);
   const [bigUrl, setBigUrl] = useState<string | null>(null);
+  const [size, setSize] = useGallerySize();
 
   useEffect(() => {
     setSession(getStudentSession());
@@ -119,8 +123,11 @@ export function StudentGallery() {
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <h1 className="font-display text-3xl text-ink">우리 반 갤러리 🖼️</h1>
-        <p className="mt-2 text-ink-soft">선생님이 전시한 작품이에요. 마음에 드는 그림에 ❤를 눌러 주세요.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-display text-3xl text-ink">우리 반 갤러리 🖼️</h1>
+          <GallerySizeControl size={size} onChange={setSize} />
+        </div>
+        <p className="mt-2 text-ink-soft">우리 반 친구들의 작품이에요. 마음에 드는 그림에 ❤를 눌러 주세요.</p>
 
         {items === null ? (
           <div className="mt-16 text-center text-ink-faint">작품을 불러오는 중…</div>
@@ -140,11 +147,17 @@ export function StudentGallery() {
           <div className="mt-10 rounded-card bg-paper p-10 text-center text-ink-soft shadow-soft">
             아직 전시된 작품이 없어요. 멋진 그림을 그려서 저장하면
             <br />
-            선생님이 골라 전시해 줄 거예요!
+            바로 여기에 전시돼요!
           </div>
         ) : (
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {items.map((a) => (
+          groupByDay(items, (a) => a.created_at).map((g) => (
+            <section key={g.key} className="mt-6">
+              <h2 className="flex items-center gap-2 font-display text-lg text-ink">
+                📅 {g.label}
+                <span className="text-sm font-normal text-ink-faint">{g.items.length}점</span>
+              </h2>
+              <div className={`mt-2 grid gap-3 ${GALLERY_GRID[size]}`}>
+                {g.items.map((a) => (
               <div key={a.id} className="overflow-hidden rounded-card bg-paper shadow-soft">
                 <button
                   onClick={() => setBig(a)}
@@ -180,8 +193,10 @@ export function StudentGallery() {
                   )}
                 </div>
               </div>
-            ))}
-          </div>
+                ))}
+              </div>
+            </section>
+          ))
         )}
       </div>
 

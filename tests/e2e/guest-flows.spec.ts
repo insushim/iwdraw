@@ -79,7 +79,8 @@ test("빈 캔버스: 가로/세로 방향을 바꿀 수 있다", async ({ page }
   }).toPass();
 });
 
-test("요금제: 무료/Pro 카드가 보인다", async ({ page }) => {
+// 요금제 라우트는 유료화 보류로 숨김(src/app/_pricing) — 복원 시 test.skip 해제(2026-07-09)
+test.skip("요금제: 무료/Pro 카드가 보인다", async ({ page }) => {
   await page.goto("/pricing");
   await expect(page.getByText("0원", { exact: true })).toBeVisible();
   await expect(page.getByText("월 4,900원", { exact: true })).toBeVisible();

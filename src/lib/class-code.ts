@@ -17,3 +17,8 @@ export function normalizeClassCode(raw: string): string {
 export function isValidClassCode(code: string): boolean {
   return VALID.test(code);
 }
+
+/** 한글 입력 감지 — 코드 입력칸에서 한글은 조용히 걸러지므로(normalize) 안내가 필요하다 */
+export function hasHangul(raw: string): boolean {
+  return /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(raw);
+}

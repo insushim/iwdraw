@@ -45,7 +45,7 @@ const FEATURES = [
 const STEPS = [
   { step: "1", title: "교사가 학급 만들기", desc: "이메일로 가입하고 학급을 만들면 6자리 코드와 QR이 생겨요." },
   { step: "2", title: "학생은 코드로 입장", desc: "설치도 로그인도 없이 코드만 입력하면 바로 캔버스가 열려요." },
-  { step: "3", title: "그리고, 전시하기", desc: "완성작은 교사 승인 후 학급 갤러리에 전시되고 A4 작품집으로 인쇄해요." },
+  { step: "3", title: "그리고, 전시하기", desc: "저장하면 학급 갤러리에 바로 전시되고 A4 작품집으로 인쇄해요." },
 ];
 
 export default function LandingPage() {
@@ -55,12 +55,7 @@ export default function LandingPage() {
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <ArtonLogo className="h-10" />
         <nav className="flex items-center gap-3">
-          <Link
-            href="/pricing"
-            className="pressable rounded-card px-4 py-2 font-semibold text-ink-soft hover:text-ink"
-          >
-            요금제
-          </Link>
+          {/* 요금제 링크는 유료화 보류로 숨김(라우트 = src/app/_pricing) — 복원 시 여기부터 */}
           <Link
             href="/teacher"
             className="pressable touch-target inline-flex items-center rounded-card bg-ink px-5 py-2.5 font-display text-white shadow-soft"
@@ -176,9 +171,7 @@ export default function LandingPage() {
           <h2 className="font-display text-3xl text-white">
             다음 미술 시간, 아트온으로 시작해 보세요
           </h2>
-          <p className="mt-3 text-white/70">
-            무료 플랜으로 학급 1개, 학생 30명까지 바로 쓸 수 있어요.
-          </p>
+          <p className="mt-3 text-white/70">지금은 전부 무료예요. 가입하고 바로 쓸 수 있어요.</p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
             <Link
               href="/teacher"

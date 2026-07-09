@@ -48,12 +48,17 @@ CREATE TABLE IF NOT EXISTS artworks (
   image_path     TEXT NOT NULL,
   thumb_path     TEXT NOT NULL,
   timelapse_path TEXT,
-  is_approved    INTEGER NOT NULL DEFAULT 0,
+  -- 승인 게이트 비활성(2026-07-09): 제출 즉시 전시라 DEFAULT 1. 게이트를 되살리면 0으로.
+  -- ⚠️ 이미 배포된 DB에 is_approved=0 행이 있다면 `UPDATE artworks SET is_approved=1` 1회 필요
+  --    (학생 갤러리 WHERE is_approved=1 필터에 영구 은닉되고 승인 UI도 제거됨 — 교차검증 발견)
+  is_approved    INTEGER NOT NULL DEFAULT 1,
   like_count     INTEGER NOT NULL DEFAULT 0,   -- 캐시(원천은 artwork_likes)
   created_at     INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 CREATE INDEX IF NOT EXISTS artworks_class_idx ON artworks(class_id);
 CREATE INDEX IF NOT EXISTS artworks_approved_idx ON artworks(class_id, is_approved);
+-- 만료 정리 cron(WHERE created_at < ?)·삭제 임박 집계 스캔용
+CREATE INDEX IF NOT EXISTS artworks_created_idx ON artworks(created_at);
 
 -- ── 좋아요(중복 방지) ──
 CREATE TABLE IF NOT EXISTS artwork_likes (

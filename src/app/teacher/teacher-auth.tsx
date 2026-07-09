@@ -61,14 +61,14 @@ export function TeacherAuth() {
   };
 
   if (authed === null) {
-    return <div className="text-center text-ink-faint">확인 중…</div>;
+    return <div className="mx-auto max-w-md text-center text-ink-faint">확인 중…</div>;
   }
   if (authed) return <TeacherDashboard onSignOut={signOut} />;
 
   const canSubmit = email.includes("@") && password.length >= 8 && !busy;
 
   return (
-    <div className="rounded-bubble bg-paper p-8 shadow-soft">
+    <div className="mx-auto max-w-md rounded-bubble bg-paper p-8 shadow-soft">
       <h1 className="text-center font-display text-2xl text-ink">
         {mode === "login" ? "선생님, 환영해요" : "선생님 회원가입"}
       </h1>
