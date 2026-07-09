@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { renderPrintSheet, type PrintItem } from "@/engine/export/PrintSheet";
-import { printImageA4 } from "@/lib/print";
+import { printImageA4, downloadImage } from "@/lib/print";
 import { groupByDay } from "@/lib/day-group";
 import { GALLERY_GRID, GallerySizeControl, useGallerySize } from "@/components/gallery-size";
 import {
@@ -49,6 +49,7 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
     }
   };
   const [delError, setDelError] = useState(false);
+  const [dlError, setDlError] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -118,6 +119,11 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
           작품을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.
         </p>
       )}
+      {dlError && (
+        <p className="mb-3 rounded-card bg-danger-soft px-4 py-2 text-sm font-semibold text-danger" role="status">
+          작품을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.
+        </p>
+      )}
 
       {/* 삭제 임박(30일 이내) 안내 — 작품집 인쇄로 남기도록 유도 */}
       {(() => {
@@ -170,19 +176,41 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
                   </span>
                 );
               })()}
-              {/* 이 작품 한 장만 바로 인쇄(원본 해상도) */}
-              <button
-                type="button"
-                onClick={async () => {
-                  const url = (await signedUrl(a.image_path)) ?? urls[a.id];
-                  if (url) printImageA4(url, a.nickname ?? "학생");
-                }}
-                aria-label={`${a.nickname ?? "학생"} 작품 인쇄`}
-                title="이 작품 인쇄"
-                className="pressable absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-lg shadow-soft backdrop-blur transition-colors hover:bg-white"
-              >
-                🖨️
-              </button>
+              {/* 작품 저장(다운로드) · 인쇄 — 원본 해상도 */}
+              <div className="absolute right-2 top-2 flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const url = (await signedUrl(a.image_path)) ?? urls[a.id];
+                    const base = `${a.nickname ?? "학생"}_${dayStamp(a.created_at)}`;
+                    if (url) {
+                      const ok = await downloadImage(url, base);
+                      if (!ok) {
+                        setDelError(false);
+                        setDlError(true);
+                        setTimeout(() => setDlError(false), 3500);
+                      }
+                    }
+                  }}
+                  aria-label={`${a.nickname ?? "학생"} 작품 저장`}
+                  title="이 작품 저장(다운로드)"
+                  className="pressable grid h-9 w-9 place-items-center rounded-full bg-white/90 text-lg shadow-soft backdrop-blur transition-colors hover:bg-white"
+                >
+                  ⬇️
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const url = (await signedUrl(a.image_path)) ?? urls[a.id];
+                    if (url) printImageA4(url, a.nickname ?? "학생");
+                  }}
+                  aria-label={`${a.nickname ?? "학생"} 작품 인쇄`}
+                  title="이 작품 인쇄"
+                  className="pressable grid h-9 w-9 place-items-center rounded-full bg-white/90 text-lg shadow-soft backdrop-blur transition-colors hover:bg-white"
+                >
+                  🖨️
+                </button>
+              </div>
               <div className="p-2">
                 <div className="flex items-center justify-between">
                   <span className="truncate text-sm font-semibold text-ink">{a.nickname ?? "학생"}</span>
@@ -212,6 +240,13 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
       )}
     </div>
   );
+}
+
+/** 다운로드 파일명용 날짜 도장(YYYY-MM-DD) */
+function dayStamp(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function loadImg(url: string): Promise<HTMLImageElement> {

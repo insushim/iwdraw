@@ -9,6 +9,57 @@
  * 확실히 작은 mm 값으로 캡. 세로 중앙정렬(flex/height:100%)은 프린트에서 페이지박스 해석이
  * 불안정하므로 쓰지 않는다.
  */
+/** 파일명에 못 쓰는 문자 제거(윈도/맥 공통 금지문자 + 공백 정리) */
+function safeFileName(name: string): string {
+  return (name || "작품").replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_").slice(0, 60);
+}
+
+/**
+ * 이미지를 파일로 다운로드한다(교사·학생이 작품을 기기에 저장).
+ * 같은 오리진(/api/artwork/file)이라 blob으로 받아 파일명을 확실히 지정 —
+ * 크로스 오리진이면 download 속성이 무시돼 새 탭 열림만 되는 것을 피한다.
+ */
+export async function downloadImage(src: string, baseName: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const filename = `${safeFileName(baseName)}.png`;
+  const abs = (() => {
+    try {
+      return new URL(src, window.location.href).href;
+    } catch {
+      return src;
+    }
+  })();
+  try {
+    const res = await fetch(abs);
+    if (!res.ok) throw new Error(`http ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  } catch {
+    // 폴백: 직접 링크(같은 오리진이면 download 유효, 실패해도 새 탭에서 저장 가능)
+    try {
+      const a = document.createElement("a");
+      a.href = abs;
+      a.download = filename;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 export function printImageA4(src: string, title?: string): void {
   if (typeof window === "undefined") return;
 

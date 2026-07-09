@@ -18,7 +18,11 @@ export class WatercolorBrush extends BrushBase {
         sizePressure: 0.3, // 굵기 변동 크면 획 머리가 볼록해진다 — 워시는 폭이 고른 게 자연스럽다
         alphaPressure: 0.5,
         minSizeRatio: 0.5,
-        composite: "multiply",
+        // darken(채널별 min): 같은 색을 겹쳐 칠하면 그 색으로 "수렴"한다 — multiply는
+        // 겹칠 때마다 곱셈으로 계속 어두워져 넓은 칠이 얼룩덜룩(동심원 단차)해진다
+        // (2026-07-09 사용자 실측: 나무 수관이 얼룩. e2e watercolor-mottle로 재현).
+        // 흰 종이 위 첫 획은 multiply와 동일, 다른 색 겹침도 min이라 물감처럼 섞인다.
+        composite: "darken",
         paperGrain: 0.32, // granulation은 은은하게 — 0.5는 획 안에 점이 도드라짐(2026-07-07 사용자 실측)
         strokeBlend: "wash", // 획 내부 균일(겹침 스캘럽 제거)
         washOpacity: 0.85, // 물양이 실제 농도를 담당(아래 makeDab) — 상한만 정의
