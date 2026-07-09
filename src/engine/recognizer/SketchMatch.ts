@@ -1,11 +1,14 @@
-import { STAMPS, type StampDef } from "../tools/StampTool";
+import { STAMPS, getStamp, type StampDef } from "../tools/StampTool";
 import type { SketchSuggestion } from "../types";
+import { EXTRA_SKETCH_VARIANTS } from "./extra-templates";
 
 /*
  * 뚝딱그림(SketchSuggest) 인식 코어 — $P 포인트클라우드 매칭.
  * 러프 스케치(스트로크 점 구름)를 스탬프 40종 템플릿과 비교해 후보를 낸다.
  * 획 순서·방향·개수 무관(점 구름), ML·네트워크 없음 — 웨일북에서도 수 ms.
- * 템플릿은 StampTool의 SVG path를 getPointAtLength로 샘플링해 재활용.
+ * 템플릿 3원: ① StampTool SVG path 샘플링 ② 손그림 변형 표본(extra-templates)
+ * ③ 아이가 수락한 스케치를 기기별 localStorage에 적립(쓸수록 그 아이 스타일에 적응).
+ * 같은 스탬프에 표본이 여러 개면 최고점만 취한다.
  */
 
 export interface Pt {
@@ -195,8 +198,78 @@ function buildTemplates(): SketchTemplate[] {
     if (strokes.flat().length < 8) continue;
     built.push({ stampId: def.id, label: def.label, cloud: preparePointCloud(strokes) });
   }
+  // 손그림 변형 표본 — SVG와 달리 순수 데이터라 DOM 불필요
+  for (const v of EXTRA_SKETCH_VARIANTS) {
+    const label = getStamp(v.stampId)?.label;
+    if (!label) continue;
+    built.push({ stampId: v.stampId, label, cloud: preparePointCloud(v.strokes) });
+  }
   templates = built;
   return templates;
+}
+
+/* ── 개인 학습 템플릿: 수락한 스케치를 그 기기의 표본으로 적립 ──
+ * 아이 그림은 어디에도 전송하지 않는다 — localStorage에 정규화 점 구름만 저장. */
+
+const LEARN_KEY = "arton.sketchLearn.v1";
+/** 스탬프당 최근 수락 표본 수(FIFO) — 40스탬프 × 3 × 48점 ≈ 수십 KB 상한 */
+const LEARN_MAX_PER_STAMP = 3;
+
+type LearnStore = Record<string, number[][]>; // stampId → [x0,y0,x1,y1,…] 플랫 배열들
+
+let personal: SketchTemplate[] | null = null;
+
+function readLearnStore(): LearnStore {
+  try {
+    const raw = localStorage.getItem(LEARN_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function unflatten(flat: number[]): Pt[] {
+  const out: Pt[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) out.push({ x: flat[i], y: flat[i + 1] });
+  return out;
+}
+
+function loadPersonalTemplates(): SketchTemplate[] {
+  if (personal) return personal;
+  if (typeof localStorage === "undefined") return [];
+  const out: SketchTemplate[] = [];
+  for (const [stampId, clouds] of Object.entries(readLearnStore())) {
+    const label = getStamp(stampId)?.label;
+    if (!label || !Array.isArray(clouds)) continue;
+    for (const flat of clouds) {
+      if (!Array.isArray(flat) || flat.length < 16 || flat.some((n) => typeof n !== "number")) continue;
+      out.push({ stampId, label, cloud: unflatten(flat) });
+    }
+  }
+  personal = out;
+  return personal;
+}
+
+/** 제안 수락 시 호출 — 이 스케치를 해당 스탬프의 개인 표본으로 저장(근사 중복은 스킵) */
+export function learnAccepted(stampId: string, rawStrokes: Pt[][]): void {
+  if (typeof localStorage === "undefined" || !getStamp(stampId)) return;
+  const cloud = preparePointCloud(rawStrokes);
+  if (cloud.length < 8) return;
+  const store = readLearnStore();
+  const list = Array.isArray(store[stampId]) ? store[stampId] : [];
+  for (const flat of list) {
+    if (Array.isArray(flat) && cloudDistance(cloud, unflatten(flat)) < 0.05) return; // 이미 비슷한 표본
+  }
+  list.push(cloud.flatMap((p) => [Math.round(p.x * 1000) / 1000, Math.round(p.y * 1000) / 1000]));
+  while (list.length > LEARN_MAX_PER_STAMP) list.shift();
+  store[stampId] = list;
+  try {
+    localStorage.setItem(LEARN_KEY, JSON.stringify(store));
+  } catch {
+    // 사파리 프라이빗 모드 등 — 학습만 포기, 인식은 정상
+  }
+  personal = null; // 다음 인식 때 재로드
 }
 
 /* ── 공개 API ── */
@@ -212,21 +285,24 @@ export interface SketchTemplate {
 export function recognizeAgainst(rawStrokes: Pt[][], tmpls: SketchTemplate[]): SketchSuggestion[] {
   if (rawStrokes.reduce((a, s) => a + s.length, 0) < 8) return [];
   const cloud = preparePointCloud(rawStrokes);
-  const results: SketchSuggestion[] = [];
+  // 스탬프당 표본이 여러 개(SVG·손그림 변형·개인 학습) — 최고점 하나만 남긴다
+  const best = new Map<string, SketchSuggestion>();
   for (const t of tmpls) {
     const d = cloudDistance(cloud, t.cloud);
     // 정규화 공간 평균거리 → 점수. 완전일치 d≈0, 무관 d≈0.5+
     const score = Math.max(0, 1 - d * 2.2);
-    results.push({ stampId: t.stampId, label: t.label, score });
+    const prev = best.get(t.stampId);
+    if (!prev || score > prev.score) best.set(t.stampId, { stampId: t.stampId, label: t.label, score });
   }
-  results.sort((a, b) => b.score - a.score);
+  const results = [...best.values()].sort((a, b) => b.score - a.score);
   return results.slice(0, SUGGEST_TOP).filter((r) => r.score >= SUGGEST_MIN_SCORE);
 }
 
 /**
  * 스케치(획 배열) → 상위 후보. 점수 하한 미달이면 빈 배열.
- * 계산량: 40템플릿 × √48 시작점 × 48² 그리디 ≈ 수 ms (스트로크 종료 후 idle에서만 호출)
+ * 계산량: ~75템플릿(SVG 40+변형 33+개인 ≤120) × √48 시작점 × 48² 그리디 ≈ 수 ms
+ * (스트로크 종료 후 debounce idle에서만 호출)
  */
 export function recognizeSketch(rawStrokes: Pt[][]): SketchSuggestion[] {
-  return recognizeAgainst(rawStrokes, buildTemplates());
+  return recognizeAgainst(rawStrokes, [...buildTemplates(), ...loadPersonalTemplates()]);
 }

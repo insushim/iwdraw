@@ -32,7 +32,7 @@ import { Stabilizer, strengthToStreamline } from "./input/Stabilizer";
 import { mirrorPoint } from "./tools/Symmetry";
 import { detectShape, QUICKSHAPE_HOLD_MS } from "./tools/QuickShape";
 import { drawStampOnCtx, getStamp } from "./tools/StampTool";
-import { recognizeSketch } from "./recognizer/SketchMatch";
+import { recognizeSketch, learnAccepted } from "./recognizer/SketchMatch";
 import type { StrokeContext } from "./core/backend";
 import { blendToComposite } from "./core/backend";
 import type { TipKind } from "./brushes/BrushBase";
@@ -296,6 +296,8 @@ export class ArtEngine {
 
   private strokeBegin(p: StrokePoint): void {
     if (this.replaying) return;
+    // 포인터(클릭 펜): 캔버스를 눌러도 아무것도 안 그린다 — 제안·버튼 클릭 중 오작화 방지
+    if (this.brushId === "pointer") return;
     // 페인트통(fill)은 클릭 1회 처리
     if (this.brushId === "fill") {
       this.doFill(p);
@@ -803,6 +805,8 @@ export class ArtEngine {
       symmetry: "none",
       extra: { stamp: { id: stampId, cx, cy, size } },
     });
+    // 수락한 스케치를 이 기기의 개인 표본으로 적립 — 쓸수록 그 아이 그림체에 적응
+    learnAccepted(stampId, this.suggestStrokes);
     this.resetSuggest();
     this.requestComposite();
     this.scheduleAutoSave();

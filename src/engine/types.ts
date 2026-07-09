@@ -16,6 +16,7 @@ export type BrushId =
   | "rainbow"
   | "smudge"
   | "eyedropper"
+  | "pointer"
   | "eraser"
   | "fill"
   | "stamp"

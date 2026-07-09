@@ -39,6 +39,7 @@ export type IconName =
   | "eyeOff"
   | "plus"
   | "picker"
+  | "pointer"
   | "glasses"
   | "sketch"
   | "palette"
@@ -293,6 +294,16 @@ const ICONS: Record<IconName, ReactNode> = {
       <circle cx="12.5" cy="12" r="6" fill="#E5484D" opacity="0.85" />
       <circle cx="19.5" cy="12" r="6" fill="#5BB8F5" opacity="0.85" />
       <circle cx="16" cy="19" r="6" fill="#FFC84A" opacity="0.85" />
+    </g>
+  ),
+  pointer: (
+    // 검지 세운 손 + 반짝 — 클릭 전용 도구(그려지지 않음)
+    <g {...O} strokeLinecap="round">
+      <path
+        d="M13.8 16.5V7.5a2.2 2.2 0 014.4 0v7l4.6 1c1.6.3 2.7 1.8 2.5 3.4l-.5 4c-.3 2-2 3.4-4 3.4h-4.6c-1.6 0-3.1-.8-4-2.1l-3.4-5c-.9-1.4.8-3 2.2-2.1z"
+        fill="#F0C08E"
+      />
+      <path d="M20.5 6l2.4-2.4M22 9.5h3.4M11.5 6L9.1 3.6" fill="none" />
     </g>
   ),
   glasses: (

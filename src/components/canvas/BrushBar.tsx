@@ -20,6 +20,7 @@ const BRUSH_ICON: Partial<Record<BrushId, IconName>> = {
   eraser: "eraser",
   fill: "fill",
   eyedropper: "picker",
+  pointer: "pointer",
 };
 
 /*
@@ -32,6 +33,8 @@ export function BrushBar() {
   const junior = useEditor((s) => s.juniorMode);
 
   const tools: { id: BrushId; label: string }[] = [
+    // 클릭(포인터): 그려지지 않는 도구 — 다 그린 뒤 제안·버튼을 눌러도 오작화가 없다
+    { id: "pointer", label: "클릭" },
     ...BRUSH_META.filter((b) => (junior ? b.junior : true)).map((b) => ({
       id: b.id,
       label: b.label,
