@@ -20,6 +20,11 @@ export class StrokeRecorder {
     return this.log;
   }
 
+  /** 최근 n개 항목 제거 — 뚝딱그림이 스케치 획을 스탬프로 치환할 때 재생 로그도 함께 정리 */
+  dropLast(n: number): void {
+    if (n > 0) this.log.length = Math.max(0, this.log.length - n);
+  }
+
   /** 전체 그리기 소요 시간(ms) — 첫 점 ~ 마지막 점 */
   get durationMs(): number {
     let min = Infinity;

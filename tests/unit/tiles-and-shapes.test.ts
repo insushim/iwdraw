@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { tilesForRect, copyTiles, TILE } from "@/engine/core/tiles";
 import { detectShape } from "@/engine/tools/QuickShape";
 import { mirrorPoint } from "@/engine/tools/Symmetry";
+import { mulberry32 } from "@/engine/types";
 import { normalizeClassCode, isValidClassCode } from "@/lib/class-code";
 import { hslToRgb } from "@/engine/brushes/BrushBase";
 import { encodeStroke, decodeStroke } from "@/lib/stroke-codec";
@@ -128,6 +129,84 @@ describe("QuickShape.detectShape", () => {
     }
     pts.push({ x: raw[0].x, y: raw[0].y, pressure: 0.5, t: pts.length });
     expect(detectShape(pts)?.kind).toBe("star");
+  });
+
+  /* ── 실사용 재현(2026-07-09 보고: "사각형 그리면 별이 그려져") ──
+   * 아이 손그림 = 큰 지터 + 변이 안/밖으로 휨(bow) + 시작·끝 벌어짐.
+   * 사각형 반지름 프로필도 8회 진동이라 별 판정(crossings>=8)에 빨려들던 버그. */
+  function handPolygon(nSides: number, bow: number, jitterAmp: number, seed = 7): StrokePoint[] {
+    const rnd = mulberry32(seed);
+    const cx = 200, cy = 200, R = 120, rot = -Math.PI / 2, perEdge = 16;
+    const corners = Array.from({ length: nSides }, (_, i) => {
+      const a = rot + (i / nSides) * Math.PI * 2;
+      return { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R };
+    });
+    const pts: StrokePoint[] = [];
+    for (let i = 0; i < nSides; i++) {
+      const A = corners[i];
+      const B = corners[(i + 1) % nSides];
+      const len = Math.hypot(B.x - A.x, B.y - A.y);
+      const nx = -(B.y - A.y) / len; // 변의 법선
+      const ny = (B.x - A.x) / len;
+      const edgeBow = bow * (i % 2 === 0 ? 1 : -1); // 변마다 안/밖 번갈아 휨
+      for (let k = 0; k < perEdge; k++) {
+        const t = k / perEdge;
+        const dev = edgeBow * Math.sin(Math.PI * t) + (rnd() - 0.5) * 2 * jitterAmp;
+        pts.push({ x: A.x + (B.x - A.x) * t + nx * dev, y: A.y + (B.y - A.y) * t + ny * dev, pressure: 0.5, t: pts.length });
+      }
+    }
+    // 시작·끝이 8px쯤 벌어진 채 끝남(아이들이 딱 안 붙임)
+    pts.push({ x: corners[0].x + 8, y: corners[0].y + 4, pressure: 0.5, t: pts.length });
+    return pts;
+  }
+
+  it("손그림 사각형(휨+지터)은 별이 아니라 사각형", () => {
+    for (const seed of [1, 7, 42]) {
+      const shape = detectShape(handPolygon(4, 7, 4, seed));
+      expect(shape?.kind).toBe("rect");
+    }
+  });
+
+  it("손그림 삼각형(휨+지터)도 삼각형", () => {
+    expect(detectShape(handPolygon(3, 6, 4))?.kind).toBe("triangle");
+  });
+
+  it("손떨림 직선(휘청거림 포함)은 직선으로 스냅", () => {
+    const rnd = mulberry32(11);
+    const pts: StrokePoint[] = [];
+    for (let i = 0; i <= 60; i++) {
+      const t = i / 60;
+      // 길이 400 가로선 + 완만한 물결(±6px) + 지터(±2px)
+      pts.push({
+        x: 100 + 400 * t,
+        y: 200 + 6 * Math.sin(t * Math.PI * 2) + (rnd() - 0.5) * 4,
+        pressure: 0.5,
+        t: i,
+      });
+    }
+    expect(detectShape(pts)?.kind).toBe("line");
+  });
+
+  it("깊게 굽은 호(반원)는 직선으로 스냅하지 않는다", () => {
+    const pts: StrokePoint[] = [];
+    for (let i = 0; i <= 40; i++) {
+      const a = Math.PI * (i / 40);
+      pts.push({ x: 200 + Math.cos(a) * 150, y: 200 - Math.sin(a) * 150, pressure: 0.5, t: i });
+    }
+    expect(detectShape(pts)?.kind).not.toBe("line");
+  });
+
+  it("애매한 닫힌 낙서는 아무 도형도 아님(하트 남발 금지)", () => {
+    const rnd = mulberry32(3);
+    const pts: StrokePoint[] = [];
+    // 불규칙 반경(60~140px)으로 우툴두툴한 닫힌 블롭
+    for (let i = 0; i <= 50; i++) {
+      const a = (i / 50) * Math.PI * 2;
+      const r = 100 + Math.sin(a * 3) * 25 + (rnd() - 0.5) * 30;
+      pts.push({ x: 200 + Math.cos(a) * r, y: 200 + Math.sin(a) * r, pressure: 0.5, t: i });
+    }
+    const kind = detectShape(pts)?.kind;
+    expect(kind === "heart").toBe(false);
   });
 });
 

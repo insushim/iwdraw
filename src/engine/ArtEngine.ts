@@ -31,6 +31,8 @@ import { Gestures } from "./input/Gestures";
 import { Stabilizer, strengthToStreamline } from "./input/Stabilizer";
 import { mirrorPoint } from "./tools/Symmetry";
 import { detectShape, QUICKSHAPE_HOLD_MS } from "./tools/QuickShape";
+import { drawStampOnCtx, getStamp } from "./tools/StampTool";
+import { recognizeSketch } from "./recognizer/SketchMatch";
 import type { StrokeContext } from "./core/backend";
 import { blendToComposite } from "./core/backend";
 import type { TipKind } from "./brushes/BrushBase";
@@ -79,6 +81,8 @@ export class ArtEngine {
   settings: BrushSettings = { ...DEFAULT_SETTINGS };
   symmetry: SymmetryMode = "none";
   quickShapeEnabled = false;
+  /** 뚝딱그림(스케치 인식 → 스탬프 제안) — 색칠 모드에선 자동 비활성 */
+  sketchSuggestEnabled = true;
 
   private brush: BrushBase | null = null;
   private curPoints: StrokePoint[] = [];
@@ -209,6 +213,7 @@ export class ArtEngine {
 
   /* ── 브러시/모드 설정 ── */
   setMode(mode: Mode): void {
+    this.resetSuggest();
     this.mode = mode;
     // 모드별 기본 브러시
     const def: Record<Mode, BrushId> = {
@@ -241,7 +246,19 @@ export class ArtEngine {
   }
   setSymmetry(m: SymmetryMode): void {
     this.symmetry = m;
+    this.requestComposite(); // 가이드선 즉시 표시/제거
   }
+  setSketchSuggest(on: boolean): void {
+    this.sketchSuggestEnabled = on;
+    if (!on) this.resetSuggest();
+  }
+  /** 협동 세션 억제 — 수락(undo×k+스탬프)이 원격에 전파될 수 없어 캔버스가 갈라진다.
+   * 스트로크 프로토콜에 치환 명령이 생기기 전까지 협동 방에서는 기능 자체를 잠근다. */
+  setSuggestSuppressed(on: boolean): void {
+    this.suggestSuppressed = on;
+    if (on) this.resetSuggest();
+  }
+  private suggestSuppressed = false;
   setQuickShape(on: boolean): void {
     this.quickShapeEnabled = on;
   }
@@ -419,6 +436,7 @@ export class ArtEngine {
   }
 
   private smudgeEnd(p: StrokePoint): void {
+    this.resetSuggest(); // smudge도 히스토리 push — 그룹 불변식 유지
     this.smudgeMove([p]);
     this.smudging = false;
     this.smudgeLast = null;
@@ -568,6 +586,8 @@ export class ArtEngine {
       points: this.curPoints,
     });
     if (this.brushId !== "eraser") this.emit("colorUsed", { color: this.settings.color });
+    // 뚝딱그림 그룹 추적 — brush/curPoints 소거 전에, 이 획의 더티 bbox와 함께
+    this.trackSuggest(alreadyRecorded, { minX: x, minY: y, maxX: x + w, maxY: y + h });
     this.brush = null;
     this.curPoints = [];
     this.scheduleAutoSave();
@@ -647,6 +667,151 @@ export class ArtEngine {
     this.emitHistory();
   }
 
+  /* ── 뚝딱그림(스케치 인식 → 스탬프 제안) ──
+   * 연속된 그리기 스트로크를 공간 근접으로 묶고, 700ms 쉬면 $P 인식 후 후보를 emit.
+   * 수락 = before 스냅샷 → 그룹 스트로크 k개 history.undo(스케치 픽셀 원복) → 스탬프
+   * 그리기 → 커맨드 1개 push. push가 redo 스택(undo된 k개)을 폐기하므로 되돌리기
+   * 1번에 "스탬프 ↔ 스케치"가 원자적으로 오간다.
+   * 그룹 불변식: suggestStrokes는 항상 히스토리 스택 최상단 k개 커맨드와 1:1 —
+   * 다른 종류의 push(fill·smudge·clear·QuickShape)나 undo/redo/레이어·모드 변경은 전부 리셋. */
+  private suggestStrokes: { x: number; y: number }[][] = [];
+  private suggestBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  private suggestLayerId: string | null = null;
+  private suggestTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 그룹 상한 — 이보다 길면 채색/낙서로 보고 제안 중단 */
+  private static readonly SUGGEST_MAX_STROKES = 12;
+  private static readonly SUGGEST_DEBOUNCE_MS = 700;
+  /** 그룹 합류 판정 여유(px) — 획끼리 이만큼 떨어져도 같은 그림으로 취급 */
+  private static readonly SUGGEST_JOIN_PAD = 60;
+
+  private resetSuggest(): void {
+    if (this.suggestTimer) {
+      clearTimeout(this.suggestTimer);
+      this.suggestTimer = null;
+    }
+    if (this.suggestStrokes.length || this.suggestLayerId) {
+      this.emit("suggestReady", { candidates: [] });
+    }
+    this.suggestStrokes = [];
+    this.suggestLayerId = null;
+    this.suggestBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  }
+
+  /** finalizeStroke에서 호출(curPoints 소거 전) — bb = 이 획의 더티 bbox */
+  private trackSuggest(
+    quickShaped: boolean,
+    bb: { minX: number; minY: number; maxX: number; maxY: number },
+  ): void {
+    const drawing =
+      this.brushId !== "eraser" && this.brush?.cfg.composite !== "destination-out";
+    if (
+      !this.sketchSuggestEnabled ||
+      this.suggestSuppressed || // 협동 방 — 치환이 원격에 전파 안 됨
+      this.mode === "coloring" || // 색칠 중 제안은 소음
+      this.symmetry !== "none" || // 데칼코마니: 미러 획까지 bbox에 잡혀 교체가 어긋난다
+      quickShaped || // 이미 도형으로 스냅됨
+      !drawing ||
+      this.replaying
+    ) {
+      this.resetSuggest();
+      return;
+    }
+    const layerId = this.layers.active.id;
+    const joined =
+      this.suggestStrokes.length > 0 &&
+      this.suggestLayerId === layerId &&
+      bb.minX - ArtEngine.SUGGEST_JOIN_PAD < this.suggestBBox.maxX &&
+      bb.maxX + ArtEngine.SUGGEST_JOIN_PAD > this.suggestBBox.minX &&
+      bb.minY - ArtEngine.SUGGEST_JOIN_PAD < this.suggestBBox.maxY &&
+      bb.maxY + ArtEngine.SUGGEST_JOIN_PAD > this.suggestBBox.minY;
+    if (!joined) this.resetSuggest();
+    // 멀리서 새 획 = 새 그림의 시작(리셋 후 곧바로 새 그룹)
+    const step = Math.max(1, Math.ceil(this.curPoints.length / 128));
+    this.suggestStrokes.push(
+      this.curPoints.filter((_, i) => i % step === 0).map((p) => ({ x: p.x, y: p.y })),
+    );
+    this.suggestLayerId = layerId;
+    this.suggestBBox.minX = Math.min(this.suggestBBox.minX, bb.minX);
+    this.suggestBBox.minY = Math.min(this.suggestBBox.minY, bb.minY);
+    this.suggestBBox.maxX = Math.max(this.suggestBBox.maxX, bb.maxX);
+    this.suggestBBox.maxY = Math.max(this.suggestBBox.maxY, bb.maxY);
+    if (this.suggestStrokes.length > ArtEngine.SUGGEST_MAX_STROKES) {
+      this.resetSuggest();
+      return;
+    }
+    if (this.suggestTimer) clearTimeout(this.suggestTimer);
+    this.suggestTimer = setTimeout(() => {
+      this.suggestTimer = null;
+      const candidates = recognizeSketch(this.suggestStrokes);
+      this.emit("suggestReady", { candidates });
+    }, ArtEngine.SUGGEST_DEBOUNCE_MS);
+  }
+
+  /** 제안 수락 — 그룹 스케치를 스탬프로 원자 교체(되돌리기 1번에 복귀) */
+  acceptSuggestion(stampId: string): void {
+    if (this.brush || this.smudging || this.replaying) return; // 획 진행 중 금지
+    const k = this.suggestStrokes.length;
+    const def = getStamp(stampId);
+    if (!k || !def || this.layers.active.id !== this.suggestLayerId) {
+      this.resetSuggest();
+      return;
+    }
+    const layer = this.layers.active;
+    const bb = this.suggestBBox;
+    const cx = clamp((bb.minX + bb.maxX) / 2, 0, this.width);
+    const cy = clamp((bb.minY + bb.maxY) / 2, 0, this.height);
+    const size = clamp(
+      (bb.maxX - bb.minX + (bb.maxY - bb.minY)) / 2,
+      48,
+      Math.min(this.width, this.height),
+    );
+    // 스케치와 스탬프 영역의 합집합 + 여유(외곽선 두께)
+    const half = size / 2 + 12;
+    const x = Math.max(0, Math.floor(Math.min(bb.minX, cx - half)));
+    const y = Math.max(0, Math.floor(Math.min(bb.minY, cy - half)));
+    const w = Math.min(this.width - x, Math.ceil(Math.max(bb.maxX, cx + half) - x));
+    const h = Math.min(this.height - y, Math.ceil(Math.max(bb.maxY, cy + half) - y));
+    if (w <= 0 || h <= 0) {
+      this.resetSuggest();
+      return;
+    }
+    const tiles = tilesForRect(x, y, w, h, this.width, this.height);
+    const before = copyTiles(
+      layer.ctx.getImageData(0, 0, this.width, this.height).data,
+      this.width,
+      tiles,
+    );
+    // 그룹 불변식 덕에 최상단 k개 = 정확히 이 스케치의 획들
+    for (let i = 0; i < k; i++) {
+      if (!this.history.undo()) break; // 불변식이 깨졌어도 before/after 스냅샷은 자기일관
+    }
+    drawStampOnCtx(layer.ctx, def, cx, cy, size, this.settings.color);
+    const after = copyTiles(
+      layer.ctx.getImageData(0, 0, this.width, this.height).data,
+      this.width,
+      tiles,
+    );
+    this.pushTileCommand(layer, tiles, before, after);
+    // 무비 재생은 로그를 누적으로만 다시 그린다 — 치환된 스케치 획을 지우지 않으면
+    // 재생 최종 프레임에 낙서 잔상이 남아 실제 그림과 달라진다(교차검증 합의 발견)
+    this.recorder.dropLast(k);
+    this.recorder.record({
+      brush: "stamp",
+      settings: { ...this.settings },
+      layerId: layer.id,
+      points: [{ x: cx, y: cy, pressure: 1, t: performance.now() }],
+      symmetry: "none",
+      extra: { stamp: { id: stampId, cx, cy, size } },
+    });
+    this.resetSuggest();
+    this.requestComposite();
+    this.scheduleAutoSave();
+  }
+
+  dismissSuggestion(): void {
+    this.resetSuggest();
+  }
+
   /* ── QuickShape 홀드 ── */
   private armQuickShapeHold(): void {
     if (!this.quickShapeEnabled) return;
@@ -723,7 +888,8 @@ export class ArtEngine {
       tolerance: 32,
       barrier,
     });
-    if (!res.changed || !res.dirty) return;
+    if (!res.changed || !res.dirty) return; // 픽셀 무변경 — 제안 그룹도 건드리지 않는다
+    this.resetSuggest(); // fill이 히스토리에 push되기 전 — 그룹 불변식 유지
     layer.ctx.putImageData(img, 0, 0);
 
     const tiles = tilesForRect(res.dirty.x, res.dirty.y, res.dirty.w, res.dirty.h, this.width, this.height);
@@ -745,12 +911,14 @@ export class ArtEngine {
 
   /* ── 히스토리 ── */
   undo(): void {
+    this.resetSuggest(); // 그룹↔히스토리 최상단 k개 대응이 깨진다
     if (this.history.undo()) {
       this.requestComposite();
       this.emitHistory();
     }
   }
   redo(): void {
+    this.resetSuggest();
     if (this.history.redo()) {
       this.requestComposite();
       this.emitHistory();
@@ -758,6 +926,7 @@ export class ArtEngine {
   }
 
   clearActiveLayer(): void {
+    this.resetSuggest(); // clear도 히스토리 push — 그룹 불변식 유지
     const layer = this.layers.active;
     const beforeFull = new Uint8ClampedArray(
       layer.ctx.getImageData(0, 0, this.width, this.height).data,
@@ -776,6 +945,7 @@ export class ArtEngine {
 
   /** 새 그림: 그리기 레이어를 1장으로 줄여 비우고 히스토리·기록·자동저장 초기화(도안·원본은 유지) */
   newDrawing(): void {
+    this.resetSuggest();
     const drawables = this.layers.info.filter((l) => !l.isLineart && !l.isBase);
     for (const l of drawables.slice(1)) this.layers.removeLayer(l.id);
     const first = this.layers.info.find((l) => !l.isLineart && !l.isBase);
@@ -795,15 +965,20 @@ export class ArtEngine {
 
   /* ── 레이어 API(UI가 호출) ── */
   addLayer(): void {
-    if (this.layers.addLayer()) this.emitLayers();
+    if (this.layers.addLayer()) {
+      this.resetSuggest(); // 활성 레이어가 새 레이어로 바뀐다 — 명시적 리셋
+      this.emitLayers();
+    }
   }
   removeLayer(id: string): void {
     if (this.layers.removeLayer(id)) {
+      this.resetSuggest();
       this.emitLayers();
       this.requestComposite();
     }
   }
   setActiveLayer(id: string): void {
+    this.resetSuggest(); // 그룹은 단일 레이어 전제
     this.layers.setActive(id);
     this.emitLayers();
   }
@@ -904,6 +1079,25 @@ export class ArtEngine {
     ctx.globalCompositeOperation = "multiply";
     drawPaperTint(ctx, this.width, this.height, this.paperKindForMode());
     ctx.globalCompositeOperation = "source-over";
+    // 데칼코마니 가이드(표시 전용 — 내보내기·저장엔 미포함): 대칭축을 연한 점선으로.
+    // 어느 선을 기준으로 접히는지 보여야 아이가 대칭을 이해하고 그린다(2026-07-09 요청).
+    if (this.symmetry !== "none") {
+      ctx.save();
+      ctx.strokeStyle = "rgba(91,184,245,0.45)"; // sky 톤
+      ctx.lineWidth = 2 / this.view.scale; // 줌과 무관하게 화면상 2px
+      ctx.setLineDash([10 / this.view.scale, 8 / this.view.scale]);
+      ctx.beginPath();
+      if (this.symmetry === "vertical" || this.symmetry === "quad") {
+        ctx.moveTo(this.width / 2, 0);
+        ctx.lineTo(this.width / 2, this.height);
+      }
+      if (this.symmetry === "horizontal" || this.symmetry === "quad") {
+        ctx.moveTo(0, this.height / 2);
+        ctx.lineTo(this.width, this.height / 2);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.emit("dirty", {});
   }
@@ -940,6 +1134,7 @@ export class ArtEngine {
     return null;
   }
   async restore(): Promise<boolean> {
+    this.resetSuggest(); // 히스토리 없는 픽셀 대체 — 그룹 무효
     const state = await this.autosave.restore();
     if (!state) return false;
     for (const saved of state.layers) {
@@ -982,6 +1177,10 @@ export class ArtEngine {
   destroy(): void {
     cancelAnimationFrame(this.rafId);
     this.clearHold();
+    if (this.suggestTimer) {
+      clearTimeout(this.suggestTimer);
+      this.suggestTimer = null;
+    }
     this.pointer.destroy();
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.flushAutoSave);

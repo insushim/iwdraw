@@ -116,6 +116,14 @@ export interface StrokeCommitted {
   points: StrokePoint[];
 }
 
+/** 뚝딱그림 후보 1개 — 스탬프 도안 제안 */
+export interface SketchSuggestion {
+  stampId: string;
+  label: string;
+  /** 0~1 — 클수록 유사 */
+  score: number;
+}
+
 /** 엔진 → UI 이벤트 (Zustand 스토어가 구독) */
 export interface EngineEvents {
   historyChange: { canUndo: boolean; canRedo: boolean };
@@ -133,6 +141,8 @@ export interface EngineEvents {
   colorPicked: { color: RGB };
   /** 뷰(핀치 줌/팬) 변경 — UI가 "화면 맞춤" 탈출 버튼 표시에 사용 */
   viewChange: { scale: number };
+  /** 뚝딱그림 — 스케치 인식 후보(빈 배열 = 제안 바 닫기) */
+  suggestReady: { candidates: SketchSuggestion[] };
 }
 
 export type EngineEventName = keyof EngineEvents;

@@ -66,39 +66,133 @@ export function detectShape(pts: StrokePoint[]): ShapeResult | null {
   const closed = closeDist < diag * 0.25;
 
   if (!closed) {
-    // 열린 선 → 직선인지 확인(경로/직선거리 비 ≈ 1)
-    const straight = pathLength(pts) / Math.max(1, Math.hypot(endPt.x - start.x, endPt.y - start.y));
-    if (straight < 1.15) {
+    // 열린 선 → 직선 판정은 두 지표 병행(2026-07-09 실사용 "직선이 안 됨" 보고):
+    //  · 경로/직선거리 비 — 1.15는 아이 손떨림이 통과 못 함 → 1.4로 완화
+    //  · 현(chord)에서의 최대 수직 이탈/길이 — 반원 호(경로비 1.11)가 직선으로 새는 걸 차단
+    const direct = Math.max(1, Math.hypot(endPt.x - start.x, endPt.y - start.y));
+    const straight = pathLength(pts) / direct;
+    if (straight < 1.4 && maxChordDeviation(pts, start, endPt) / direct < 0.12) {
       return { kind: "line", points: [{ x: start.x, y: start.y }, { x: endPt.x, y: endPt.y }] };
     }
     return null;
   }
 
-  // 닫힌 도형: 중심에서 각 점까지 반지름 변동으로 원 판별
-  const radii = pts.map((p) => Math.hypot(p.x - b.cx, p.y - b.cy));
+  // 닫힌 도형 — 등간격 재샘플 + 이동평균 스무딩 후 분석(지터가 만든 가짜 꼭짓점·오목 제거).
+  // 재샘플은 시작=끝 이음새(seam) 꼭짓점 오프바이원도 방지.
+  const rs = smoothClosed(resampleClosed(pts, 64));
+  const radii = rs.map((p) => Math.hypot(p.x - b.cx, p.y - b.cy));
   const rMean = radii.reduce((a, c) => a + c, 0) / radii.length;
-  const rVar =
-    radii.reduce((a, c) => a + (c - rMean) * (c - rMean), 0) / radii.length;
+  const rVar = radii.reduce((a, c) => a + (c - rMean) * (c - rMean), 0) / radii.length;
   const rCv = Math.sqrt(rVar) / Math.max(1, rMean); // 변동계수
-
-  // 등간격 재샘플(닫힌 윤곽) 후 순환 꼭짓점 계산 —
-  // 시작=끝 이음새(seam)의 꼭짓점까지 세어 삼각형/사각형이 하나씩 밀리는 오프바이원 방지.
-  const rs = resampleClosed(pts, 64);
+  let rMin = Infinity;
+  let rMax = 0;
+  for (const r of radii) {
+    if (r < rMin) rMin = r;
+    if (r > rMax) rMax = r;
+  }
+  const amplitude = (rMax - rMin) / Math.max(1, rMean); // 별 0.8±, 사각형 0.34±
+  const crossings = crossingsCyclic(radii, rMean); // 5각 별=10, 사각형=8
   const corners = countCornersCyclic(rs);
-  const convex = isConvexish(rs);
+  const conc = concavity(rs);
 
   if (rCv < 0.14 && corners <= 2) {
     return { kind: "circle", points: sampleCircle(b.cx, b.cy, (b.w + b.h) / 4, b.w / b.h) };
   }
-  // 볼록한 3/4각만 삼각형·사각형(사각형도 반지름 진동 8회라 별 판정보다 먼저 확정).
-  // 오목하면(하트 상단 홈·별 스파이크) 넘어간다.
-  if (convex && corners === 3) return { kind: "triangle", points: regularPoly(b, 3, -Math.PI / 2) };
-  if (convex && corners === 4) return { kind: "rect", points: rectPoints(b) };
-  // 별은 오목 + 반지름 진동이 강함
-  if (isStarLike(radii, rMean)) return { kind: "star", points: starPoints(b) };
-  // 오목하거나 꼭짓점이 애매한 닫힌 도형 → 하트
-  if (!convex || corners <= 6) return { kind: "heart", points: heartPoints(b) };
-  return null;
+  // 별 = 강한 반지름 진동 "그리고" 깊은 진폭. 사각형도 진동 8회라 crossings만으론
+  // 별로 오인된다(2026-07-09 실사용 보고 "사각형 그리면 별") — 진폭 이중 게이트로 분리.
+  if (crossings >= 9 && amplitude >= 0.4) return { kind: "star", points: starPoints(b) };
+  // 하트 = 캐치올이 아니라 "지배적인 깊은 오목 노치"(상단 홈)가 있어야 한다 —
+  // 변이 살짝 굽은 삼각형/낙서가 하트로 둔갑하던 문제의 정공법.
+  // 클러스터 개수 대신 지배도(≥70%)를 본다: 손그림엔 자잘한 노이즈 오목이 늘 따라온다.
+  if (conc.maxCluster >= 0.9 && conc.maxCluster >= conc.total * 0.7 && corners <= 6) {
+    return { kind: "heart", points: heartPoints(b) };
+  }
+  // 별·하트를 먼저 걸렀으니 꼭짓점 수만으로 확정(볼록 전제는 변 휨 손그림이 통과 못 해 폐기)
+  if (corners === 3) return { kind: "triangle", points: regularPoly(b, 3, -Math.PI / 2) };
+  if (corners === 4) return { kind: "rect", points: rectPoints(b) };
+  return null; // 애매한 낙서는 원본 유지(하트 남발 금지)
+}
+
+/** 현(시작→끝 직선)에서 가장 먼 점의 수직 거리 — 호/커브가 직선으로 새는 것 차단 */
+function maxChordDeviation(pts: StrokePoint[], a: StrokePoint, bp: StrokePoint): number {
+  const dx = bp.x - a.x;
+  const dy = bp.y - a.y;
+  const len = Math.max(1e-6, Math.hypot(dx, dy));
+  let max = 0;
+  for (const p of pts) {
+    const d = Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
+    if (d > max) max = d;
+  }
+  return max;
+}
+
+/** 닫힌 윤곽 이동평균(±1) — 지터가 만든 가짜 꼭짓점·가짜 오목을 죽인다 */
+function smoothClosed(rs: { x: number; y: number }[]): { x: number; y: number }[] {
+  const n = rs.length;
+  if (n < 8) return rs;
+  return rs.map((_, i) => {
+    const a = rs[(i - 1 + n) % n];
+    const c = rs[(i + 1) % n];
+    return { x: (a.x + rs[i].x + c.x) / 3, y: (a.y + rs[i].y + c.y) / 3 };
+  });
+}
+
+/** 반지름이 평균선을 넘나드는 횟수(순환) — 별 스파이크 진동 지표 */
+function crossingsCyclic(radii: number[], rMean: number): number {
+  let crossings = 0;
+  let above = radii[radii.length - 1] > rMean;
+  for (const r of radii) {
+    const nowAbove = r > rMean;
+    if (nowAbove !== above) {
+      crossings++;
+      above = nowAbove;
+    }
+  }
+  return crossings;
+}
+
+/**
+ * 오목(회전 방향 반대) 분석 — 클러스터별 누적 각으로 "하트 노치" 같은
+ * 단일 깊은 오목과, 변 휨이 만드는 여러 얕은 오목을 구분한다.
+ */
+function concavity(rs: { x: number; y: number }[]): { total: number; clusters: number; maxCluster: number } {
+  const n = rs.length;
+  if (n < 6) return { total: 0, clusters: 0, maxCluster: 0 };
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const p = rs[i];
+    const q = rs[(i + 1) % n];
+    area += p.x * q.y - q.x * p.y;
+  }
+  const orient = Math.sign(area) || 1;
+  const k = Math.max(2, Math.round(n / 16));
+  const conc: number[] = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    const a = rs[(i - k + n) % n];
+    const b = rs[i];
+    const c = rs[(i + k) % n];
+    const raw = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x);
+    const ang = Math.atan2(Math.sin(raw), Math.cos(raw));
+    // 얕은 굴곡(변 휨·지터)은 무시 — 진짜 노치만 집계
+    if (Math.sign(ang) === -orient && Math.abs(ang) > 0.12) conc[i] = Math.abs(ang);
+  }
+  // 순환 클러스터 집계(이음새에서 갈라지지 않게 비-오목 지점부터 시작)
+  const s = conc.findIndex((v) => v === 0);
+  if (s === -1) return { total: conc.reduce((a, c) => a + c, 0), clusters: 1, maxCluster: conc.reduce((a, c) => a + c, 0) };
+  let total = 0;
+  let clusters = 0;
+  let maxCluster = 0;
+  let cur = 0;
+  for (let j = 0; j < n; j++) {
+    const v = conc[(s + j) % n];
+    if (v > 0) {
+      if (cur === 0) clusters++;
+      cur += v;
+      total += v;
+      if (cur > maxCluster) maxCluster = cur;
+    } else cur = 0;
+  }
+  return { total, clusters, maxCluster };
 }
 
 /** 닫힌 스트로크를 둘레를 따라 n개로 등간격 재샘플(첫 점부터 다시 첫 점까지). */
@@ -157,43 +251,6 @@ function countCornersCyclic(rs: { x: number; y: number }[], thresh = 0.85): numb
     } else run = false;
   }
   return count;
-}
-
-/** 오목 회전각 누적이 작으면 볼록(삼각형·사각형). 하트 상단 홈은 큰 오목 → false. */
-function isConvexish(rs: { x: number; y: number }[]): boolean {
-  const n = rs.length;
-  if (n < 6) return true;
-  let area = 0;
-  for (let i = 0; i < n; i++) {
-    const p = rs[i];
-    const q = rs[(i + 1) % n];
-    area += p.x * q.y - q.x * p.y;
-  }
-  const orient = Math.sign(area) || 1;
-  const k = Math.max(2, Math.round(n / 16));
-  let concave = 0;
-  for (let i = 0; i < n; i++) {
-    const a = rs[(i - k + n) % n];
-    const b = rs[i];
-    const c = rs[(i + k) % n];
-    const raw = Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(b.y - a.y, b.x - a.x);
-    const ang = Math.atan2(Math.sin(raw), Math.cos(raw));
-    if (Math.sign(ang) === -orient) concave += Math.abs(ang);
-  }
-  return concave < 1.2; // rad — 손떨림 여유는 두되 하트 홈은 확실히 초과
-}
-
-function isStarLike(radii: number[], rMean: number): boolean {
-  let crossings = 0;
-  let above = radii[0] > rMean;
-  for (let i = 1; i < radii.length; i++) {
-    const nowAbove = radii[i] > rMean;
-    if (nowAbove !== above) {
-      crossings++;
-      above = nowAbove;
-    }
-  }
-  return crossings >= 8; // 5각 별이면 안/밖 진동 10회
 }
 
 function sampleCircle(cx: number, cy: number, r: number, aspect: number): { x: number; y: number }[] {

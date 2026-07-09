@@ -22,11 +22,41 @@ export function ActionRail() {
   const setSymmetry = useEditor((s) => s.setSymmetry);
   const quickShape = useEditor((s) => s.quickShape);
   const toggleQuickShape = useEditor((s) => s.toggleQuickShape);
+  const sketchSuggest = useEditor((s) => s.sketchSuggest);
+  const toggleSketchSuggest = useEditor((s) => s.toggleSketchSuggest);
+  const suggestSuppressed = useEditor((s) => s.suggestSuppressed);
   const [confirmClear, setConfirmClear] = useState(false);
 
   return (
     <div className="rounded-card bg-paper p-3 shadow-soft">
       <span className="font-display text-base text-ink">마법 도구</span>
+
+      {/* 뚝딱그림 */}
+      <button
+        onClick={toggleSketchSuggest}
+        disabled={suggestSuppressed}
+        aria-pressed={sketchSuggest && !suggestSuppressed}
+        title={
+          suggestSuppressed
+            ? "함께 그리는 방에서는 쓸 수 없어요"
+            : "대충 그려도 비슷한 그림을 찾아서 바꿔줘요"
+        }
+        className={`pressable mt-2 flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold disabled:opacity-40 ${
+          sketchSuggest && !suggestSuppressed
+            ? "bg-berry-soft text-berry ring-2 ring-berry"
+            : "bg-cream text-ink-soft hover:bg-cream-deep"
+        }`}
+      >
+        <Icon name="glow" className="h-6 w-6" />
+        뚝딱그림
+        <span
+          className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold ${
+            sketchSuggest && !suggestSuppressed ? "bg-berry text-white" : "bg-cream-deep text-ink-faint"
+          }`}
+        >
+          {suggestSuppressed ? "잠금" : sketchSuggest ? "켬" : "끔"}
+        </span>
+      </button>
 
       {/* 도형보정 */}
       <button

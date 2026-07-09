@@ -2,7 +2,15 @@
 
 import { create } from "zustand";
 import type { ArtEngine } from "@/engine/ArtEngine";
-import type { BlendMode, BrushId, LayerInfo, Mode, RGB, SymmetryMode } from "@/engine/types";
+import type {
+  BlendMode,
+  BrushId,
+  LayerInfo,
+  Mode,
+  RGB,
+  SketchSuggestion,
+  SymmetryMode,
+} from "@/engine/types";
 
 /*
  * 에디터 스토어: ArtEngine(비-React)과 UI를 잇는 브리지.
@@ -27,6 +35,12 @@ export interface EditorState {
   stabilize: number;
   symmetry: SymmetryMode;
   quickShape: boolean;
+  /** 뚝딱그림: 스케치 인식 → 스탬프 제안 */
+  sketchSuggest: boolean;
+  /** 협동 방 억제 — 치환이 원격에 전파 안 돼 캔버스가 갈라진다(토글보다 우선) */
+  suggestSuppressed: boolean;
+  /** 현재 떠 있는 제안 후보(빈 배열 = 바 숨김) */
+  suggestions: SketchSuggestion[];
   juniorMode: boolean;
 
   canUndo: boolean;
@@ -55,6 +69,10 @@ export interface EditorState {
   setStabilize: (n: number) => void;
   setSymmetry: (m: SymmetryMode) => void;
   toggleQuickShape: () => void;
+  toggleSketchSuggest: () => void;
+  setSuggestSuppressed: (on: boolean) => void;
+  acceptSuggestion: (stampId: string) => void;
+  dismissSuggestion: () => void;
   toggleJunior: () => void;
   undo: () => void;
   redo: () => void;
@@ -89,6 +107,9 @@ export const useEditor = create<EditorState>((set, get) => ({
   stabilize: 3,
   symmetry: "none",
   quickShape: false,
+  sketchSuggest: true,
+  suggestSuppressed: false,
+  suggestions: [],
   juniorMode: false,
   canUndo: false,
   canRedo: false,
@@ -109,6 +130,11 @@ export const useEditor = create<EditorState>((set, get) => ({
       ),
       engine.on("strokeLatency", ({ ms }) => set({ latencyMs: Math.round(ms) })),
       engine.on("restoreAvailable", ({ savedAt }) => set({ restoreAvailable: savedAt })),
+      engine.on("suggestReady", ({ candidates }) => {
+        // 빈→빈 갱신 스킵(리셋 경로마다 emit돼 불필요 리렌더 방지)
+        if (candidates.length === 0 && get().suggestions.length === 0) return;
+        set({ suggestions: candidates });
+      }),
       // 최근 색은 "실제로 그린 색"만 — setColor 시점 기록은 밝기 슬라이더 드래그가 도배(실측)
       engine.on("colorPicked", ({ color: c }) => {
         // 스포이트: 색 반영 후 이전 붓으로 자동 복귀
@@ -154,6 +180,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     engine.setStabilize(s.stabilize);
     engine.setSymmetry(s.symmetry);
     engine.setQuickShape(s.quickShape);
+    engine.setSketchSuggest(s.sketchSuggest);
+    engine.setSuggestSuppressed(s.suggestSuppressed);
     engine.setPressureEnabled(s.pressureOn);
     void engine.checkRestore();
   },
@@ -161,7 +189,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   detach: () => {
     unsub.forEach((u) => u());
     unsub = [];
-    set({ engine: null, ready: false, layers: [] });
+    set({ engine: null, ready: false, layers: [], suggestions: [] });
   },
 
   setMode: (m) => {
@@ -213,6 +241,23 @@ export const useEditor = create<EditorState>((set, get) => ({
     const q = !get().quickShape;
     get().engine?.setQuickShape(q);
     set({ quickShape: q });
+  },
+  toggleSketchSuggest: () => {
+    const on = !get().sketchSuggest;
+    get().engine?.setSketchSuggest(on); // 끄면 엔진이 suggestReady([])로 바를 닫는다
+    set({ sketchSuggest: on });
+  },
+  setSuggestSuppressed: (on) => {
+    get().engine?.setSuggestSuppressed(on);
+    set({ suggestSuppressed: on });
+  },
+  acceptSuggestion: (stampId) => {
+    get().engine?.acceptSuggestion(stampId);
+    set({ suggestions: [] });
+  },
+  dismissSuggestion: () => {
+    get().engine?.dismissSuggestion();
+    set({ suggestions: [] });
   },
   toggleJunior: () => set((s) => ({ juniorMode: !s.juniorMode })),
   undo: () => get().engine?.undo(),

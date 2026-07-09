@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ArtEngine } from "@/engine/ArtEngine";
 import { useEditor } from "@/store/editor";
@@ -16,6 +16,8 @@ import { useKeyboard } from "./useKeyboard";
 import { MovieModal } from "./MovieModal";
 import { useCollab } from "./useCollab";
 import { CollabOverlay } from "./CollabOverlay";
+import { SuggestBar } from "./SuggestBar";
+import { PhotoImport } from "@/components/photo-import";
 import { ArtonLogo } from "@/components/arton-logo";
 import { Icon } from "./icons";
 
@@ -68,12 +70,30 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     setConfirmNew(false);
     newDrawing();
   };
+  const setSuggestSuppressed = useEditor((s) => s.setSuggestSuppressed);
+  // 협동 방: 뚝딱그림 수락(undo×k+스탬프)이 원격에 전파되지 않아 캔버스가 갈라진다 — 방에선 잠금
+  useEffect(() => {
+    setSuggestSuppressed(!!room);
+    return () => setSuggestSuppressed(false);
+  }, [room, engine, setSuggestSuppressed]);
   const canUndo = useEditor((s) => s.canUndo);
   const canRedo = useEditor((s) => s.canRedo);
   const undo = useEditor((s) => s.undo);
   const redo = useEditor((s) => s.redo);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  // onSave가 있다 = 학급 코드로 입장한 학생 세션 — 저장이 곧 학급 갤러리 제출
+  const submits = !!onSave;
+  // 첫 진입 1회 안내(세션당) — 터치 기기는 저장 버튼 툴팁을 볼 수 없다
+  const [showSubmitHint, setShowSubmitHint] = useState(false);
+  useEffect(() => {
+    if (!submits || sessionStorage.getItem("arton.submitHint")) return;
+    sessionStorage.setItem("arton.submitHint", "1");
+    setShowSubmitHint(true);
+    const t = setTimeout(() => setShowSubmitHint(false), 6000);
+    return () => clearTimeout(t);
+  }, [submits]);
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
   const [showMovie, setShowMovie] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -92,7 +112,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       if (onSave) {
         await onSave(png, thumb);
         setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
+        setTimeout(() => setSaved(false), 3500); // 제출 안내 문구가 길어 읽을 시간 확보
       } else {
         const url = URL.createObjectURL(png);
         const a = document.createElement("a");
@@ -101,6 +121,10 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         a.click();
         URL.revokeObjectURL(url);
       }
+    } catch {
+      // 제출 실패(네트워크·잠긴 학급 403·과속 429) — 아이에게도 알려야 재시도한다
+      setSaveError(true);
+      setTimeout(() => setSaveError(false), 3500);
     } finally {
       setSaving(false);
     }
@@ -171,6 +195,23 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             {confirmNew ? "정말요?" : "새 그림"}
           </span>
         </button>
+        {/* 내 사진·그림 가져오기 — 협동 방에서는 숨김(가져오면 방을 떠나게 되어 혼란) */}
+        {!room && (
+          <PhotoImport
+            renderButton={(openPicker, converting) => (
+              <button
+                onClick={openPicker}
+                disabled={converting}
+                className={iconBtn}
+                aria-label="내 사진·그림 가져오기"
+                title="사진이나 그림을 가져와서 선따기·이어 그리기"
+              >
+                📷
+                <span className="hidden lg:inline">{converting ? "변환 중…" : "사진"}</span>
+              </button>
+            )}
+          />
+        )}
         <button
           onClick={() => setShowMovie(true)}
           className={iconBtn}
@@ -197,9 +238,12 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           disabled={saving}
           className="pressable touch-target flex items-center gap-1.5 rounded-full bg-coral px-5 py-2.5 font-display text-white shadow-soft disabled:opacity-60"
           aria-label="저장하기"
+          title={
+            submits ? "저장하면 우리 반 갤러리에 바로 전시돼요" : "그림을 파일로 저장해요"
+          }
         >
           <Icon name="save" className="h-5 w-5" />
-          {saving ? "저장 중…" : "저장"}
+          {saving ? (submits ? "제출 중…" : "저장 중…") : "저장"}
         </button>
       </header>
 
@@ -237,6 +281,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
               setEngine(e);
             }}
           />
+          <SuggestBar />
           <div className="absolute bottom-3 left-3 z-10 flex gap-2">
             <button
               onClick={undo}
@@ -292,8 +337,16 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         </div>
       </div>
 
-      {saving && <Toast>저장 중…</Toast>}
-      {saved && <Toast tone="leaf">✅ 저장했어요!</Toast>}
+      {showSubmitHint && !saving && !saved && (
+        <Toast>💾 다 그리고 저장을 누르면 우리 반 갤러리에 제출돼요</Toast>
+      )}
+      {saveError && <Toast>😢 저장하지 못했어요 — 잠시 후 다시 눌러 주세요</Toast>}
+      {saving && <Toast>{submits ? "우리 반 갤러리로 보내는 중…" : "저장 중…"}</Toast>}
+      {saved && (
+        <Toast tone="leaf">
+          {submits ? "✅ 우리 반 갤러리에 전시했어요! 갤러리에서 확인해 보세요" : "✅ 저장했어요!"}
+        </Toast>
+      )}
       {showMovie && engineRef.current && (
         <MovieModal engine={engineRef.current} onClose={() => setShowMovie(false)} />
       )}

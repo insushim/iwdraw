@@ -65,3 +65,35 @@ export const STAMPS: StampDef[] = [
 export function getStamp(id: string): StampDef | undefined {
   return STAMPS.find((s) => s.id === id);
 }
+
+/**
+ * 스탬프를 캔버스에 그린다(뚝딱그림 수락·무비 재생 공용).
+ * evenodd 채우기 = 웃는 얼굴 눈처럼 안쪽 서브패스가 구멍으로 뚫린다.
+ * fill 없는 path는 잉크(브러시 색)로 채우고, 윤곽은 항상 잉크 선.
+ */
+export function drawStampOnCtx(
+  ctx: CanvasRenderingContext2D,
+  def: StampDef,
+  cx: number,
+  cy: number,
+  sizePx: number,
+  ink: { r: number; g: number; b: number },
+): void {
+  const s = sizePx / 24; // 뷰박스 24 기준
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over"; // 호출부의 지우개/블렌드 상태 오염 방지
+  ctx.translate(cx - sizePx / 2, cy - sizePx / 2);
+  ctx.scale(s, s);
+  ctx.lineWidth = 1.1;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#2D2A26";
+  ctx.globalAlpha = 1;
+  for (const p of def.paths) {
+    const path = new Path2D(p.d);
+    ctx.fillStyle = p.fill ?? `rgb(${ink.r},${ink.g},${ink.b})`;
+    ctx.fill(path, "evenodd");
+    ctx.stroke(path);
+  }
+  ctx.restore();
+}

@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArtonLogo } from "@/components/arton-logo";
 import { Chip } from "@/components/ui";
-import { photoToLineart, photoToUnderlay } from "@/lib/photo-to-lineart";
+import { PhotoImport, type PhotoImportHandle } from "@/components/photo-import";
+import { printImageA4 } from "@/lib/print";
 import {
   GRADE_LABEL,
   loadTemplateManifest,
@@ -20,9 +20,7 @@ export function ColoringGallery() {
   const [cat, setCat] = useState<string>("all");
   const [grade, setGrade] = useState<Grade>("all");
   const [error, setError] = useState<string | null>(null);
-  const [converting, setConverting] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
+  const photoRef = useRef<PhotoImportHandle>(null);
 
   useEffect(() => {
     loadTemplateManifest().then(setManifest).catch((e) => setError(String(e.message ?? e)));
@@ -45,64 +43,21 @@ export function ColoringGallery() {
     return out;
   }, [themes, grade]);
 
-  // 가져온 이미지 → 시작 방식 선택 모달(자동 선따기 vs 옅은 밑그림 위에 직접 선따기)
-  const [pending, setPending] = useState<{ file: File | Blob; url: string } | null>(null);
-
-  const openImage = (file: File | Blob) => {
-    if (!file.type.startsWith("image/")) return;
-    setError(null);
-    setPending((prev) => {
-      if (prev) URL.revokeObjectURL(prev.url);
-      return { file, url: URL.createObjectURL(file) };
-    });
-  };
-
   // 붙여넣기(Ctrl+V)로 이미지 가져오기 — 구글 등에서 이미지 복사 후 바로 붙여넣는 흐름
+  // (시작 방식 모달·변환·이동은 PhotoImport 공용 컴포넌트가 담당)
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith("image/"));
       const f = item?.getAsFile();
       if (f) {
         e.preventDefault();
-        openImage(f);
+        setError(null);
+        photoRef.current?.openFile(f);
       }
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
   }, []);
-
-  const startWith = async (kind: "lineart" | "underlay" | "continue") => {
-    if (!pending) return;
-    setConverting(true);
-    setError(null);
-    try {
-      // 매 진입마다 고유 토큰(v) — 두 번째 이어그리기/선따기가 첫 번째와 URL·컴포넌트 key가
-      // 같아 라우터 캐시가 이전 캔버스를 재사용, 새 이미지가 안 열리던 버그의 정공법
-      // (2026-07-08 실사용 보고: 같은 크기 이미지의 dataURL 앞부분이 동일 → key 충돌).
-      const v = Date.now().toString(36);
-      if (kind === "continue") {
-        // 그대로 이어 그리기: 변환 없이 원본을 그림 레이어에 깔고 계속 그린다
-        // (작업하던 그림을 다시 선따기 하면 선이 이중으로 진해지는 문제의 정공법)
-        const dataUrl = await blobToDataUrl(pending.file);
-        sessionStorage.setItem("arton.customBase", dataUrl);
-        URL.revokeObjectURL(pending.url);
-        setPending(null);
-        router.push(`/draw?base=custom&v=${v}`);
-        return;
-      }
-      const blob =
-        kind === "lineart" ? await photoToLineart(pending.file) : await photoToUnderlay(pending.file);
-      const dataUrl = await blobToDataUrl(blob);
-      sessionStorage.setItem("arton.customLineart", dataUrl);
-      URL.revokeObjectURL(pending.url);
-      setPending(null);
-      router.push(`/draw?template=custom&mode=coloring&v=${v}`);
-    } catch {
-      setError("사진을 도안으로 바꾸지 못했어요. 다른 사진을 써 보세요.");
-    } finally {
-      setConverting(false);
-    }
-  };
 
   return (
     <main
@@ -111,7 +66,10 @@ export function ColoringGallery() {
       onDrop={(e) => {
         e.preventDefault();
         const f = e.dataTransfer.files?.[0];
-        if (f) openImage(f);
+        if (f) {
+          setError(null);
+          photoRef.current?.openFile(f);
+        }
       }}
     >
       <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-cream-deep bg-cream/90 px-4 py-3 backdrop-blur">
@@ -122,25 +80,20 @@ export function ColoringGallery() {
           <ArtonLogo className="h-8" />
         </div>
         <div className="flex items-center gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) openImage(f);
-              e.target.value = "";
-            }}
-          />
           {/* 버튼 2개는 같은 높이·수직 중앙 정렬(inline-flex h-11) — a/button 베이스라인 어긋남 방지 */}
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={converting}
-            className="pressable touch-target inline-flex h-11 items-center justify-center rounded-card bg-sky px-4 font-display text-white shadow-soft disabled:opacity-60"
-          >
-            {converting ? "변환 중…" : "📷 내 사진·그림으로"}
-          </button>
+          <PhotoImport
+            ref={photoRef}
+            onError={setError}
+            renderButton={(openPicker, converting) => (
+              <button
+                onClick={openPicker}
+                disabled={converting}
+                className="pressable touch-target inline-flex h-11 items-center justify-center rounded-card bg-sky px-4 font-display text-white shadow-soft disabled:opacity-60"
+              >
+                {converting ? "변환 중…" : "📷 내 사진·그림으로"}
+              </button>
+            )}
+          />
           <Link
             href="/draw"
             className="pressable touch-target inline-flex h-11 items-center justify-center rounded-card bg-coral px-4 font-display text-white shadow-soft"
@@ -190,112 +143,49 @@ export function ColoringGallery() {
             <p className="mt-5 text-sm text-ink-faint">{items.length}장</p>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {items.map((it) => (
-                <Link
+                <div
                   key={`${it.theme}/${it.id}`}
-                  href={`/draw?template=${encodeURIComponent(it.image)}&mode=coloring`}
-                  className="pressable group overflow-hidden rounded-card bg-paper shadow-soft"
+                  className="group relative overflow-hidden rounded-card bg-paper shadow-soft"
                 >
-                  <div className="aspect-square overflow-hidden bg-white">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={it.image}
-                      alt={`${it.title} 색칠 도안`}
-                      loading="lazy"
-                      className="h-full w-full object-contain transition-transform group-hover:scale-105"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between px-3 py-2">
-                    <span className="truncate text-sm font-semibold text-ink">{it.title}</span>
-                    <Chip tone={it.grade === "high" ? "coral" : it.grade === "mid" ? "sun" : "leaf"}>
-                      {GRADE_LABEL[it.grade]}
-                    </Chip>
-                  </div>
-                </Link>
+                  <Link
+                    href={`/draw?template=${encodeURIComponent(it.image)}&mode=coloring`}
+                    className="pressable block"
+                  >
+                    <div className="aspect-square overflow-hidden bg-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={it.image}
+                        alt={`${it.title} 색칠 도안`}
+                        loading="lazy"
+                        className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="truncate text-sm font-semibold text-ink">{it.title}</span>
+                      <Chip tone={it.grade === "high" ? "coral" : it.grade === "mid" ? "sun" : "leaf"}>
+                        {GRADE_LABEL[it.grade]}
+                      </Chip>
+                    </div>
+                  </Link>
+                  {/* 도안 바로 인쇄(빈 라인아트를 A4로) — 색칠 대신 종이에 인쇄해 크레파스로 칠할 때 */}
+                  <button
+                    type="button"
+                    onClick={() => printImageA4(it.image, it.title)}
+                    aria-label={`${it.title} 도안 인쇄`}
+                    title="이 도안 인쇄"
+                    className="pressable absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-lg shadow-soft backdrop-blur transition-colors hover:bg-white"
+                  >
+                    🖨️
+                  </button>
+                </div>
               ))}
             </div>
           </>
         )}
       </div>
 
-      {/* 가져온 이미지 → 시작 방식 선택 */}
-      {pending && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-ink/70 p-4"
-          onClick={() => {
-            URL.revokeObjectURL(pending.url);
-            setPending(null);
-          }}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="w-full max-w-lg rounded-bubble bg-paper p-6 shadow-lift"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="font-display text-xl text-ink">이 그림으로 어떻게 시작할까요?</h2>
-            <div className="mt-4 grid place-items-center rounded-card bg-white p-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={pending.url} alt="가져온 그림" className="max-h-56 w-auto rounded-lg" />
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <button
-                onClick={() => startWith("lineart")}
-                disabled={converting}
-                className="pressable rounded-card bg-sky px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
-              >
-                <span className="font-display text-lg">✏️ 자동 선따기</span>
-                <span className="mt-1 block text-sm text-white/85">
-                  윤곽선 도안으로 바꿔서 색칠해요
-                </span>
-              </button>
-              <button
-                onClick={() => startWith("underlay")}
-                disabled={converting}
-                className="pressable rounded-card bg-coral px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
-              >
-                <span className="font-display text-lg">🖊️ 밑그림 따라 그리기</span>
-                <span className="mt-1 block text-sm text-white/85">
-                  옅게 깔린 그림 위에 내가 직접 선을 따요
-                </span>
-              </button>
-              <button
-                onClick={() => startWith("continue")}
-                disabled={converting}
-                className="pressable rounded-card bg-leaf px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
-              >
-                <span className="font-display text-lg">🎨 그대로 이어 그리기</span>
-                <span className="mt-1 block text-sm text-white/85">
-                  그리던 그림을 그대로 불러와 계속 그려요
-                </span>
-              </button>
-            </div>
-            <p className="mt-4 text-xs text-ink-faint">
-              인터넷에서 받은 그림은 연습용으로만 써요. 그린 작품을 학급 밖에 공개하거나 팔면 안
-              돼요.
-            </p>
-            <button
-              onClick={() => {
-                URL.revokeObjectURL(pending.url);
-                setPending(null);
-              }}
-              className="pressable mt-3 w-full rounded-card bg-cream px-4 py-2 font-semibold text-ink-soft"
-            >
-              {converting ? "변환 중…" : "취소"}
-            </button>
-          </div>
-        </div>
-      )}
     </main>
   );
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(new Error("읽기 실패"));
-    r.readAsDataURL(blob);
-  });
 }
 
 function FilterChip({

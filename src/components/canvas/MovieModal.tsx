@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ArtEngine } from "@/engine/ArtEngine";
 import { createBrush } from "@/engine/brushes";
 import { smearSegment } from "@/engine/tools/SmudgeTool";
+import { drawStampOnCtx, getStamp } from "@/engine/tools/StampTool";
 import { floodFill } from "@/engine/brushes/FillTool";
 import { playMovie, recordMovie, type MovieSpeed, type ReplayHandle } from "@/engine/export/TimelapseExporter";
 import { Button } from "@/components/ui";
@@ -137,6 +138,14 @@ function replayOne(
   stroke: RecordedStroke,
   progress: number,
 ) {
+  if (stroke.extra?.stamp) {
+    // 뚝딱그림 스탬프: progress 100%에서 한 번에(스케치 획들 뒤에 "뿅" 등장)
+    if (progress < 1) return;
+    const st = stroke.extra.stamp as { id: string; cx: number; cy: number; size: number };
+    const def = getStamp(st.id);
+    if (def) drawStampOnCtx(ctx, def, st.cx, st.cy, st.size, stroke.settings.color);
+    return;
+  }
   if (stroke.extra?.fill) {
     // 페인트통 재생: 전체 다시 채우기(간이 — progress 100%에서만)
     if (progress < 1) return;
