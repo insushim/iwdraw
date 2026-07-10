@@ -429,10 +429,13 @@ export function applyWetEdge(
 
 
 /**
- * 수채 글레이징 합성: result = min(기존, max(기존 × 획, 획²)).
+ * 수채 글레이징 합성: result = min(기존, max(기존 × 획, 획 × 0.85)).
  * · 마른 워시 위에 새 워시가 겹치면 multiply로 "한 단계" 진해진다(겹침이 보인다 —
  *   darken(min) 수렴은 겹침 효과가 0이라 플랫한 마커로 읽힘, 2026-07-10 사용자 실측).
- * · 2겹(획²)보다 어두워지지는 않는다(lighten 바닥) — 낙서 겹침의 얼룩 폭주 차단.
+ * · 바닥 = 획×0.85: 새 획은 자기 색보다 최대 15%까지만 진해진다. 옅은 워시(0.85급)에선
+ *   획²과 동일(같은 한 단계 겹침)하지만, 진한 획이 밝은 밑칠 위를 지날 때 밑칠 경계가
+ *   줄무늬로 비치는 것(획² 바닥은 어두운 색에서 사실상 무제한 multiply, 사용자 실측
+ *   "이게 맞니")을 차단 — 진한 물감일수록 불투명하게 덮는 실제 수채 성질.
  * · 기존보다 밝아지지도 않는다(darken 스냅샷) — 어두운 색 위에 밝은 워시를 얹어도
  *   바닥값이 기존을 지우지 않는다.
  * 프리뷰(presentStroke)와 최종(endStroke)이 같은 함수를 써야 한다(프리뷰=최종).
@@ -450,10 +453,13 @@ export function compositeGlaze(
   glzSnap.clearRect(0, 0, width, height);
   glzSnap.drawImage(target.canvas, 0, 0);
 
-  // 바닥 = 획² (실루엣 내부 자기 multiply — 2겹 색)
+  // 바닥 = 획 × 0.85 (실루엣 안에서 자기 색을 15% 어둡게)
   glzFloor.clearRect(0, 0, width, height);
   glzFloor.drawImage(src, 0, 0);
   glzFloor.globalCompositeOperation = "multiply";
+  glzFloor.fillStyle = "rgb(217,217,217)"; // ×0.85
+  glzFloor.fillRect(0, 0, width, height);
+  glzFloor.globalCompositeOperation = "destination-in"; // multiply가 채운 실루엣 밖 제거
   glzFloor.drawImage(src, 0, 0);
   glzFloor.globalCompositeOperation = "source-over";
 
