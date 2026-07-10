@@ -429,15 +429,15 @@ export function applyWetEdge(
 
 
 /**
- * 수채 글레이징 합성: result = min(기존, max(기존 × 획, 획 × 0.85)).
- * · 마른 워시 위에 새 워시가 겹치면 multiply로 "한 단계" 진해진다(겹침이 보인다 —
- *   darken(min) 수렴은 겹침 효과가 0이라 플랫한 마커로 읽힘, 2026-07-10 사용자 실측).
- * · 바닥 = 획×0.85: 새 획은 자기 색보다 최대 15%까지만 진해진다. 옅은 워시(0.85급)에선
- *   획²과 동일(같은 한 단계 겹침)하지만, 진한 획이 밝은 밑칠 위를 지날 때 밑칠 경계가
- *   줄무늬로 비치는 것(획² 바닥은 어두운 색에서 사실상 무제한 multiply, 사용자 실측
- *   "이게 맞니")을 차단 — 진한 물감일수록 불투명하게 덮는 실제 수채 성질.
- * · 기존보다 밝아지지도 않는다(darken 스냅샷) — 어두운 색 위에 밝은 워시를 얹어도
- *   바닥값이 기존을 지우지 않는다.
+ * 수채 글레이징 합성: result = min(기존, max(기존 × 획, max(획⁴, 획 × 0.6))).
+ * · 마른 워시 위에 새 워시가 겹치면 multiply로 진해진다(겹침이 보인다 — darken(min)
+ *   수렴은 겹침 효과 0 = 플랫 마커, 2026-07-10 사용자 실측).
+ * · 바닥 1 = 획⁴: 옅은 워시(한 획 15~25% 농도)가 4겹까지 점진 누적 후 포화 —
+ *   i-scream 원본 전수검수(겹침 스텝 2~3회 뚜렷, 6~8회 실질 포화, 시각 포화 50%대).
+ *   (×0.85 상수 바닥은 2겹 15%에서 즉시 포화 = 스텝이 안 보임, 사용자 "이게 맞냐" 실측)
+ * · 바닥 2 = 획×0.6: 진한 색에서 획⁴은 사실상 무제한 multiply — 진한 획이 밝은 밑칠
+ *   경계를 지날 때 줄무늬가 되는 것을 차단(진한 물감일수록 불투명한 실제 수채 성질).
+ * · 기존보다 밝아지지도 않는다(darken 스냅샷) — 어두운 밑색을 지우지 않는다.
  * 프리뷰(presentStroke)와 최종(endStroke)이 같은 함수를 써야 한다(프리뷰=최종).
  */
 export function compositeGlaze(
@@ -453,14 +453,27 @@ export function compositeGlaze(
   glzSnap.clearRect(0, 0, width, height);
   glzSnap.drawImage(target.canvas, 0, 0);
 
-  // 바닥 = 획 × 0.85 (실루엣 안에서 자기 색을 15% 어둡게)
+  // 바닥 = max(획³, 획×0.6) — 획³: 옅은 워시가 3겹까지 점진 누적 후 포화
+  // (획⁴는 p5가 81까지 떨어져 원본(166)보다 훨씬 어두워짐, 실측)
   glzFloor.clearRect(0, 0, width, height);
   glzFloor.drawImage(src, 0, 0);
   glzFloor.globalCompositeOperation = "multiply";
-  glzFloor.fillStyle = "rgb(217,217,217)"; // ×0.85
-  glzFloor.fillRect(0, 0, width, height);
-  glzFloor.globalCompositeOperation = "destination-in"; // multiply가 채운 실루엣 밖 제거
-  glzFloor.drawImage(src, 0, 0);
+  glzFloor.drawImage(src, 0, 0); // 획²
+  glzFloor.drawImage(src, 0, 0); // 획³
+  glzFloor.globalCompositeOperation = "lighten";
+  // 획×0.6을 lighten으로 합쳐 어두운 색 바닥을 들어올린다(줄무늬 방어).
+  // 별도 캔버스 없이: 알파를 지닌 src를 60% 회색과 곱한 것 = source-atop 근사 대신
+  // multiply-fill 후 destination-in이 필요하지만, 여기선 wetTmp를 재사용한다.
+  wetTmp = scratch(wetTmp, width, height);
+  wetTmp.clearRect(0, 0, width, height);
+  wetTmp.drawImage(src, 0, 0);
+  wetTmp.globalCompositeOperation = "multiply";
+  wetTmp.fillStyle = "rgb(153,153,153)"; // ×0.6
+  wetTmp.fillRect(0, 0, width, height);
+  wetTmp.globalCompositeOperation = "destination-in";
+  wetTmp.drawImage(src, 0, 0);
+  wetTmp.globalCompositeOperation = "source-over";
+  glzFloor.drawImage(wetTmp.canvas, 0, 0); // lighten 합성
   glzFloor.globalCompositeOperation = "source-over";
 
   target.save();
