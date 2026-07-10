@@ -54,6 +54,7 @@ export function ActionRail() {
   const sketchSuggest = useEditor((s) => s.sketchSuggest);
   const toggleSketchSuggest = useEditor((s) => s.toggleSketchSuggest);
   const suggestSuppressed = useEditor((s) => s.suggestSuppressed);
+  const setStampPaletteOpen = useEditor((s) => s.setStampPaletteOpen);
   const [confirmClear, setConfirmClear] = useState(false);
 
   return (
@@ -84,6 +85,19 @@ export function ActionRail() {
           }`}
         >
           {suggestSuppressed ? "잠금" : sketchSuggest ? "켬" : "끔"}
+        </span>
+      </button>
+
+      {/* 그림 도장(스탬프 팔레트) — 264종을 직접 골라 넣고 크기·위치 조절 */}
+      <button
+        onClick={() => setStampPaletteOpen(true)}
+        title="여러 그림을 골라서 도장처럼 찍어요 (크기·위치 바꿀 수 있어요)"
+        className="pressable mt-2 flex w-full items-center gap-2 rounded-2xl bg-cream px-3 py-2 text-sm font-semibold text-ink-soft hover:bg-cream-deep"
+      >
+        <span className="text-xl leading-none">🧸</span>
+        그림 도장
+        <span className="ml-auto rounded-full bg-cream-deep px-2 py-0.5 text-[11px] font-bold text-ink-faint">
+          고르기
         </span>
       </button>
 

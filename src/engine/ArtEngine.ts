@@ -37,6 +37,7 @@ import {
   SHAPE_MIN_DRAG,
   type ShapeInsertKind,
 } from "./tools/ShapeInsert";
+import { hitPending, movePending, resizePending, commitRegion } from "./tools/pendingStampMath";
 import { drawStampOnCtx, getStamp } from "./tools/StampTool";
 import { recognizeSketch } from "./recognizer/SketchMatch";
 import type { StrokeContext } from "./core/backend";
@@ -92,6 +93,30 @@ export class ArtEngine {
   /** 도형 삽입 모드 — 켜져 있으면 드래그가 그리기 대신 도형 배치가 된다 */
   shapeInsertKind: ShapeInsertKind | null = null;
   private shapeDrag: { x0: number; y0: number; x1: number; y1: number } | null = null;
+
+  /* ── 떠 있는(아직 안 굳은) 스탬프 배치 ──
+   * 뚝딱그림 제안 수락 또는 팔레트 선택 시, 바로 굳히지 않고 "떠 있는" 프리뷰로 띄운다.
+   * 드래그 = 이동, 모서리 핸들 = 중심 기준 크기조절. 확인(commit) 시 실제 레이어에 굳히고,
+   * 취소(cancel) 시 레이어를 건드리지 않아 원래 스케치가 그대로 남는다.
+   * replaceCount = 커밋 시 지울 스케치 획 수(제안 수락=k, 팔레트=0).
+   * originBBox = 대체할 스케치 원래 bbox(스탬프를 멀리 옮겨도 원본을 지우도록 tile 영역에 합집합). */
+  private pending: {
+    stampId: string;
+    cx: number;
+    cy: number;
+    size: number;
+    replaceCount: number;
+    layerId: string;
+    originBBox: { minX: number; minY: number; maxX: number; maxY: number } | null;
+  } | null = null;
+  private pendingDrag: {
+    mode: "move" | "resize";
+    px: number;
+    py: number;
+    cx0: number;
+    cy0: number;
+    size0: number;
+  } | null = null;
 
   private brush: BrushBase | null = null;
   private curPoints: StrokePoint[] = [];
@@ -235,6 +260,7 @@ export class ArtEngine {
     this.requestComposite(); // 모드=종이(캔버스) 변경 — 즉시 다시 그려야 탭 클릭에 바로 반응
   }
   setBrush(id: BrushId): void {
+    this.cancelPendingStamp(); // 붓/도구 전환 = 떠 있던 배치 취소
     this.brushId = id;
   }
   setColor(rgb: RGB | string): void {
@@ -254,6 +280,7 @@ export class ArtEngine {
     this.stabilizer.setStrength(this.settings.stabilize);
   }
   setSymmetry(m: SymmetryMode): void {
+    this.cancelPendingStamp();
     this.symmetry = m;
     this.requestComposite(); // 가이드선 즉시 표시/제거
   }
@@ -269,6 +296,7 @@ export class ArtEngine {
   }
   private suggestSuppressed = false;
   setShapeInsert(kind: ShapeInsertKind | null): void {
+    this.cancelPendingStamp();
     this.shapeInsertKind = kind;
     this.shapeDrag = null;
     this.requestComposite(); // 진행 중이던 미리보기 정리
@@ -310,6 +338,11 @@ export class ArtEngine {
 
   private strokeBegin(p: StrokePoint): void {
     if (this.replaying) return;
+    // 떠 있는 스탬프 배치 중: 그리기 대신 이동/크기조절 드래그만(그리기 완전 차단)
+    if (this.pending) {
+      this.pendingPointerDown(p);
+      return;
+    }
     // 도형 삽입: 드래그 = 도형 배치(미리보기), 커밋은 strokeEnd에서
     if (this.shapeInsertKind) {
       // 스트로크형 브러시로만 그린다(포인터·페인트통 등이면 UI가 브러시를 바꿔줌)
@@ -355,6 +388,10 @@ export class ArtEngine {
   }
 
   private strokeMove(points: StrokePoint[]): void {
+    if (this.pending) {
+      if (this.pendingDrag) this.pendingPointerMove(points[points.length - 1]);
+      return;
+    }
     if (this.shapeDrag) {
       const last = points[points.length - 1];
       this.shapeDrag.x1 = last.x;
@@ -381,6 +418,10 @@ export class ArtEngine {
   }
 
   private strokeEnd(p: StrokePoint): void {
+    if (this.pending) {
+      this.pendingDrag = null; // 드래그만 끝남 — 배치는 확인/취소 버튼으로
+      return;
+    }
     if (this.shapeDrag) {
       const d = this.shapeDrag;
       this.shapeDrag = null;
@@ -791,7 +832,7 @@ export class ArtEngine {
     }, ArtEngine.SUGGEST_DEBOUNCE_MS);
   }
 
-  /** 제안 수락 — 그룹 스케치를 스탬프로 원자 교체(되돌리기 1번에 복귀) */
+  /** 제안 수락 — 스케치 자리에 스탬프를 "떠 있는" 상태로 띄운다(이동/크기조절 후 확인 시 굳힘) */
   acceptSuggestion(stampId: string): void {
     if (this.brush || this.smudging || this.replaying) return; // 획 진행 중 금지
     const k = this.suggestStrokes.length;
@@ -800,23 +841,116 @@ export class ArtEngine {
       this.resetSuggest();
       return;
     }
-    const layer = this.layers.active;
     const bb = this.suggestBBox;
     const cx = clamp((bb.minX + bb.maxX) / 2, 0, this.width);
     const cy = clamp((bb.minY + bb.maxY) / 2, 0, this.height);
     const size = clamp(
       (bb.maxX - bb.minX + (bb.maxY - bb.minY)) / 2,
-      48,
+      ArtEngine.PENDING_MIN_SIZE,
       Math.min(this.width, this.height),
     );
-    // 스케치와 스탬프 영역의 합집합 + 여유(외곽선 두께)
-    const half = size / 2 + 12;
-    const x = Math.max(0, Math.floor(Math.min(bb.minX, cx - half)));
-    const y = Math.max(0, Math.floor(Math.min(bb.minY, cy - half)));
-    const w = Math.min(this.width - x, Math.ceil(Math.max(bb.maxX, cx + half) - x));
-    const h = Math.min(this.height - y, Math.ceil(Math.max(bb.maxY, cy + half) - y));
+    const origin = { ...bb };
+    const layerId = this.layers.active.id;
+    this.resetSuggest(); // 제안 바 닫기(커밋은 history 최상단 k개를 지우므로 tracking 불필요)
+    this.beginPendingStamp(stampId, cx, cy, size, { replaceCount: k, layerId, originBBox: origin });
+  }
+
+  dismissSuggestion(): void {
+    this.resetSuggest();
+  }
+
+  /* ── 떠 있는 스탬프 배치 ── */
+  private static readonly PENDING_MIN_SIZE = 40;
+  /** 모서리 핸들 히트 반경(화면 px — view.scale로 나눠 캔버스 좌표로) */
+  private static readonly PENDING_HANDLE_HIT = 24;
+
+  /** 스탬프를 떠 있는 상태로 띄운다(제안 수락·팔레트 공통). 색칠 잠금 레이어면 무시. */
+  beginPendingStamp(
+    stampId: string,
+    cx: number,
+    cy: number,
+    size: number,
+    opts?: {
+      replaceCount?: number;
+      layerId?: string;
+      originBBox?: { minX: number; minY: number; maxX: number; maxY: number } | null;
+    },
+  ): void {
+    const def = getStamp(stampId);
+    if (!def || this.replaying) return;
+    const active = this.layers.active;
+    const layerId = opts?.layerId ?? active.id;
+    this.pending = {
+      stampId,
+      cx: clamp(cx, 0, this.width),
+      cy: clamp(cy, 0, this.height),
+      size: clamp(size, ArtEngine.PENDING_MIN_SIZE, Math.min(this.width, this.height)),
+      replaceCount: opts?.replaceCount ?? 0,
+      layerId,
+      originBBox: opts?.originBBox ?? null,
+    };
+    this.pendingDrag = null;
+    this.emit("pendingChange", { pending: { stampId, label: def.label } });
+    this.requestComposite();
+  }
+
+  /** 떠 있는 스탬프 존재 여부 */
+  get hasPending(): boolean {
+    return this.pending !== null;
+  }
+
+  /** 팔레트에서 스탬프 선택 — 캔버스 중앙에 기본 크기로 띄운다(이동/크기조절 후 확인) */
+  insertStamp(stampId: string): void {
+    const size = Math.round(Math.min(this.width, this.height) * 0.28);
+    this.beginPendingStamp(stampId, this.width / 2, this.height / 2, size);
+  }
+
+  private pendingPointerDown(p: StrokePoint): void {
+    const pd = this.pending;
+    if (!pd) return;
+    const mode = hitPending(p.x, p.y, pd, this.view.scale, ArtEngine.PENDING_HANDLE_HIT);
+    if (!mode) return; // 바깥 탭은 무시(실수 배치·취소 방지)
+    this.pendingDrag = { mode, px: p.x, py: p.y, cx0: pd.cx, cy0: pd.cy, size0: pd.size };
+  }
+
+  private pendingPointerMove(p: StrokePoint): void {
+    const pd = this.pending;
+    const dr = this.pendingDrag;
+    if (!pd || !dr) return;
+    if (dr.mode === "move") {
+      const m = movePending(dr.cx0, dr.cy0, dr.px, dr.py, p.x, p.y, this.width, this.height);
+      pd.cx = m.cx;
+      pd.cy = m.cy;
+    } else {
+      pd.size = resizePending(
+        pd.cx,
+        pd.cy,
+        p.x,
+        p.y,
+        ArtEngine.PENDING_MIN_SIZE,
+        Math.min(this.width, this.height),
+      );
+    }
+    this.requestComposite();
+  }
+
+  /** 확인 — 떠 있는 스탬프를 실제 레이어에 굳힘(되돌리기 1번에 복귀). 제안 수락이면 스케치도 교체. */
+  commitPendingStamp(): void {
+    const pd = this.pending;
+    if (!pd) return;
+    const def = getStamp(pd.stampId);
+    const layer =
+      this.layers.list.find((l) => l.id === pd.layerId && !l.isLineart && !l.isBase) ??
+      (!this.layers.active.isLineart && !this.layers.active.isBase ? this.layers.active : null);
+    if (!def || !layer) {
+      this.cancelPendingStamp();
+      return;
+    }
+    const { cx, cy, size } = pd;
+    // tile 영역 = (옮겨진)스탬프 bbox ∪ 원래 스케치 bbox + 외곽선 여유
+    const { x, y, w, h } = commitRegion(cx, cy, size, pd.originBBox, this.width, this.height);
     if (w <= 0 || h <= 0) {
-      this.resetSuggest();
+      this.cancelPendingStamp();
       return;
     }
     const tiles = tilesForRect(x, y, w, h, this.width, this.height);
@@ -825,9 +959,9 @@ export class ArtEngine {
       this.width,
       tiles,
     );
-    // 그룹 불변식 덕에 최상단 k개 = 정확히 이 스케치의 획들
-    for (let i = 0; i < k; i++) {
-      if (!this.history.undo()) break; // 불변식이 깨졌어도 before/after 스냅샷은 자기일관
+    // 제안 수락이면 스케치 획 k개를 되돌려 지운다(그룹 불변식: 최상단 k개 = 이 스케치).
+    for (let i = 0; i < pd.replaceCount; i++) {
+      if (!this.history.undo()) break;
     }
     drawStampOnCtx(layer.ctx, def, cx, cy, size, this.settings.color);
     const after = copyTiles(
@@ -836,24 +970,30 @@ export class ArtEngine {
       tiles,
     );
     this.pushTileCommand(layer, tiles, before, after);
-    // 무비 재생은 로그를 누적으로만 다시 그린다 — 치환된 스케치 획을 지우지 않으면
-    // 재생 최종 프레임에 낙서 잔상이 남아 실제 그림과 달라진다(교차검증 합의 발견)
-    this.recorder.dropLast(k);
+    // 무비 재생 정합 — 교체된 스케치 획은 로그에서도 제거
+    this.recorder.dropLast(pd.replaceCount);
     this.recorder.record({
       brush: "stamp",
       settings: { ...this.settings },
       layerId: layer.id,
       points: [{ x: cx, y: cy, pressure: 1, t: performance.now() }],
       symmetry: "none",
-      extra: { stamp: { id: stampId, cx, cy, size } },
+      extra: { stamp: { id: pd.stampId, cx, cy, size } },
     });
-    this.resetSuggest();
+    this.pending = null;
+    this.pendingDrag = null;
+    this.emit("pendingChange", { pending: null });
     this.requestComposite();
     this.scheduleAutoSave();
   }
 
-  dismissSuggestion(): void {
-    this.resetSuggest();
+  /** 취소 — 레이어를 건드리지 않아 원래 스케치가 그대로 남는다 */
+  cancelPendingStamp(): void {
+    if (!this.pending) return;
+    this.pending = null;
+    this.pendingDrag = null;
+    this.emit("pendingChange", { pending: null });
+    this.requestComposite();
   }
 
   /* ── 도형 삽입 커밋 — 드래그 영역의 도형을 "합성 스트로크"로 그린다 ──
@@ -1001,6 +1141,10 @@ export class ArtEngine {
 
   /* ── 히스토리 ── */
   undo(): void {
+    if (this.pending) {
+      this.cancelPendingStamp(); // 배치 중 되돌리기 = 배치 취소(레이어 무변경)
+      return;
+    }
     this.resetSuggest(); // 그룹↔히스토리 최상단 k개 대응이 깨진다
     if (this.history.undo()) {
       this.requestComposite();
@@ -1008,6 +1152,7 @@ export class ArtEngine {
     }
   }
   redo(): void {
+    if (this.pending) return; // 배치 중엔 redo 무시
     this.resetSuggest();
     if (this.history.redo()) {
       this.requestComposite();
@@ -1016,6 +1161,7 @@ export class ArtEngine {
   }
 
   clearActiveLayer(): void {
+    this.cancelPendingStamp();
     this.resetSuggest(); // clear도 히스토리 push — 그룹 불변식 유지
     const layer = this.layers.active;
     const beforeFull = new Uint8ClampedArray(
@@ -1214,6 +1360,39 @@ export class ArtEngine {
         ctx.stroke();
       }
       ctx.restore();
+    }
+    // 떠 있는 스탬프 프리뷰 + 선택 프레임 + 모서리 핸들(표시 전용 — 확인 시 굳힘).
+    // 스탬프 자체는 drawStampOnCtx가 커밋과 동일하게 그리므로 프리뷰==최종.
+    if (this.pending) {
+      const pd = this.pending;
+      const def = getStamp(pd.stampId);
+      if (def) {
+        drawStampOnCtx(ctx, def, pd.cx, pd.cy, pd.size, this.settings.color);
+        const half = pd.size / 2;
+        const s = this.view.scale;
+        ctx.save();
+        ctx.strokeStyle = "rgba(91,184,245,0.95)"; // sky
+        ctx.lineWidth = 2 / s;
+        ctx.setLineDash([6 / s, 5 / s]);
+        ctx.strokeRect(pd.cx - half, pd.cy - half, pd.size, pd.size);
+        ctx.setLineDash([]);
+        const hr = 7 / s; // 화면상 ~7px 핸들
+        for (const [hx, hy] of [
+          [pd.cx - half, pd.cy - half],
+          [pd.cx + half, pd.cy - half],
+          [pd.cx + half, pd.cy + half],
+          [pd.cx - half, pd.cy + half],
+        ]) {
+          ctx.beginPath();
+          ctx.arc(hx, hy, hr, 0, Math.PI * 2);
+          ctx.fillStyle = "#5BB8F5";
+          ctx.fill();
+          ctx.lineWidth = 2 / s;
+          ctx.strokeStyle = "#ffffff";
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.emit("dirty", {});

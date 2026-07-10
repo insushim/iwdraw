@@ -44,6 +44,10 @@ export interface EditorState {
   suggestSuppressed: boolean;
   /** 현재 떠 있는 제안 후보(빈 배열 = 바 숨김) */
   suggestions: SketchSuggestion[];
+  /** 떠 있는(배치 중) 스탬프 — null이면 없음. 있으면 확인/취소 바 표시 */
+  pending: { stampId: string; label: string } | null;
+  /** 스탬프 팔레트 열림 여부 */
+  stampPaletteOpen: boolean;
   juniorMode: boolean;
 
   canUndo: boolean;
@@ -76,6 +80,12 @@ export interface EditorState {
   setSuggestSuppressed: (on: boolean) => void;
   acceptSuggestion: (stampId: string) => void;
   dismissSuggestion: () => void;
+  /** 떠 있는 스탬프 굳히기(확인) / 취소 */
+  commitPending: () => void;
+  cancelPending: () => void;
+  /** 팔레트에서 스탬프 선택 → 떠 있는 상태로 삽입 */
+  insertStamp: (stampId: string) => void;
+  setStampPaletteOpen: (open: boolean) => void;
   toggleJunior: () => void;
   undo: () => void;
   redo: () => void;
@@ -113,6 +123,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   sketchSuggest: true,
   suggestSuppressed: false,
   suggestions: [],
+  pending: null,
+  stampPaletteOpen: false,
   juniorMode: false,
   canUndo: false,
   canRedo: false,
@@ -137,6 +149,10 @@ export const useEditor = create<EditorState>((set, get) => ({
         // 빈→빈 갱신 스킵(리셋 경로마다 emit돼 불필요 리렌더 방지)
         if (candidates.length === 0 && get().suggestions.length === 0) return;
         set({ suggestions: candidates });
+      }),
+      engine.on("pendingChange", ({ pending }) => {
+        // 배치 시작 = 제안 바 닫고 확인/취소 바 표시, 종료 = 되돌림
+        set({ pending, suggestions: pending ? [] : get().suggestions });
       }),
       // 최근 색은 "실제로 그린 색"만 — setColor 시점 기록은 밝기 슬라이더 드래그가 도배(실측)
       engine.on("colorPicked", ({ color: c }) => {
@@ -192,7 +208,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   detach: () => {
     unsub.forEach((u) => u());
     unsub = [];
-    set({ engine: null, ready: false, layers: [], suggestions: [] });
+    set({ engine: null, ready: false, layers: [], suggestions: [], pending: null, stampPaletteOpen: false });
   },
 
   setMode: (m) => {
@@ -265,6 +281,17 @@ export const useEditor = create<EditorState>((set, get) => ({
     get().engine?.dismissSuggestion();
     set({ suggestions: [] });
   },
+  commitPending: () => {
+    get().engine?.commitPendingStamp(); // pendingChange(null) 구독이 상태 정리
+  },
+  cancelPending: () => {
+    get().engine?.cancelPendingStamp();
+  },
+  insertStamp: (stampId) => {
+    get().engine?.insertStamp(stampId);
+    set({ stampPaletteOpen: false });
+  },
+  setStampPaletteOpen: (open) => set({ stampPaletteOpen: open }),
   toggleJunior: () => set((s) => ({ juniorMode: !s.juniorMode })),
   undo: () => get().engine?.undo(),
   redo: () => get().engine?.redo(),

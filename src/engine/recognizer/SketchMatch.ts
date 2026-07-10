@@ -205,7 +205,13 @@ function buildTemplates(): SketchTemplate[] {
   // 영원히 무력화된다(교차검증 발견)
   if (typeof document === "undefined") return [];
   const built: SketchTemplate[] = [];
+  // 인식 대상 = 기존 132종(cat 미지정)만. 팔레트용으로 새로 넣은 132종(cat 지정)은
+  // 상세 SVG를 인식 템플릿에 넣지 않는다 — 264종 전부를 후보로 두면 아이의 러프한
+  // 윤곽과 어긋나 오탐만 늘고 정답이 후보 밖으로 밀린다(house→apple 류, 프로젝트 실측).
+  // 신규 소재는 "그림 도장" 팔레트로 직접 골라 넣게 해 접근성은 지키고 인식 정확도는
+  // 2배 확장 전과 동일하게 유지한다(정확도 우선). 인식률 개선은 변형 표본 확충으로만.
   for (const def of STAMPS) {
+    if (def.cat) continue; // 신규(팔레트 전용) 소재는 인식 제외
     const strokes = sampleStampStrokes(def, 96);
     if (strokes.flat().length < 8) continue;
     built.push({ stampId: def.id, label: def.label, cloud: preparePointCloud(strokes) });

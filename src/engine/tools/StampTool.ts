@@ -8,7 +8,24 @@ export interface StampDef {
   label: string;
   /** 24x24 뷰박스 기준 SVG path(들) */
   paths: { d: string; fill?: string }[];
+  /** 팔레트 분류(없으면 "기타") */
+  cat?: StampCategory;
 }
+
+/** 스탬프 팔레트 카테고리 — 배열 순서가 팔레트 표시 순서 */
+export const STAMP_CATEGORIES = [
+  "동물",
+  "바다",
+  "새·곤충",
+  "음식",
+  "과일·채소",
+  "탈것",
+  "자연·날씨",
+  "우주",
+  "사람·몸",
+  "물건·기호",
+] as const;
+export type StampCategory = (typeof STAMP_CATEGORIES)[number];
 
 export interface StampPlacement {
   stampId: string;
@@ -834,10 +851,434 @@ export const STAMPS: StampDef[] = [
       { d: "M8 15.5a1.8 1.8 0 110 3.6 1.8 1.8 0 010-3.6z", fill: "#2D2A26" },
     ],
   },
+
+  /* ── 2026-07-09 4차 대확장 132종(팔레트 264종 달성) — cat으로 분류.
+   * 아이들이 실제로 그리는 소재를 단순 실루엣으로. evenodd 구멍=눈·창문. */
+
+  // ── 동물 16 ──
+  { id: "koala", label: "코알라", cat: "동물", paths: [
+    { d: "M4 7a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm16 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5z", fill: "#9AA5AD" },
+    { d: "M12 5a7 7 0 110 14 7 7 0 010-14zM9 10a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2zm6 0a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2z", fill: "#B7C0C7" },
+    { d: "M12 13.5a1.6 1.3 0 110 2.6 1.6 1.3 0 010-2.6z", fill: "#2D2A26" } ] },
+  { id: "kangaroo", label: "캥거루", cat: "동물", paths: [
+    { d: "M9 4l1 4 3-1-1 4 3 3v5h-3v-3l-3-2-2 5H7l2-6-2-4z", fill: "#D98E5A" },
+    { d: "M10 6.5a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#2D2A26" } ] },
+  { id: "zebra", label: "얼룩말", cat: "동물", paths: [
+    { d: "M4 8a8 6 0 0116 0v8h-3v-4h-4v4H6V8zM8 5l1 3M12 4.5l0 3.5M16 5l-1 3", fill: "#F4F1EC" } ] },
+  { id: "wolf", label: "늑대", cat: "동물", paths: [
+    { d: "M5 6l1 4 6-2 6 2 1-4-2 8a7 6 0 01-10 0zM9 12a1 1 0 110 2 1 1 0 010-2zm6 0a1 1 0 110 2 1 1 0 010-2zM12 16l-1.2 1.4h2.4z", fill: "#8A94A0" } ] },
+  { id: "sheep", label: "양", cat: "동물", paths: [
+    { d: "M7 9a4 4 0 018 0 3.5 3.5 0 010 7 4 4 0 01-8 0 3.5 3.5 0 010-7z", fill: "#F4F1EC" },
+    { d: "M9 8a3.5 4 0 016 0 4 4 0 01-6 0zM10 11a.9.9 0 110 1.8.9.9 0 010-1.8zm4 0a.9.9 0 110 1.8.9.9 0 010-1.8z", fill: "#3B3A38" } ] },
+  { id: "cow", label: "소", cat: "동물", paths: [
+    { d: "M5 8a7 6 0 0114 0v6a7 5 0 01-14 0zM4 6l3 2M20 6l-3 2", fill: "#F4F1EC" },
+    { d: "M9 11a1 1 0 110 2 1 1 0 010-2zm6 0a1 1 0 110 2 1 1 0 010-2z", fill: "#2D2A26" },
+    { d: "M8 15a4 2.5 0 018 0 4 2.5 0 01-8 0z", fill: "#F7A8B8" } ] },
+  { id: "goat", label: "염소", cat: "동물", paths: [
+    { d: "M7 8a5 6 0 0110 0v6a5 5 0 01-10 0zM8 6c-1-2-1-4 0-4M16 6c1-2 1-4 0-4", fill: "#EDE7DC" },
+    { d: "M10 11a.9.9 0 110 1.8.9.9 0 010-1.8zm4 0a.9.9 0 110 1.8.9.9 0 010-1.8zM11 16h2l-1 2z", fill: "#2D2A26" } ] },
+  { id: "mouse", label: "쥐", cat: "동물", paths: [
+    { d: "M6 6a3 3 0 110 6 3 3 0 010-6zm12 0a3 3 0 110 6 3 3 0 010-6z", fill: "#B7B2AA" },
+    { d: "M12 8a6 6 0 110 12 6 6 0 010-12zM10 13a.9.9 0 110 1.8.9.9 0 010-1.8zm4 0a.9.9 0 110 1.8.9.9 0 010-1.8z", fill: "#C9C4BC" } ] },
+  { id: "hamster", label: "햄스터", cat: "동물", paths: [
+    { d: "M12 5a7 6 0 110 13 7 6 0 010-13zM8 9a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2zm8 0a1.1 1.1 0 110 2.2 1.1 1.1 0 010-2.2z", fill: "#F0C08E" },
+    { d: "M9 13a3 2 0 016 0 3 2 0 01-6 0z", fill: "#FBF7F0" } ] },
+  { id: "hedgehog", label: "고슴도치", cat: "동물", paths: [
+    { d: "M3 15a9 6 0 0118 0zM6 15l-1-4M9 14l-1-5M12 14V9M15 14l1-5M18 15l1-4", fill: "#A9744F" },
+    { d: "M18 15a3 3 0 013 0 3 3 0 01-6 0z", fill: "#F0C08E" } ] },
+  { id: "raccoon", label: "너구리", cat: "동물", paths: [
+    { d: "M5 7l1-3 3 2h6l3-2 1 3a7 7 0 11-14 0z", fill: "#9AA5AD" },
+    { d: "M6 11a3 2.4 0 015 0 3 2.4 0 01-5 0zm7 0a3 2.4 0 015 0 3 2.4 0 01-5 0z", fill: "#3B3A38" },
+    { d: "M8 11a.7.7 0 110 1.4.7.7 0 010-1.4zm8 0a.7.7 0 110 1.4.7.7 0 010-1.4z", fill: "#FBF7F0" },
+    { d: "M11.5 14.5h1l-.5 1.5z", fill: "#2D2A26" } ] },
+  { id: "camel", label: "낙타", cat: "동물", paths: [
+    { d: "M4 16V11a3 3 0 016 0c1-3 4-3 5 0l1-1a3 3 0 015 3v3h-2v-2l-2 2v-2l-3 1-3-1v3H8v-3l-2-1v3z", fill: "#D9A066" } ] },
+  { id: "rhino", label: "코뿔소", cat: "동물", paths: [
+    { d: "M4 10a6 5 0 016-2h5a4 4 0 014 4v5h-3v-3H8v3H5v-4l-1-3zM4 10l-1-2 3 1", fill: "#9AA5AD" },
+    { d: "M4 9l-2-1 1 3z", fill: "#EDE7DC" },
+    { d: "M8 11a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#2D2A26" } ] },
+  { id: "gorilla", label: "고릴라", cat: "동물", paths: [
+    { d: "M6 8a6 6 0 0112 0 4 4 0 010 8 6 5 0 01-12 0 4 4 0 010-8z", fill: "#5C5852" },
+    { d: "M9 9a2.5 2 0 016 0 2.5 2 0 01-6 0zM9 10a1 1 0 110 2 1 1 0 010-2zm6 0a1 1 0 110 2 1 1 0 010-2z", fill: "#8A857D" } ] },
+  { id: "sloth", label: "나무늘보", cat: "동물", paths: [
+    { d: "M12 5a7 7 0 110 14 7 7 0 010-14zM7 9a2.5 2 0 015 0 2.5 2 0 01-5 0zm5 0a2.5 2 0 015 0 2.5 2 0 01-5 0z", fill: "#B89B77" },
+    { d: "M9 10a.9.9 0 110 1.8.9.9 0 010-1.8zm6 0a.9.9 0 110 1.8.9.9 0 010-1.8zM10 14h4l-2 2z", fill: "#5C5852" } ] },
+  { id: "llama", label: "라마", cat: "동물", paths: [
+    { d: "M9 6a2 3 0 014 0v3l3 1v7h-3v-4h-4v4H6v-6l3-2zM8 4l1 2M14 4l-1 2", fill: "#EDE7DC" },
+    { d: "M10 7a.7.7 0 110 1.4.7.7 0 010-1.4z", fill: "#2D2A26" } ] },
+
+  // ── 바다 10 ──
+  { id: "seahorse", label: "해마", cat: "바다", paths: [
+    { d: "M10 3c3 0 4 2 4 4v6a3 3 0 01-6 0c0-1 2-1 2 1M14 5l2-1M6 20c0-3 2-3 2-5", fill: "#FFC84A" },
+    { d: "M12 6a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#2D2A26" } ] },
+  { id: "jellyfish", label: "해파리", cat: "바다", paths: [
+    { d: "M5 11a7 6 0 0114 0v1H5zM7 12v6M10 12l-1 7M14 12l1 7M17 12v6", fill: "#F7A8B8" },
+    { d: "M9 9a.8.8 0 110 1.6.8.8 0 010-1.6zm6 0a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#2D2A26" } ] },
+  { id: "seal", label: "물개", cat: "바다", paths: [
+    { d: "M3 15c0-4 4-7 9-7 4 0 7 2 8 5l1 3-3-1c-3 2-9 2-13 1zM5 12l-2-1 1 3", fill: "#9AA5AD" },
+    { d: "M9 11a.9.9 0 110 1.8.9.9 0 010-1.8z", fill: "#2D2A26" } ] },
+  { id: "clownfish", label: "흰동가리", cat: "바다", paths: [
+    { d: "M3 12c4-5 12-5 16 0-4 5-12 5-16 0zM18 12l3-2v4zM8 8v8M13 7v10", fill: "#FF7A59" },
+    { d: "M6 11a1 1 0 110 2 1 1 0 010-2z", fill: "#2D2A26" } ] },
+  { id: "lobster", label: "랍스터", cat: "바다", paths: [
+    { d: "M12 4v14M12 8l-4-4-2 2M12 8l4-4 2 2M12 12H7M12 12h5M12 16l-3 3M12 16l3 3", fill: "#E5484D" },
+    { d: "M12 18a3 3 0 01-3 3h6a3 3 0 01-3-3z", fill: "#E5484D" } ] },
+  { id: "seaweed", label: "미역", cat: "바다", paths: [
+    { d: "M8 21c-2-4 0-6 1-8s0-4-1-6M12 21c2-4 0-6-1-8s0-4 1-6M16 21c-2-4 0-6 1-8s0-4-1-5", fill: "none" } ] },
+  { id: "coral", label: "산호", cat: "바다", paths: [
+    { d: "M12 21v-8M12 15l-3-3M12 15l3-3M9 12V8M15 12V8M12 13V6M9 8l-1-2M15 8l1-2", fill: "none" } ] },
+  { id: "pufferfish", label: "복어", cat: "바다", paths: [
+    { d: "M12 5a7 7 0 110 14 7 7 0 010-14zM12 3v2M12 19v2M3 12h2M19 12h2M5 6l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19", fill: "#FFC84A" },
+    { d: "M9 11a1 1 0 110 2 1 1 0 010-2zm6 0a1 1 0 110 2 1 1 0 010-2z", fill: "#2D2A26" } ] },
+  { id: "stingray", label: "가오리", cat: "바다", paths: [
+    { d: "M12 6c5 0 9 4 9 9-3-1-6-1-9-1s-6 0-9 1c0-5 4-9 9-9zM12 14v7", fill: "#8A94A0" },
+    { d: "M9 10a.8.8 0 110 1.6.8.8 0 010-1.6zm6 0a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#2D2A26" } ] },
+  { id: "anchor", label: "닻", cat: "바다", paths: [
+    { d: "M12 3a2 2 0 110 4 2 2 0 010-4zM12 7v13M7 11H5c0 5 3 8 7 8s7-3 7-8h-2M8 10h8", fill: "none" } ] },
+
+  // ── 새·곤충 12 ──
+  { id: "parrot", label: "앵무새", cat: "새·곤충", paths: [
+    { d: "M14 4c4 0 6 4 5 8s-4 8-8 8c-3 0-5-2-5-5 0-4 4-4 4-7 0-2 2-4 4-4zM6 12l-3 2 3 1", fill: "#7BC96F" },
+    { d: "M13 7a1 1 0 110 2 1 1 0 010-2zM15 9l2 1-2 1z", fill: "#2D2A26" } ] },
+  { id: "eagle", label: "독수리", cat: "새·곤충", paths: [
+    { d: "M12 6a3 3 0 110 6 3 3 0 010-6zM12 12l-8-3 4 6zM12 12l8-3-4 6zM12 12v6", fill: "#8A6E4E" },
+    { d: "M11 8h2l-1 2z", fill: "#FFC84A" } ] },
+  { id: "flamingo", label: "홍학", cat: "새·곤충", paths: [
+    { d: "M13 4a3 3 0 013 3c0 3-4 3-4 6h4l-3 4M12 21v-4M9 8l-1 2", fill: "#F7A8B8" },
+    { d: "M14 6a.7.7 0 110 1.4.7.7 0 010-1.4z", fill: "#2D2A26" } ] },
+  { id: "peacock", label: "공작", cat: "새·곤충", paths: [
+    { d: "M12 12a3 4 0 110 8 3 4 0 010-8zM12 4v8M8 6l4 6M16 6l-4 6M5 10l7 2M19 10l-7 2", fill: "#5BB8F5" },
+    { d: "M5 10a1 1 0 110 2 1 1 0 010-2zm14 0a1 1 0 110 2 1 1 0 010-2zM12 4a1 1 0 110 2 1 1 0 010-2z", fill: "#7BC96F" } ] },
+  { id: "swan", label: "백조", cat: "새·곤충", paths: [
+    { d: "M4 17c0-4 4-6 8-6 3 0 5-1 5-4a3 3 0 00-5-2M4 17a8 3 0 0016 0z", fill: "#F4F1EC" },
+    { d: "M14 6a.7.7 0 110 1.4.7.7 0 010-1.4zM10 5h2l-1.5 1.5z", fill: "#FF7A59" } ] },
+  { id: "dove", label: "비둘기", cat: "새·곤충", paths: [
+    { d: "M4 12c4 0 5-4 9-4 3 0 5 2 5 5 0 3-3 6-7 6-3 0-5-2-5-4l-2-3zM16 8l3-1-1 3", fill: "#EDE7DC" },
+    { d: "M15 11a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#2D2A26" } ] },
+  { id: "ant", label: "개미", cat: "새·곤충", paths: [
+    { d: "M6 12a2 2 0 110 4 2 2 0 010-4zm6-1a2.5 2 0 110 4 2.5 2 0 010-4zm6-2a2 2 0 110 4 2 2 0 010-4zM17 8l2-2M16 9l2 0M8 13l-3 1M9 15l-3 2M13 12l1-3M13 14l1 3", fill: "#5C5852" } ] },
+  { id: "dragonfly", label: "잠자리", cat: "새·곤충", paths: [
+    { d: "M12 4v16M12 8C8 6 4 7 3 9c2 2 6 2 9 1M12 8c4-2 8-1 9 1-2 2-6 2-9 1M12 12c-3-1-6 0-7 2 2 1 5 1 7 0M12 12c3-1 6 0 7 2-2 1-5 1-7 0", fill: "#5BB8F5" },
+    { d: "M12 3a1.3 1.3 0 110 2.6 1.3 1.3 0 010-2.6z", fill: "#2D2A26" } ] },
+  { id: "grasshopper", label: "메뚜기", cat: "새·곤충", paths: [
+    { d: "M4 13c0-3 4-5 9-5 3 0 6 1 7 3l-2 2-8 1zM6 11l-3-2M8 10l-2-3M16 12l3 5M16 12l4 1", fill: "#7BC96F" },
+    { d: "M17 10a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#2D2A26" } ] },
+  { id: "caterpillar", label: "애벌레", cat: "새·곤충", paths: [
+    { d: "M5 15a2.5 2.5 0 115 0 2.5 2.5 0 015 0 2.5 2.5 0 015 0M6 10l-1-2M8 10l0-2", fill: "#7BC96F" },
+    { d: "M18 13a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#2D2A26" } ] },
+  { id: "worm", label: "지렁이", cat: "새·곤충", paths: [
+    { d: "M6 18c-2-2-2-5 1-6s3-4 1-5M18 8a2 2 0 11-4 0 2 2 0 014 0z", fill: "none" } ] },
+  { id: "beetle", label: "딱정벌레", cat: "새·곤충", paths: [
+    { d: "M12 6a5 7 0 110 14 5 7 0 010-14zM12 6V4M10 5L8 3M14 5l2-2M12 6v14M4 11l3 1M17 12l3-1M4 16l3-1M17 15l3 1", fill: "#4A6B3A" } ] },
+
+  // ── 음식 14 ──
+  { id: "bread", label: "빵", cat: "음식", paths: [
+    { d: "M4 12a4 4 0 018 0 4 4 0 018 0v6H4zM4 12a4 4 0 018 0", fill: "#E8B27D" } ] },
+  { id: "croissant", label: "크루아상", cat: "음식", paths: [
+    { d: "M4 16c0-5 4-8 8-8s8 3 8 7l-3-1-2 2-3-2-3 2-2-2z", fill: "#F0C060" } ] },
+  { id: "taco", label: "타코", cat: "음식", paths: [
+    { d: "M3 16a9 8 0 0118 0zM3 16h18l-1-2H4z", fill: "#FFC84A" },
+    { d: "M6 14l1-2M12 13v-2M17 14l-1-2", fill: "#7BC96F" } ] },
+  { id: "ramen", label: "라면", cat: "음식", paths: [
+    { d: "M4 12h16l-1 6a3 3 0 01-3 2H8a3 3 0 01-3-2zM8 12V8M11 12V7M14 12V8", fill: "#F0C060" },
+    { d: "M17 14a2 2 0 013 1v2h-3z", fill: "#E5484D" } ] },
+  { id: "riceball", label: "주먹밥", cat: "음식", paths: [
+    { d: "M12 5l8 14H4z", fill: "#FBF7F0" },
+    { d: "M9 15h6v4H9z", fill: "#3B3A38" } ] },
+  { id: "pancake", label: "팬케이크", cat: "음식", paths: [
+    { d: "M4 13a8 3 0 0116 0 8 3 0 01-16 0zM4 13v3a8 3 0 0016 0v-3", fill: "#E8B27D" },
+    { d: "M9 9l3-3 3 3-3 3z", fill: "#FFC84A" } ] },
+  { id: "cheese", label: "치즈", cat: "음식", paths: [
+    { d: "M3 12l9-5 9 5v6H3zM7 14a1 1 0 110 2 1 1 0 010-2zm7-1a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4z", fill: "#FFC84A" } ] },
+  { id: "milk", label: "우유", cat: "음식", paths: [
+    { d: "M8 3h8v4l1 3v10H7V10l1-3zM7 12h10", fill: "#FBF7F0" },
+    { d: "M10 14h4v3h-4z", fill: "#5BB8F5" } ] },
+  { id: "tea", label: "차", cat: "음식", paths: [
+    { d: "M5 9h12v4a5 5 0 01-10 0zM17 10h2a2 2 0 010 4h-2M6 6c0-1 1-1 1-2M10 6c0-1 1-1 1-2", fill: "#A9744F" } ] },
+  { id: "lollipop", label: "막대사탕", cat: "음식", paths: [
+    { d: "M12 3a5 5 0 110 10 5 5 0 010-10zM12 13v8", fill: "#F7A8B8" },
+    { d: "M12 5c2 0 3 2 3 3M9 10c0-2 1-3 3-3", fill: "#FBF7F0" } ] },
+  { id: "chocolate", label: "초콜릿", cat: "음식", paths: [
+    { d: "M5 5h14v14H5zM5 10h14M5 15h14M10 5v14M15 5v14", fill: "#7B4A2A" } ] },
+  { id: "pie", label: "파이", cat: "음식", paths: [
+    { d: "M3 13a9 5 0 0118 0v3a9 4 0 01-18 0zM3 13a9 5 0 0118 0", fill: "#E8B27D" },
+    { d: "M8 11l1-2M12 10.5V9M16 11l-1-2", fill: "#E5484D" } ] },
+  { id: "waffle", label: "와플", cat: "음식", paths: [
+    { d: "M5 5h14v14H5zM5 9.7h14M5 14.3h14M9.7 5v14M14.3 5v14", fill: "#E8B27D" } ] },
+  { id: "macaron", label: "마카롱", cat: "음식", paths: [
+    { d: "M4 9a8 3.5 0 0116 0 8 3.5 0 01-16 0zM4 15a8 3.5 0 0116 0 8 3.5 0 01-16 0zM4 9v6M20 9v6", fill: "#F7A8B8" },
+    { d: "M5 12h14", fill: "#FBF7F0" } ] },
+
+  // ── 과일·채소 14 ──
+  { id: "peach", label: "복숭아", cat: "과일·채소", paths: [
+    { d: "M12 7c-3-2-7 0-7 5s4 8 7 8 7-3 7-8-4-7-7-5zM12 7V4l3-1", fill: "#F7A8B8" } ] },
+  { id: "pear", label: "배", cat: "과일·채소", paths: [
+    { d: "M12 6c-2 0-3 2-3 4s-2 3-2 6a5 5 0 0010 0c0-3-2-4-2-6s-1-4-3-4zM12 6V3l2-1", fill: "#B5C94A" } ] },
+  { id: "lemon", label: "레몬", cat: "과일·채소", paths: [
+    { d: "M4 12a8 5 0 0116 0 8 5 0 01-16 0zM3 12H1M21 12h2", fill: "#FFE04A" } ] },
+  { id: "kiwi", label: "키위", cat: "과일·채소", paths: [
+    { d: "M12 4a8 8 0 110 16 8 8 0 010-16zM12 8a4 4 0 110 8 4 4 0 010-8z", fill: "#8CB84A" },
+    { d: "M12 11a1 1 0 110 2 1 1 0 010-2zM12 6v2M12 16v2M6 12h2M16 12h2", fill: "#FBF7F0" } ] },
+  { id: "mango", label: "망고", cat: "과일·채소", paths: [
+    { d: "M14 5c4 1 7 5 5 9s-8 5-11 2c-3-4 0-11 6-11zM14 5l1-2", fill: "#FFB03A" } ] },
+  { id: "avocado", label: "아보카도", cat: "과일·채소", paths: [
+    { d: "M12 4c3 0 5 3 5 7s-2 8-5 8-5-4-5-8 2-7 5-7zM12 11a3 4 0 110 8 3 4 0 010-8z", fill: "#7BC96F" },
+    { d: "M12 13a1.6 2 0 110 4 1.6 2 0 010-4z", fill: "#A9744F" } ] },
+  { id: "tomato", label: "토마토", cat: "과일·채소", paths: [
+    { d: "M12 7a7 6 0 110 12 7 6 0 010-12zM9 6l3 1 3-1M12 4v3", fill: "#E5484D" },
+    { d: "M9 6l3 1 3-1 2 1-2 1-3-1-3 1-2-1z", fill: "#7BC96F" } ] },
+  { id: "potato", label: "감자", cat: "과일·채소", paths: [
+    { d: "M5 13a7 5 0 0114-1c1 4-3 7-7 7s-8-2-7-6zM9 11a.7.7 0 110 1.4.7.7 0 010-1.4zm5 1a.7.7 0 110 1.4.7.7 0 010-1.4z", fill: "#D9A066" } ] },
+  { id: "pumpkin", label: "호박", cat: "과일·채소", paths: [
+    { d: "M6 12a6 6 0 0112 0 6 6 0 01-12 0zM12 7v10M9 7v10M15 7v10M12 7V4l2-1", fill: "#FF9F45" } ] },
+  { id: "eggplant", label: "가지", cat: "과일·채소", paths: [
+    { d: "M15 6c3 2 4 6 1 9s-9 4-10 0c-1-4 3-7 6-8M15 6l1-3-3 1", fill: "#8E5AB8" },
+    { d: "M13 7l3-1", fill: "#7BC96F" } ] },
+  { id: "broccoli", label: "브로콜리", cat: "과일·채소", paths: [
+    { d: "M8 8a3 3 0 013-3 3 3 0 013 0 3 3 0 012 5 3 3 0 01-3 3H9a3 3 0 01-1-5zM10 13v6M14 13v6", fill: "#5FA83A" } ] },
+  { id: "pepper", label: "고추", cat: "과일·채소", paths: [
+    { d: "M8 8c4 0 8 3 8 8 0 2-2 3-4 2-4-2-6-6-6-9M8 8l-2-3 3 1", fill: "#E5484D" },
+    { d: "M6 5l3 1", fill: "#7BC96F" } ] },
+  { id: "radish", label: "무", cat: "과일·채소", paths: [
+    { d: "M12 8a5 6 0 01-1 11 5 6 0 01-1-11 3 3 0 012 0zM10 8c-1-2 0-4 1-5M12 8c1-2 2-3 3-3", fill: "#FBF7F0" },
+    { d: "M10 8c-1-2 0-4 1-5M12 8c1-2 2-3 3-3", fill: "#7BC96F" } ] },
+  { id: "onion", label: "양파", cat: "과일·채소", paths: [
+    { d: "M12 7c4 0 6 4 6 7a6 6 0 01-12 0c0-3 2-7 6-7zM10 9c-1 3-1 6 0 9M14 9c1 3 1 6 0 9M12 7V4M12 4l-1-1M12 4l1-1", fill: "#D98AC0" } ] },
+
+  // ── 탈것 12 ──
+  { id: "sailboat", label: "돛단배", cat: "탈것", paths: [
+    { d: "M12 3v10M12 5l6 8H12zM12 5L7 13h5M3 16h18l-2 3H5z", fill: "#5BB8F5" } ] },
+  { id: "tractor", label: "트랙터", cat: "탈것", paths: [
+    { d: "M4 10h6l2-4h3v6H4zM4 12h11", fill: "#7BC96F" },
+    { d: "M7 15a4 4 0 110 8 4 4 0 010-8zm11 1a3 3 0 110 6 3 3 0 010-6z", fill: "#2D2A26" } ] },
+  { id: "ambulance", label: "구급차", cat: "탈것", paths: [
+    { d: "M2 10h11v6H2zM13 11h5l3 3v2h-8z", fill: "#FBF7F0" },
+    { d: "M6 6h4v2h2v2h-2v2H6v-2H4V8h2zM5 16a2 2 0 110 4 2 2 0 010-4zm12 0a2 2 0 110 4 2 2 0 010-4z", fill: "#E5484D" } ] },
+  { id: "motorcycle", label: "오토바이", cat: "탈것", paths: [
+    { d: "M5 15a4 4 0 110 8 4 4 0 010-8zm14 0a4 4 0 110 8 4 4 0 010-8zM5 19h6l3-5h4M9 9h4l2 3M13 9h4", fill: "none" } ] },
+  { id: "ship", label: "여객선", cat: "탈것", paths: [
+    { d: "M3 15h18l-2 4H5zM5 15V9h12v6M8 6h5v3H8z", fill: "#5BB8F5" },
+    { d: "M8 11a.8.8 0 110 1.6.8.8 0 010-1.6zm4 0a.8.8 0 110 1.6.8.8 0 010-1.6z", fill: "#FBF7F0" } ] },
+  { id: "van", label: "승합차", cat: "탈것", paths: [
+    { d: "M2 8h13v8H2zM15 10h4l3 3v3h-7z", fill: "#FFC84A" },
+    { d: "M6 16a2 2 0 110 4 2 2 0 010-4zm11 0a2 2 0 110 4 2 2 0 010-4z", fill: "#2D2A26" } ] },
+  { id: "jeep", label: "지프", cat: "탈것", paths: [
+    { d: "M3 11l2-3h9l3 3h4v5H3zM3 8h4", fill: "#7BC96F" },
+    { d: "M7 15a2 2 0 110 4 2 2 0 010-4zm9 0a2 2 0 110 4 2 2 0 010-4z", fill: "#2D2A26" } ] },
+  { id: "crane", label: "크레인", cat: "탈것", paths: [
+    { d: "M3 20h8v-4H3zM6 16V4h1l10 3M17 7v4M7 4l-2 2M7 4l2 2", fill: "none" },
+    { d: "M5 20a2 2 0 110 0M9 20a2 2 0 110 0", fill: "#2D2A26" } ] },
+  { id: "wagon", label: "수레", cat: "탈것", paths: [
+    { d: "M4 8h12v6H4zM16 10h2l3 2M4 8V6", fill: "#E5484D" },
+    { d: "M7 15a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm8 0a2.5 2.5 0 110 5 2.5 2.5 0 010-5z", fill: "#2D2A26" } ] },
+  { id: "cablecar", label: "케이블카", cat: "탈것", paths: [
+    { d: "M2 5h20M12 5v3M6 8h12l-1 9H7zM7 12h10", fill: "none" } ] },
+  { id: "ferry", label: "페리", cat: "탈것", paths: [
+    { d: "M3 14h18l-2 5H5zM5 14l2-4h10l2 4M9 6h2v4H9z", fill: "#5BB8F5" } ] },
+  { id: "rickshaw", label: "인력거", cat: "탈것", paths: [
+    { d: "M4 15a4 4 0 110 8 4 4 0 010-8zM4 19h9V9H6zM13 11l6-3M13 15l6 3", fill: "none" } ] },
+
+  // ── 자연·날씨 12 ──
+  { id: "tulip", label: "튤립", cat: "자연·날씨", paths: [
+    { d: "M8 8c0-2 1-4 4-4s4 2 4 4c0 3-2 5-4 5s-4-2-4-5zM12 4v5M12 13v8M12 17l-3-2M12 17l3-2", fill: "#E5484D" } ] },
+  { id: "rose", label: "장미", cat: "자연·날씨", paths: [
+    { d: "M12 4a4 4 0 014 4 4 4 0 01-4 4 4 4 0 01-4-4 4 4 0 014-4zM10 8a2 2 0 014 0 2 2 0 01-4 0M12 12v9M12 16l-3-2M12 16l3-2", fill: "#E5484D" } ] },
+  { id: "daisy", label: "데이지", cat: "자연·날씨", paths: [
+    { d: "M12 5l1.5 3 3-1-1 3 3 1.5-3 1.5 1 3-3-1L12 21l-1.5-3-3 1 1-3-3-1.5 3-1.5-1-3 3 1z", fill: "#FBF7F0" },
+    { d: "M12 8.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z", fill: "#FFC84A" } ] },
+  { id: "mapleleaf", label: "단풍잎", cat: "자연·날씨", paths: [
+    { d: "M12 3l1 4 3-2-1 3 4 0-3 2 2 3-4-1 1 4-3-3-3 3 1-4-4 1 2-3-3-2 4 0-1-3 3 2z", fill: "#E5484D" },
+    { d: "M12 12v9", fill: "#A9744F" } ] },
+  { id: "pinetree", label: "소나무", cat: "자연·날씨", paths: [
+    { d: "M12 3l4 6h-3l4 6H7l4-6H8zM11 15h2v6h-2z", fill: "#4A8B3A" } ] },
+  { id: "waterdrop", label: "물방울", cat: "자연·날씨", paths: [
+    { d: "M12 3c3 5 6 8 6 11a6 6 0 01-12 0c0-3 3-6 6-11z", fill: "#5BB8F5" },
+    { d: "M9 14a3 3 0 003 3", fill: "#FBF7F0" } ] },
+  { id: "raincloud", label: "비구름", cat: "자연·날씨", paths: [
+    { d: "M6 12a4 4 0 010-8 5 5 0 019.6-1.4A3.5 3.5 0 1116.5 12z", fill: "#9AA5AD" },
+    { d: "M8 15l-1 3M12 15l-1 3M16 15l-1 3", fill: "#5BB8F5" } ] },
+  { id: "fire", label: "불", cat: "자연·날씨", paths: [
+    { d: "M12 3c1 3 4 4 4 8a4 4 0 01-8 0c0-2 1-3 2-4 0 2 2 2 2 0 0-2 0-3 0-4z", fill: "#FF7A59" },
+    { d: "M12 11c1 1 1 3 0 4s-2-1-1-3", fill: "#FFC84A" } ] },
+  { id: "wave", label: "파도", cat: "자연·날씨", paths: [
+    { d: "M3 16c2-6 7-6 9-2s7 2 9-2c-1 6-5 8-9 6s-7-2-9 0zM3 20h18", fill: "#5BB8F5" } ] },
+  { id: "rock", label: "바위", cat: "자연·날씨", paths: [
+    { d: "M4 18l3-8 5-2 6 3 2 7zM7 10l5 3 6-2M12 13l-1 5", fill: "#9AA5AD" } ] },
+  { id: "bush", label: "덤불", cat: "자연·날씨", paths: [
+    { d: "M4 16a4 4 0 013-5 4 4 0 016-2 4 4 0 016 3 3 3 0 011 4z", fill: "#5FA83A" } ] },
+  { id: "tornado", label: "회오리", cat: "자연·날씨", paths: [
+    { d: "M4 5h16M6 9h12M9 13h7M11 17h4M13 21h1", fill: "none" } ] },
+
+  // ── 우주 8 ──
+  { id: "saturn", label: "토성", cat: "우주", paths: [
+    { d: "M12 6a5 5 0 110 10 5 5 0 010-10zM3 11c6 4 12 4 18 0", fill: "#E8B27D" } ] },
+  { id: "comet", label: "혜성", cat: "우주", paths: [
+    { d: "M16 6a4 4 0 110 8 4 4 0 010-8zM12 10L3 19M13 13l-5 5M14 9l-6 6", fill: "#5BB8F5" } ] },
+  { id: "satellite", label: "인공위성", cat: "우주", paths: [
+    { d: "M10 10l4 4-2 2-4-4zM8 8l2 2M14 14l2 2M4 6h4v4H4zM16 14h4v4h-4zM12 5v-2M12 3h3", fill: "none" } ] },
+  { id: "astronaut", label: "우주인", cat: "우주", paths: [
+    { d: "M12 4a5 5 0 015 5 5 5 0 01-10 0 5 5 0 015-5zM8 13h8v7H8zM8 15H5v3M16 15h3v3", fill: "#EDE7DC" },
+    { d: "M9 9a3 2 0 016 0 3 2 0 01-6 0z", fill: "#5BB8F5" } ] },
+  { id: "alien", label: "외계인", cat: "우주", paths: [
+    { d: "M12 4c4 0 6 3 6 7s-3 9-6 9-6-5-6-9 2-7 6-7zM9 10a1.5 2 0 110 4 1.5 2 0 010-4zm6 0a1.5 2 0 110 4 1.5 2 0 010-4z", fill: "#7BC96F" },
+    { d: "M12 3v-1M12 2l-1-1M12 2l1-1", fill: "#7BC96F" } ] },
+  { id: "telescope", label: "망원경", cat: "우주", paths: [
+    { d: "M4 15l10-6 3 2-9 6zM14 9l3-2 2 3-3 2M9 15v5M9 20H6M9 20h3", fill: "none" } ] },
+  { id: "shootingstar", label: "별똥별", cat: "우주", paths: [
+    { d: "M16 4l1.5 3.5L21 9l-3.5 1.5L16 14l-1.5-3.5L11 9l3.5-1.5zM11 11L3 19M9 12l-4 4", fill: "#FFC84A" } ] },
+  { id: "spaceship", label: "우주선", cat: "우주", paths: [
+    { d: "M12 3c3 3 4 8 4 11H8c0-3 1-8 4-11zM8 12l-3 4h3M16 12l3 4h-3M10 18l2 3 2-3", fill: "#B7C0C7" },
+    { d: "M12 8a1.5 1.5 0 110 3 1.5 1.5 0 010-3z", fill: "#5BB8F5" } ] },
+
+  // ── 사람·몸 12 ──
+  { id: "boy", label: "남자아이", cat: "사람·몸", paths: [
+    { d: "M12 3a4 4 0 110 8 4 4 0 010-8zM6 21v-4a6 6 0 0112 0v4z", fill: "#5BB8F5" },
+    { d: "M9 5a4 3 0 016 0", fill: "#5C3A1E" } ] },
+  { id: "girl", label: "여자아이", cat: "사람·몸", paths: [
+    { d: "M12 3a4 4 0 110 8 4 4 0 010-8zM7 21l1-4a4 4 0 018 0l1 4z", fill: "#F7A8B8" },
+    { d: "M7 8c0-3 2-5 5-5s5 2 5 5l-2-2H9z", fill: "#5C3A1E" } ] },
+  { id: "baby", label: "아기", cat: "사람·몸", paths: [
+    { d: "M12 5a5 5 0 110 10 5 5 0 010-10zM9 9a.9.9 0 110 1.8.9.9 0 010-1.8zm6 0a.9.9 0 110 1.8.9.9 0 010-1.8zM10 12a3 2 0 004 0M8 16h8v5H8z", fill: "#F0C08E" } ] },
+  { id: "king", label: "왕", cat: "사람·몸", paths: [
+    { d: "M6 6l2 3 4-4 4 4 2-3v4H6zM12 9a4 4 0 110 8 4 4 0 010-8zM7 21v-2a5 5 0 0110 0v2z", fill: "#FFC84A" } ] },
+  { id: "queen", label: "여왕", cat: "사람·몸", paths: [
+    { d: "M6 6l2 3 4-4 4 4 2-3v4H6zM6 5a.9.9 0 110 1.8.9.9 0 010-1.8zm12 0a.9.9 0 110 1.8.9.9 0 010-1.8zM12 9a4 4 0 110 8 4 4 0 010-8zM7 21v-2a5 5 0 0110 0v2z", fill: "#F7A8B8" } ] },
+  { id: "angel", label: "천사", cat: "사람·몸", paths: [
+    { d: "M9 4a5 3 0 016 0M12 6a3 3 0 110 6 3 3 0 010-6zM8 21l1-5a3 3 0 016 0l1 5zM9 16L4 14M15 16l5-2", fill: "#FBF7F0" } ] },
+  { id: "hand", label: "손", cat: "사람·몸", paths: [
+    { d: "M7 13V6a1.2 1.2 0 012.4 0v4V4a1.2 1.2 0 012.4 0v6V5a1.2 1.2 0 012.4 0v6l1-3a1.2 1.2 0 012.3.7l-1.5 6a5 5 0 01-5 3H12a5 5 0 01-5-5z", fill: "#F0C08E" } ] },
+  { id: "foot", label: "발", cat: "사람·몸", paths: [
+    { d: "M7 4c3 0 5 2 5 6 0 3 2 4 2 7a3 3 0 01-6 0c0-2-2-3-2-6 0-4 0-7 1-7zM14 6a1 1 0 110 2 1 1 0 010-2zm2 2a1 1 0 110 2 1 1 0 010-2zm2 2a1 1 0 110 2 1 1 0 010-2z", fill: "#F0C08E" } ] },
+  { id: "eye", label: "눈", cat: "사람·몸", paths: [
+    { d: "M2 12a10 6 0 0120 0 10 6 0 01-20 0zM12 8a4 4 0 110 8 4 4 0 010-8z", fill: "#FBF7F0" },
+    { d: "M12 9.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z", fill: "#5BB8F5" } ] },
+  { id: "tooth", label: "이빨", cat: "사람·몸", paths: [
+    { d: "M6 6c0-2 2-3 4-2 1 .5 3 .5 4 0 2-1 4 0 4 2 0 4-1 6-2 9-1 2-2 2-2-1s-1-3-2-3-1 0-2 3-1 3-2 1c-1-3-2-5-2-9z", fill: "#FBF7F0" } ] },
+  { id: "ear", label: "귀", cat: "사람·몸", paths: [
+    { d: "M8 20c-2-2-3-5-3-9a6 6 0 0112 0c0 3-3 3-3 5s-1 3-3 3M9 8a3 3 0 015 2", fill: "none" } ] },
+  { id: "nose", label: "코", cat: "사람·몸", paths: [
+    { d: "M12 4v9c0 2-2 3-4 3M12 16h1M9 15a3 3 0 006 0", fill: "none" } ] },
+
+  // ── 물건·기호 22 ──
+  { id: "phone", label: "휴대폰", cat: "물건·기호", paths: [
+    { d: "M7 3h10v18H7zM7 6h10M7 18h10", fill: "#5C5852" },
+    { d: "M10 19h4", fill: "#FBF7F0" } ] },
+  { id: "computer", label: "컴퓨터", cat: "물건·기호", paths: [
+    { d: "M3 5h18v11H3zM2 19h20M9 16l-1 3h8l-1-3", fill: "#5C5852" },
+    { d: "M5 7h14v7H5z", fill: "#5BB8F5" } ] },
+  { id: "tv", label: "티비", cat: "물건·기호", paths: [
+    { d: "M3 7h18v11H3zM8 4l4 3 4-3M9 18v2M15 18v2", fill: "#5C5852" },
+    { d: "M5 9h14v7H5z", fill: "#5BB8F5" } ] },
+  { id: "watch", label: "손목시계", cat: "물건·기호", paths: [
+    { d: "M9 2h6l-1 4h-4zM9 18h6l-1 4h-4zM12 5a7 7 0 110 14 7 7 0 010-14z", fill: "#5C5852" },
+    { d: "M12 8v4l3 2", fill: "#FBF7F0" } ] },
+  { id: "ring", label: "반지", cat: "물건·기호", paths: [
+    { d: "M12 9a5 5 0 110 10 5 5 0 010-10zM9 6l3-3 3 3-3 3z", fill: "#5BB8F5" },
+    { d: "M9 6l3-3 3 3-3 3z", fill: "#FFC84A" } ] },
+  { id: "backpack", label: "가방", cat: "물건·기호", paths: [
+    { d: "M6 8a6 6 0 0112 0v12H6zM9 8a3 3 0 016 0M9 13h6v3H9z", fill: "#FF7A59" } ] },
+  { id: "ball", label: "공", cat: "물건·기호", paths: [
+    { d: "M12 4a8 8 0 110 16 8 8 0 010-16zM4 12h16M12 4v16M6 6c3 3 3 9 0 12M18 6c-3 3-3 9 0 12", fill: "#FBF7F0" } ] },
+  { id: "dice", label: "주사위", cat: "물건·기호", paths: [
+    { d: "M5 5h14v14H5zM8 8a1 1 0 110 2 1 1 0 010-2zm8 0a1 1 0 110 2 1 1 0 010-2zM12 11a1 1 0 110 2 1 1 0 010-2zM8 14a1 1 0 110 2 1 1 0 010-2zm8 0a1 1 0 110 2 1 1 0 010-2z", fill: "#FBF7F0" } ] },
+  { id: "crayon", label: "크레용", cat: "물건·기호", paths: [
+    { d: "M9 3h6v3l1 13a4 4 0 01-8 0l1-13zM9 6h6", fill: "#FF7A59" },
+    { d: "M10 3h4l-2-2z", fill: "#FFC84A" } ] },
+  { id: "paintbrush", label: "붓", cat: "물건·기호", paths: [
+    { d: "M16 3l5 5-9 9-4 1 1-4zM6 15l3 3-3 2-2-2z", fill: "#5BB8F5" },
+    { d: "M6 15l3 3", fill: "#FFC84A" } ] },
+  { id: "palette", label: "팔레트", cat: "물건·기호", paths: [
+    { d: "M12 4a8 7 0 018 7c0 3-3 3-4 3s-2 2-1 3-1 2-3 2a8 7 0 010-15zM7 9a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4zm4-2a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4zm4 1a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4z", fill: "#E8B27D" } ] },
+  { id: "ruler", label: "자", cat: "물건·기호", paths: [
+    { d: "M4 8l12 12-4 2L2 10zM7 9l1 1M9 11l2 2M12 14l1 1", fill: "#FFC84A" } ] },
+  { id: "magnet", label: "자석", cat: "물건·기호", paths: [
+    { d: "M6 4h4v9a2 2 0 004 0V4h4v9a6 6 0 01-12 0zM6 4v4h4M14 4v4h4", fill: "#E5484D" } ] },
+  { id: "battery", label: "건전지", cat: "물건·기호", paths: [
+    { d: "M3 8h15v8H3zM18 10h2v4h-2zM6 11l-1 2h2l-1 2", fill: "#7BC96F" },
+    { d: "M6 11l-1 2h2l-1 2", fill: "#FFC84A" } ] },
+  { id: "trophy", label: "트로피", cat: "물건·기호", paths: [
+    { d: "M7 4h10v4a5 5 0 01-10 0zM7 6H4v2a3 3 0 003 2M17 6h3v2a3 3 0 01-3 2M11 12h2v4h-2zM8 20h8l-1-4H9z", fill: "#FFC84A" } ] },
+  { id: "target", label: "과녁", cat: "물건·기호", paths: [
+    { d: "M12 3a9 9 0 110 18 9 9 0 010-18zM12 7a5 5 0 110 10 5 5 0 010-10z", fill: "#E5484D" },
+    { d: "M12 7a5 5 0 110 10 5 5 0 010-10zM12 11a1 1 0 110 2 1 1 0 010-2z", fill: "#FBF7F0" } ] },
+  { id: "puzzle", label: "퍼즐", cat: "물건·기호", paths: [
+    { d: "M4 5h6a2 2 0 014 0h6v6a2 2 0 010 4v4h-6a2 2 0 01-4 0H4v-6a2 2 0 000-4z", fill: "#B878E0" } ] },
+  { id: "envelope", label: "편지", cat: "물건·기호", paths: [
+    { d: "M3 6h18v12H3zM3 6l9 7 9-7", fill: "#FBF7F0" } ] },
+  { id: "lock", label: "자물쇠", cat: "물건·기호", paths: [
+    { d: "M6 11h12v9H6zM8 11V8a4 4 0 018 0v3", fill: "#FFC84A" },
+    { d: "M12 14a1.3 1.3 0 011 2v1h-2v-1a1.3 1.3 0 011-2z", fill: "#5C5852" } ] },
+  { id: "magnifier", label: "돋보기", cat: "물건·기호", paths: [
+    { d: "M10 3a6 6 0 110 12 6 6 0 010-12zM10 6a3 3 0 100 6M15 14l6 6", fill: "none" } ] },
+  { id: "drum", label: "북", cat: "물건·기호", paths: [
+    { d: "M4 8a8 3 0 0116 0v8a8 3 0 01-16 0zM4 8l16 8M20 8L4 16M15 3l4-1M9 3L5 2", fill: "#E5484D" } ] },
+  { id: "trumpet", label: "트럼펫", cat: "물건·기호", paths: [
+    { d: "M3 12h10l7-4v8l-7-4M13 10v4M10 10v4M7 10v4M3 10h1v4H3z", fill: "#FFC84A" } ] },
 ];
 
 export function getStamp(id: string): StampDef | undefined {
   return STAMPS.find((s) => s.id === id);
+}
+
+/* 기존 스탬프 카테고리(신규 스탬프는 def.cat 직접 지정, 기존은 여기서 일괄 매핑). */
+const LEGACY_CAT: Record<string, StampCategory> = {
+  // 동물
+  paw: "동물", cat: "동물", dog: "동물", rabbit: "동물", bear: "동물", pig: "동물", frog: "동물",
+  lion: "동물", tiger: "동물", elephant: "동물", giraffe: "동물", monkey: "동물", panda: "동물",
+  fox: "동물", deer: "동물", hippo: "동물", squirrel: "동물", snake: "동물", dinosaur: "동물", horse: "동물",
+  // 바다
+  fish: "바다", octopus: "바다", whale: "바다", crab: "바다", turtle: "바다", dolphin: "바다",
+  shark: "바다", starfish: "바다", shell: "바다",
+  // 새·곤충
+  butterfly: "새·곤충", bird: "새·곤충", bee: "새·곤충", ladybug: "새·곤충", snail: "새·곤충",
+  duck: "새·곤충", penguin: "새·곤충", chick: "새·곤충", owl: "새·곤충", spider: "새·곤충",
+  // 음식
+  cake: "음식", candy: "음식", icecream: "음식", pizza: "음식", donut: "음식", cupcake: "음식",
+  hamburger: "음식", hotdog: "음식", fries: "음식", sandwich: "음식", sushi: "음식", egg: "음식",
+  cookie: "음식", popcorn: "음식",
+  // 과일·채소
+  apple: "과일·채소", cherry: "과일·채소", strawberry: "과일·채소", banana: "과일·채소", grape: "과일·채소",
+  carrot: "과일·채소", watermelon: "과일·채소", orange: "과일·채소", pineapple: "과일·채소", corn: "과일·채소",
+  // 탈것
+  car: "탈것", airplane: "탈것", boat: "탈것", bus: "탈것", train: "탈것", bicycle: "탈것",
+  truck: "탈것", firetruck: "탈것", helicopter: "탈것", submarine: "탈것", hotairballoon: "탈것",
+  police: "탈것", scooter: "탈것", taxi: "탈것",
+  // 자연·날씨
+  flower: "자연·날씨", sun: "자연·날씨", cloud: "자연·날씨", rainbow: "자연·날씨", leaf: "자연·날씨",
+  tree: "자연·날씨", snowflake: "자연·날씨", lightning: "자연·날씨", mushroom: "자연·날씨",
+  mountain: "자연·날씨", cactus: "자연·날씨", snowman: "자연·날씨", palmtree: "자연·날씨",
+  sunflower: "자연·날씨", clover: "자연·날씨",
+  // 우주
+  rocket: "우주", moon: "우주", planet: "우주", earth: "우주", ufo: "우주",
+  // 사람·몸
+  smile: "사람·몸", person: "사람·몸",
+  // 물건·기호
+  star: "물건·기호", heart: "물건·기호", crown: "물건·기호", bubble: "물건·기호", balloon: "물건·기호",
+  gift: "물건·기호", music: "물건·기호", star4: "물건·기호", diamond: "물건·기호", ghost: "물건·기호",
+  crown2: "물건·기호", flag: "물건·기호", key: "물건·기호", kite: "물건·기호", medal: "물건·기호",
+  robot: "물건·기호", pencil: "물건·기호", book: "물건·기호", clock: "물건·기호", cup: "물건·기호",
+  hat: "물건·기호", glasses: "물건·기호", soccer: "물건·기호", bell: "물건·기호", tent: "물건·기호",
+  castle: "물건·기호", lighthouse: "물건·기호", scissors: "물건·기호", camera: "물건·기호",
+  lightbulb: "물건·기호", guitar: "물건·기호", umbrella: "물건·기호", house: "물건·기호",
+};
+
+/** 스탬프의 카테고리(def.cat 우선, 없으면 기존 매핑). */
+function catOf(s: StampDef): StampCategory | undefined {
+  return s.cat ?? LEGACY_CAT[s.id];
+}
+
+/** 팔레트용 — 카테고리별로 묶어 표시 순서대로 반환(분류 없는 스탬프는 "기타"로 맨 뒤). */
+export function groupedStamps(): { cat: string; stamps: StampDef[] }[] {
+  const groups: { cat: string; stamps: StampDef[] }[] = STAMP_CATEGORIES.map((cat) => ({
+    cat,
+    stamps: STAMPS.filter((s) => catOf(s) === cat),
+  }));
+  const rest = STAMPS.filter((s) => {
+    const c = catOf(s);
+    return !c || !STAMP_CATEGORIES.includes(c);
+  });
+  if (rest.length) groups.push({ cat: "기타", stamps: rest });
+  return groups.filter((g) => g.stamps.length > 0);
 }
 
 /**

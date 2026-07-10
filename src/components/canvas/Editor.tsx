@@ -17,6 +17,8 @@ import { MovieModal } from "./MovieModal";
 import { useCollab } from "./useCollab";
 import { CollabOverlay } from "./CollabOverlay";
 import { SuggestBar } from "./SuggestBar";
+import { PendingStampBar } from "./PendingStampBar";
+import { StampPalette } from "./StampPalette";
 import { PhotoImport } from "@/components/photo-import";
 import { ArtonLogo } from "@/components/arton-logo";
 import { Icon } from "./icons";
@@ -282,6 +284,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             }}
           />
           <SuggestBar />
+          <PendingStampBar />
           <div className="absolute bottom-3 left-3 z-10 flex gap-2">
             <button
               onClick={undo}
@@ -327,11 +330,18 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             {panelOpen ? "▸" : "◂"}
           </button>
           {panelOpen && (
-            <div className="flex shrink-0 gap-2 overflow-y-auto max-md:overflow-x-auto md:w-[264px] md:flex-col">
-              <ColorPalette />
-              <BrushControls />
-              <ActionRail />
-              <LayerPanel />
+            // 넓은 화면(xl+)에선 2열로 펼쳐 색·굵기·마법도구·레이어를 스크롤 없이 한눈에.
+            // 좁은 화면은 기존대로 1열(md) / 가로 스크롤(모바일). 2열 wrapper는 모바일에서
+            // contents로 사라져 원래 1줄 흐름을 유지한다.
+            <div className="flex shrink-0 gap-2 overflow-y-auto max-md:overflow-x-auto md:w-[264px] md:flex-col md:overflow-x-hidden xl:w-[500px] xl:flex-row xl:overflow-y-hidden">
+              <div className="flex shrink-0 flex-col gap-2 max-md:contents xl:flex-1 xl:overflow-y-auto">
+                <ColorPalette />
+                <BrushControls />
+              </div>
+              <div className="flex shrink-0 flex-col gap-2 max-md:contents xl:flex-1 xl:overflow-y-auto">
+                <ActionRail />
+                <LayerPanel />
+              </div>
             </div>
           )}
         </div>
@@ -364,6 +374,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       {room && collab.locked && (
         <Toast tone="ink">🔒 선생님이 캔버스를 잠갔어요</Toast>
       )}
+      <StampPalette />
     </div>
   );
 }

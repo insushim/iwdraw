@@ -24,8 +24,8 @@ const BRUSH_ICON: Partial<Record<BrushId, IconName>> = {
 };
 
 /*
- * 도구 레일 — 데스크톱은 좌측 세로 1열, 모바일은 하단 가로 스크롤.
- * (세로 1열이어야 캔버스가 화면을 최대한 차지한다)
+ * 도구 레일 — 데스크톱은 좌측 세로 2열(스크롤 없이 한눈에), 모바일은 하단 가로 스크롤.
+ * (도구가 많아 1열은 세로 스크롤이 생겨 2열로 — 캔버스 폭은 여유가 있어 감당 가능)
  */
 export function BrushBar() {
   const brush = useEditor((s) => s.brush);
@@ -45,7 +45,7 @@ export function BrushBar() {
 
   return (
     <div
-      className="flex shrink-0 gap-1 overflow-x-auto rounded-card bg-paper p-1.5 shadow-soft md:w-[76px] md:flex-col md:overflow-y-auto md:overflow-x-hidden"
+      className="flex shrink-0 gap-1 overflow-x-auto rounded-card bg-paper p-1.5 shadow-soft md:grid md:w-[150px] md:grid-cols-2 md:content-start md:gap-1.5 md:overflow-x-hidden md:overflow-y-auto"
       role="toolbar"
       aria-label="그리기 도구"
       aria-orientation="vertical"

@@ -144,6 +144,8 @@ export interface EngineEvents {
   viewChange: { scale: number };
   /** 뚝딱그림 — 스케치 인식 후보(빈 배열 = 제안 바 닫기) */
   suggestReady: { candidates: SketchSuggestion[] };
+  /** 떠 있는 스탬프(배치 중) 변경 — null = 배치 종료(확인/취소). UI가 확인·취소 바 표시 */
+  pendingChange: { pending: { stampId: string; label: string } | null };
 }
 
 export type EngineEventName = keyof EngineEvents;
