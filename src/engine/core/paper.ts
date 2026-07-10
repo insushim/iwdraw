@@ -378,7 +378,10 @@ function scratch(
 
 /**
  * 수채 wet edge: 획이 마르며 안료가 실루엣 가장자리에 몰리는 효과.
- * 밴드 = 스트로크 − blur(스트로크): 실루엣 안쪽 경계에서만 알파가 남는다.
+ * 밴드 = 경화(hardened) 스트로크 − blur(경화 스트로크): 실루엣 안쪽 경계에서만 남는다.
+ * ⚠️ 경화(자기 자신을 4회 겹쳐 알파 ≈1로) 필수 — buildup 수채는 획 내부 알파가
+ * 0.7~0.9로 요동해, 원본 알파로 밴드를 만들면 내부 전체에 ~0.16 밴드가 깔리고
+ * 종이결 패턴 마스크가 그걸 3~8px 어두운 반점으로 찍는다(2026-07-10 실측 — 곰팡이/때).
  * 밴드를 source-atop으로 다시 얹어 가장자리 알파(=진하기)를 올린다 —
  * dab 단위 rim 베이크와 달리 획 전체 실루엣 기준이라 겹침 고리가 없다.
  */
@@ -392,13 +395,18 @@ export function applyWetEdge(
   wetTmp = scratch(wetTmp, width, height);
   wetBand = scratch(wetBand, width, height);
 
-  wetTmp.clearRect(0, 0, width, height);
-  wetTmp.filter = "blur(7px)";
-  wetTmp.drawImage(ctx.canvas, 0, 0);
-  wetTmp.filter = "none";
-
+  // 경화 스트로크(색 유지, 알파만 1로 수렴)
   wetBand.clearRect(0, 0, width, height);
   wetBand.drawImage(ctx.canvas, 0, 0);
+  wetBand.drawImage(ctx.canvas, 0, 0);
+  wetBand.drawImage(ctx.canvas, 0, 0);
+  wetBand.drawImage(ctx.canvas, 0, 0);
+
+  wetTmp.clearRect(0, 0, width, height);
+  wetTmp.filter = "blur(7px)";
+  wetTmp.drawImage(wetBand.canvas, 0, 0);
+  wetTmp.filter = "none";
+
   wetBand.globalCompositeOperation = "destination-out";
   wetBand.drawImage(wetTmp.canvas, 0, 0);
   wetBand.globalCompositeOperation = "source-over";

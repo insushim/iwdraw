@@ -106,6 +106,37 @@ export function makeTipHighlightCanvas(kind: TipKind, size = 128): HTMLCanvasEle
   c = document.createElement("canvas");
   c.width = c.height = size;
   const ctx = c.getContext("2d")!;
+  if (kind === "wet") {
+    // 수채 붓결 — bristle보다 훨씬 은은한 젖은 붓털 자국(rotationFollowsStroke로
+    // 획 방향을 따라 이어진다). 진하면 "긁힌 자국"으로 읽히므로 가늘고 옅게.
+    const r = size / 2;
+    let seed = 211;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    ctx.lineCap = "round";
+    for (let i = 0; i < 6; i++) {
+      const yn = 0.14 + (i / 5) * 0.72; // 0.14~0.86
+      const y = size * yn + (rand() - 0.5) * 6;
+      const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
+      if (half < 8) continue;
+      ctx.lineWidth = 2 + rand() * 2.5;
+      let x = r - half + rand() * 20;
+      while (x < r + half - 6) {
+        const seg = 18 + rand() * 34; // 긴 대시 — 물기가 끌린 자국
+        const alpha = 0.1 + rand() * 0.22;
+        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(x, y + (rand() - 0.5) * 2);
+        ctx.lineTo(Math.min(x + seg, r + half), y + (rand() - 0.5) * 2);
+        ctx.stroke();
+        x += seg + 8 + rand() * 20;
+      }
+    }
+    tipHlCache.set(kind, c);
+    return c;
+  }
   if (kind === "bristle" || kind === "bristle-bold") {
     const r = size / 2;
     let seed = 137;

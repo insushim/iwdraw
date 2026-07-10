@@ -21,28 +21,38 @@ export class WatercolorBrush extends BrushBase {
         tip: "wet",
         // 팁 플래토 0.8 기준 보정(체감 획 폭 유지, 2026-07-10 팁 재작업 2차)
         sizeScale: 1.9,
-        // dab이 낱낱이 보이는 점점이 간격 — 0.15는 연속 리본(붓자국 소멸),
-        // 0.4는 동전 찍은 듯 기계적(실측+codex 비전: 반복이 규칙적) — 겹침·지터로 흩뜨림
-        spacing: 0.24,
-        // 반투명 dab 누적: 중심선 ~3겹 → 유효 α ~0.75, 외곽 1겹 = 농담 트레일
-        flow: 0.38,
-        jitter: 0.07,
+        // 간격 사슬 실패 이력 양쪽: 0.24~0.4 성긴 간격 + 큰 크기편차 = "점점점 에어브러시
+        // 사슬"(2026-07-10 사용자 실측), wash(MAX) 시절 0.15 = 균일 리본. 정답은
+        // 촘촘한 간격(연속 획) + 질감은 dab이 아니라 획 방향 붓결(streaks)로.
+        spacing: 0.13,
+        // 반투명 dab 누적: 중심선 ~6겹 → 유효 α ~0.7, 외곽은 옅게 = 자연스러운 농담
+        // (edgeNoise 전면 침식 제거 후 유효 α가 올라 0.22→0.18 보정 — 원본 한 획 12~18%)
+        flow: 0.18,
+        jitter: 0.03,
         sizePressure: 0.3, // 굵기 변동 크면 획 머리가 볼록해진다 — 워시는 폭이 고른 게 자연스럽다
         alphaPressure: 0.12,
         minSizeRatio: 0.5,
+        // 붓결: 팁 스트릭 맵이 획 진행 방향을 따라 이어지도록 회전 추종(유화·붓펜과 동일 원리)
+        rotationFollowsStroke: true,
+        streaks: 0.32,
         // glaze: 겹침이 multiply로 점진 누적, 획³에서 포화(전수검수: 원본은 6~8겹 포화).
         // darken(min) 수렴=겹침 0(플랫 마커), 순수 multiply=무한 어두워짐(얼룩) — 둘 다 실측 실패.
         composite: "glaze",
-        paperGrain: 0.09, // 종이 결 흰 리프트 소폭(codex 비전: 원본은 종이결이 더 남음) — 0.18은 점 노이즈(실측)
+        // 종이결 이빨(깊은 골에서만 안료 빠짐) — buildup 누적이라 은은히 배어난다.
+        // 0.18+는 포화 워시에서 점 노이즈(실측), 0.06은 내부가 마커처럼 매끈(codex 비전 3차)
+        paperGrain: 0.12,
         strokeBlend: "buildup",
         washOpacity: 1,
         opacityAsDilution: true, // 진하기 슬라이더도 알파가 아니라 희석으로(아래 makeDab)
         // 농담 구름: 전수검수 — 원본 내부 변동의 60~70%가 90~300px 구름형(진폭 10~20%p),
         // 백화보다 "안료 고임(진해짐)"이 주력(셰이더에서 비대칭 처리).
-        washCloud: 0.4,
+        // 큰 물번짐·안료고임 상향(codex 비전 2차) — 0.5 실패 이력은 구 대칭 공식(어두운 색
+        // 흰 얼룩)이고 현행은 고임 주력 비대칭이라 0.48까지 안전
+        washCloud: 0.48,
         // 가장자리 스밈: dab 알파<1 영역을 캔버스 고정 노이즈로 침식. buildup에서는
-        // dab 전면(α~0.5)에 걸리므로 wash 시절 0.85는 과침식 — 절반으로.
-        edgeNoise: 0.45,
+        // dab 전면(α~0.5)에 걸리므로 wash 시절 0.85는 과침식. 0.45는 실루엣이 너무
+        // 균일하게 흐림(codex 비전 2차) — 불규칙 파단 강화
+        edgeNoise: 0.62,
         // 전수검수: 진한 테는 둘레의 20~35%에만 4~9% — 균일 테는 스티커/마커로 읽힘.
         wetEdge: 0.22,
       },
@@ -75,10 +85,12 @@ export class WatercolorBrush extends BrushBase {
     // 소비하므로(위 density) 알파는 flow·필압만으로 직접 계산(이중 적용 방지).
     const pr = clamp(p.pressure, 0, 1);
     const alphaK = 1 - this.cfg.alphaPressure * (1 - pr);
-    // per-dab 물 고임/마름 편차 — 점점이 질감의 핵심. dab 단위 랜덤이어도 안전:
-    // 획 간 겹침은 glaze가 bound하고, 획 내 누적은 over 블렌드라 수렴 강박이 없다.
-    dab.alpha = clamp(this.cfg.flow * alphaK * (0.65 + this.rng2() * 0.65), 0.05, 1);
-    dab.size *= 0.78 + this.rng2() * 0.42; // dab 크기 편차 — 규칙적 반복 흩뜨림(codex 비전 제안 35~50%)
+    // per-dab 물 고임/마름 편차 — dab 단위 랜덤이어도 안전: 획 간 겹침은 glaze가
+    // bound하고, 획 내 누적은 over 블렌드라 수렴 강박이 없다.
+    // ⚠️ 편차 과대(알파 ±33%·크기 ±42%) + 성긴 간격 = "점점점 사슬"(2026-07-10 실측)
+    // — 촘촘한 간격에선 소폭이면 충분(질감 주력은 붓결 streaks·안료고갈 드리프트).
+    dab.alpha = clamp(this.cfg.flow * alphaK * (0.8 + this.rng2() * 0.4), 0.05, 1);
+    dab.size *= 0.94 + this.rng2() * 0.12;
     return dab;
   }
 

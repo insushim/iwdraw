@@ -321,6 +321,14 @@ export class ArtEngine {
     return this.mode === "oil" ? "linen" : this.mode === "watercolor" ? "cotton" : "smooth";
   }
 
+  /** 표시용 종이 틴트는 별도 — 수채는 일반과 같은 백지(i-scream 원본과 동일, 2026-07-10
+   * 사용자 판정). 실제 수채화지도 빈 종이의 결은 거의 안 보이고 칠한 곳에서 드러난다 —
+   * 획 내부 질감(paperGrain·edgeNoise·washCloud)은 cotton 필드를 그대로 쓴다(위 함수). */
+  private paperTintKindForMode(): PaperKind {
+    const k = this.paperKindForMode();
+    return k === "cotton" ? "smooth" : k;
+  }
+
   private brushContext(): StrokeContext {
     const brush = this.brush!;
     const wash = brush.cfg.strokeBlend === "wash";
@@ -1329,7 +1337,7 @@ export class ArtEngine {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, this.width, this.height);
     ctx.globalCompositeOperation = "multiply";
-    drawPaperTint(ctx, this.width, this.height, this.paperKindForMode());
+    drawPaperTint(ctx, this.width, this.height, this.paperTintKindForMode());
     ctx.globalCompositeOperation = "source-over";
     // 데칼코마니 가이드(표시 전용 — 내보내기·저장엔 미포함): 대칭축을 연한 점선으로.
     // 어느 선을 기준으로 접히는지 보여야 아이가 대칭을 이해하고 그린다(2026-07-09 요청).

@@ -31,14 +31,14 @@ describe("BrushBase dab 스트림", () => {
   });
 
   it("수채붓은 물 양이 많을수록 넓고 옅게(색 희석) 찍힌다", () => {
-    const dry = createBrush("watercolor", mulberry32(2)).begin(
-      { x: 5, y: 5, pressure: 1, t: 0 },
-      { ...SETTINGS, waterAmount: 0 },
-    )[0];
-    const wet = createBrush("watercolor", mulberry32(2)).begin(
-      { x: 5, y: 5, pressure: 1, t: 0 },
-      { ...SETTINGS, waterAmount: 1 },
-    )[0];
+    // rotationFollowsStroke(붓결이 획 방향 추종)라 begin은 dab을 보류 — move로 얻는다
+    const firstDab = (waterAmount: number) => {
+      const b = createBrush("watercolor", mulberry32(2));
+      b.begin({ x: 5, y: 5, pressure: 1, t: 0 }, { ...SETTINGS, waterAmount });
+      return b.move({ x: 60, y: 5, pressure: 1, t: 60 })[0];
+    };
+    const dry = firstDab(0);
+    const wet = firstDab(1);
     expect(wet.size).toBeGreaterThan(dry.size);
     // 옅음은 알파가 아니라 색 희석(흰색 혼합)이다 — 알파(<1) 방식은 겹침마다
     // darken이 한 스텝씩 어두워져 획 경계 얼룩을 만든다(2026-07-10 사용자 실측).
@@ -50,10 +50,10 @@ describe("BrushBase dab 스트림", () => {
     expect(dist(wet.color!)).toBeLessThan(dist(dry.color!));
     // dab은 반투명(buildup 점점이 누적 — i-scream 원본의 붓자국 질감, 2026-07-10).
     // 획 간 겹침 폭주는 glaze 합성이 bound하므로 알파 포화(≥1) 강박은 폐기됨.
-    expect(wet.alpha).toBeGreaterThan(0.2);
-    expect(wet.alpha).toBeLessThanOrEqual(1);
-    expect(dry.alpha).toBeGreaterThan(0.2);
-    expect(dry.alpha).toBeLessThanOrEqual(1);
+    expect(wet.alpha).toBeGreaterThan(0.08);
+    expect(wet.alpha).toBeLessThan(0.5);
+    expect(dry.alpha).toBeGreaterThan(0.08);
+    expect(dry.alpha).toBeLessThan(0.5);
   });
 
   it("무지개붓은 이동에 따라 색이 바뀐다", () => {
