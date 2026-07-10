@@ -48,3 +48,4 @@ public/sw.js.map
 .dev.vars
 .wrangler/
 out/
+test-results/
