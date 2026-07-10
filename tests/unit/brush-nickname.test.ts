@@ -48,9 +48,12 @@ describe("BrushBase dab 스트림", () => {
     const dist = (c: { r: number; g: number; b: number }) =>
       255 * 3 - c.r - c.g - c.b; // 흰색에서 먼 정도(진하기)
     expect(dist(wet.color!)).toBeLessThan(dist(dry.color!));
-    // 겹침 수렴을 위해 획 내부 알파는 팁 플래토를 뚫고 1로 포화(부스트 ≥1)
-    expect(wet.alpha).toBeGreaterThanOrEqual(1);
-    expect(dry.alpha).toBeGreaterThanOrEqual(1);
+    // dab은 반투명(buildup 점점이 누적 — i-scream 원본의 붓자국 질감, 2026-07-10).
+    // 획 간 겹침 폭주는 glaze 합성이 bound하므로 알파 포화(≥1) 강박은 폐기됨.
+    expect(wet.alpha).toBeGreaterThan(0.2);
+    expect(wet.alpha).toBeLessThanOrEqual(1);
+    expect(dry.alpha).toBeGreaterThan(0.2);
+    expect(dry.alpha).toBeLessThanOrEqual(1);
   });
 
   it("무지개붓은 이동에 따라 색이 바뀐다", () => {

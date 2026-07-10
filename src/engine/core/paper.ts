@@ -359,6 +359,8 @@ let wetTmp: CanvasRenderingContext2D | null = null;
 let wetBand: CanvasRenderingContext2D | null = null;
 let glzSnap: CanvasRenderingContext2D | null = null;
 let glzFloor: CanvasRenderingContext2D | null = null;
+let glzFlat: CanvasRenderingContext2D | null = null;
+let glzWork: CanvasRenderingContext2D | null = null;
 
 function scratch(
   ref: CanvasRenderingContext2D | null,
@@ -429,15 +431,20 @@ export function applyWetEdge(
 
 
 /**
- * 수채 글레이징 합성: result = min(기존, max(기존 × 획, max(획⁴, 획 × 0.6))).
+ * 수채 글레이징 합성: result = min(기존, max(기존 × 획, max(획³, 획 × 0.6))).
  * · 마른 워시 위에 새 워시가 겹치면 multiply로 진해진다(겹침이 보인다 — darken(min)
  *   수렴은 겹침 효과 0 = 플랫 마커, 2026-07-10 사용자 실측).
- * · 바닥 1 = 획⁴: 옅은 워시(한 획 15~25% 농도)가 4겹까지 점진 누적 후 포화 —
- *   i-scream 원본 전수검수(겹침 스텝 2~3회 뚜렷, 6~8회 실질 포화, 시각 포화 50%대).
- *   (×0.85 상수 바닥은 2겹 15%에서 즉시 포화 = 스텝이 안 보임, 사용자 "이게 맞냐" 실측)
- * · 바닥 2 = 획×0.6: 진한 색에서 획⁴은 사실상 무제한 multiply — 진한 획이 밝은 밑칠
+ * · 바닥 1 = 획³: 옅은 워시(한 획 15~25% 농도)가 3겹까지 점진 누적 후 포화 —
+ *   i-scream 원본 전수검수(겹침 스텝 2~3회 뚜렷, 시각 포화 50%대).
+ * · 바닥 2 = 획×0.6: 진한 색에서 획³은 사실상 무제한 multiply — 진한 획이 밝은 밑칠
  *   경계를 지날 때 줄무늬가 되는 것을 차단(진한 물감일수록 불투명한 실제 수채 성질).
- * · 기존보다 밝아지지도 않는다(darken 스냅샷) — 어두운 밑색을 지우지 않는다.
+ * · 기존보다 밝아지지도 않는다(darken 클램프) — 어두운 밑색을 지우지 않는다.
+ *
+ * ⚠️ 모든 중간 연산은 "흰 종이에 플래튼한 불투명" 공간에서 한다. 반투명 이미지에
+ * Canvas2D 블렌드 모드(multiply/lighten/darken)를 직접 쓰면 교차항 αs(1−αb)·Cs가
+ * 가장자리 폴오프(0<α<1) 픽셀에 어두운 획³ 색을 주입 + 알파를 부풀려 획 실루엣
+ * 전체에 "검은 테두리"가 생긴다(2026-07-10 격리 실측: 폴오프 밴드 명도 215→179).
+ * 불투명 연산이면 교차항이 0이라 순수 채널별 min/max/×가 된다.
  * 프리뷰(presentStroke)와 최종(endStroke)이 같은 함수를 써야 한다(프리뷰=최종).
  */
 export function compositeGlaze(
@@ -446,43 +453,58 @@ export function compositeGlaze(
   width: number,
   height: number,
 ): void {
-  glzSnap = scratch(glzSnap, width, height);
-  glzFloor = scratch(glzFloor, width, height);
+  glzSnap = scratch(glzSnap, width, height); // flatDst: 기존 over 백지
+  glzFlat = scratch(glzFlat, width, height); // flatSrc: 획 over 백지(얇은 가장자리 = 옅은 물감)
+  glzFloor = scratch(glzFloor, width, height); // 포화 바닥
+  glzWork = scratch(glzWork, width, height); // 결과 작업 버퍼
 
-  // 기존 dst 스냅샷(밝아짐 방지 클램프용)
-  glzSnap.clearRect(0, 0, width, height);
+  // ① 플래튼 — 이후 모든 블렌드가 불투명 대 불투명이 된다
+  glzSnap.globalCompositeOperation = "source-over";
+  glzSnap.fillStyle = "#fff";
+  glzSnap.fillRect(0, 0, width, height);
   glzSnap.drawImage(target.canvas, 0, 0);
+  glzFlat.globalCompositeOperation = "source-over";
+  glzFlat.fillStyle = "#fff";
+  glzFlat.fillRect(0, 0, width, height);
+  glzFlat.drawImage(src, 0, 0);
 
-  // 바닥 = max(획³, 획×0.6) — 획³: 옅은 워시가 3겹까지 점진 누적 후 포화
+  // ② 바닥 = max(획³, 획×0.6) — 획³: 옅은 워시가 3겹까지 점진 누적 후 포화
   // (획⁴는 p5가 81까지 떨어져 원본(166)보다 훨씬 어두워짐, 실측)
-  glzFloor.clearRect(0, 0, width, height);
-  glzFloor.drawImage(src, 0, 0);
-  glzFloor.globalCompositeOperation = "multiply";
-  glzFloor.drawImage(src, 0, 0); // 획²
-  glzFloor.drawImage(src, 0, 0); // 획³
-  glzFloor.globalCompositeOperation = "lighten";
-  // 획×0.6을 lighten으로 합쳐 어두운 색 바닥을 들어올린다(줄무늬 방어).
-  // 별도 캔버스 없이: 알파를 지닌 src를 60% 회색과 곱한 것 = source-atop 근사 대신
-  // multiply-fill 후 destination-in이 필요하지만, 여기선 wetTmp를 재사용한다.
-  wetTmp = scratch(wetTmp, width, height);
-  wetTmp.clearRect(0, 0, width, height);
-  wetTmp.drawImage(src, 0, 0);
-  wetTmp.globalCompositeOperation = "multiply";
-  wetTmp.fillStyle = "rgb(153,153,153)"; // ×0.6
-  wetTmp.fillRect(0, 0, width, height);
-  wetTmp.globalCompositeOperation = "destination-in";
-  wetTmp.drawImage(src, 0, 0);
-  wetTmp.globalCompositeOperation = "source-over";
-  glzFloor.drawImage(wetTmp.canvas, 0, 0); // lighten 합성
   glzFloor.globalCompositeOperation = "source-over";
+  glzFloor.drawImage(glzFlat.canvas, 0, 0);
+  glzFloor.globalCompositeOperation = "multiply";
+  glzFloor.drawImage(glzFlat.canvas, 0, 0); // 획²
+  glzFloor.drawImage(glzFlat.canvas, 0, 0); // 획³
+  glzWork.globalCompositeOperation = "source-over";
+  glzWork.drawImage(glzFlat.canvas, 0, 0);
+  glzWork.globalCompositeOperation = "multiply";
+  glzWork.fillStyle = "rgb(153,153,153)"; // 획×0.6
+  glzWork.fillRect(0, 0, width, height);
+  glzFloor.globalCompositeOperation = "lighten";
+  glzFloor.drawImage(glzWork.canvas, 0, 0);
+
+  // ③ 결과 = min(flatDst, max(flatDst×flatSrc, 바닥)) — 전부 불투명 채널 연산
+  glzWork.globalCompositeOperation = "source-over";
+  glzWork.drawImage(glzSnap.canvas, 0, 0);
+  glzWork.globalCompositeOperation = "multiply";
+  glzWork.drawImage(glzFlat.canvas, 0, 0);
+  glzWork.globalCompositeOperation = "lighten";
+  glzWork.drawImage(glzFloor.canvas, 0, 0);
+  glzWork.globalCompositeOperation = "darken";
+  glzWork.drawImage(glzSnap.canvas, 0, 0);
+
+  // ④ 레이어 반영 — 알파는 src와의 유니언(source-over), 색은 src 알파 가중으로
+  // 플래튼 결과 톤으로 치환(마스크 + source-atop). src 알파가 낮은 픽셀(기존 획의
+  // 가장자리 스침)은 기존 색이 거의 유지돼 반복 겹침에도 백화·침식이 없다.
+  glzWork.globalCompositeOperation = "destination-in";
+  glzWork.drawImage(src, 0, 0);
+  glzWork.globalCompositeOperation = "source-over";
 
   target.save();
   target.setTransform(1, 0, 0, 1, 0, 0);
-  target.globalCompositeOperation = "multiply"; // ① 글레이즈(겹침 어두워짐)
+  target.globalCompositeOperation = "source-over";
   target.drawImage(src, 0, 0);
-  target.globalCompositeOperation = "lighten"; // ② 획²보다 어두우면 끌어올림(포화)
-  target.drawImage(glzFloor.canvas, 0, 0);
-  target.globalCompositeOperation = "darken"; // ③ 기존보다 밝아지지는 않게
-  target.drawImage(glzSnap.canvas, 0, 0);
+  target.globalCompositeOperation = "source-atop";
+  target.drawImage(glzWork.canvas, 0, 0);
   target.restore();
 }
