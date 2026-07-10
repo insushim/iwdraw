@@ -20,6 +20,7 @@ export type TipKind =
   | "bristle-bold"
   | "flat"
   | "wet"
+  | "ink"
   | "glow";
 
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
@@ -68,6 +69,8 @@ export interface BrushConfig {
    * 알파 <1 이면 darken이어도 겹칠 때마다 한 스텝씩 어두워져 겹침 경계가 얼룩이 된다.
    */
   opacityAsDilution: boolean;
+  /** 수채 농담 구름(캔버스 고정 저주파 색 요동) 강도 0~1 — GL 전용 */
+  washCloud: number;
   /** 획 실루엣 가장자리 안료 몰림 0~1(수채 wet edge) — endStroke 후처리 */
   wetEdge: number;
   /** 획 시작·끝의 마른 붓털 트레일 강도 0~1(유화) — 진행 방향으로 저알파 fringe dab */
@@ -95,6 +98,7 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   strokeBlend: "buildup",
   washOpacity: 1,
   opacityAsDilution: false,
+  washCloud: 0,
   wetEdge: 0,
   fringe: 0,
   grainLift: false,

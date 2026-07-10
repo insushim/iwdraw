@@ -22,13 +22,16 @@ export class WatercolorBrush extends BrushBase {
         // darken(채널별 min): 같은 색·같은 농도의 겹침은 그 색으로 정확히 "수렴"한다.
         // multiply는 겹칠 때마다 어두워져 얼룩(2026-07-09 실측, e2e watercolor-mottle).
         composite: "darken",
-        paperGrain: 0.32, // granulation은 은은하게 — 0.5는 획 안에 점이 도드라짐(2026-07-07 사용자 실측)
+        paperGrain: 0.18, // granulation 최소화 — 0.32도 클로즈업에서 마커+모래알로 읽힘(2026-07-10). 수채감은 농담 구름이 담당
         strokeBlend: "wash", // 획 내부 균일(겹침 스캘럽 제거)
         // ⚠️ washOpacity·알파로 옅음을 만들면 안 된다 — 획 전체 알파가 1 미만이면
         // darken이어도 겹칠 때마다 min 쪽으로 한 스텝씩 어두워져 획 경계가 얼룩으로
         // 남는다(2026-07-10 사용자 실측, i-scream 대비 어색). 옅음은 전부 색 희석이 담당.
         washOpacity: 1,
         opacityAsDilution: true, // 진하기 슬라이더도 알파가 아니라 희석으로(아래 makeDab)
+        // 농담 구름: 완전 균일 워시는 "연한 마커"로 읽힌다(2026-07-10 사용자 실측).
+        // 캔버스 고정 저주파 색 요동이라 겹침 수렴은 유지하면서 수채 특유의 불균일만 살림.
+        washCloud: 0.34,
         wetEdge: 0.35, // 실루엣 가장자리 안료 몰림 — 0.75는 획마다 테가 얼룩처럼 보임(실측)
       },
       rng,

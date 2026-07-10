@@ -5,6 +5,7 @@ import { Crayon } from "./Crayon";
 import { Marker } from "./Marker";
 import { WatercolorBrush } from "./WatercolorBrush";
 import { OilBrush } from "./OilBrush";
+import { InkBrush } from "./InkBrush";
 import { Airbrush } from "./Airbrush";
 import { OilPastel } from "./OilPastel";
 import { GlowBrush } from "./GlowBrush";
@@ -24,6 +25,8 @@ export function createBrush(id: BrushId, rng?: () => number): BrushBase {
       return new WatercolorBrush(rng);
     case "oil":
       return new OilBrush(rng);
+    case "inkbrush":
+      return new InkBrush(rng);
     case "airbrush":
       return new Airbrush(rng);
     case "oilpastel":
@@ -45,6 +48,7 @@ export const STROKE_BRUSHES: BrushId[] = [
   "marker",
   "watercolor",
   "oil",
+  "inkbrush",
   "airbrush",
   "oilpastel",
   "glow",
@@ -65,6 +69,7 @@ export const BRUSH_META: BrushMeta[] = [
   { id: "marker", label: "마커", junior: true },
   { id: "watercolor", label: "수채붓", junior: true },
   { id: "oil", label: "유화붓", junior: false },
+  { id: "inkbrush", label: "붓펜", junior: false },
   { id: "airbrush", label: "에어브러시", junior: false },
   { id: "oilpastel", label: "오일파스텔", junior: false },
   { id: "glow", label: "글로우", junior: false },

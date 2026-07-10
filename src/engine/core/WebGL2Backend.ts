@@ -46,6 +46,7 @@ uniform float u_grain;      // 종이 결 강도 0~1 (dab 단위 실시간 — �
 uniform float u_grainLift;  // 1=결을 색 백화로(불투명 유지, 유화) / 0=알파 침식(수채 등)
 uniform sampler2D u_tipHl;  // 붓 방향 밝은 스트릭 맵(팁 UV) — 마른 붓털 하이라이트
 uniform float u_streaks;    // 스트릭 강도 0~1
+uniform float u_cloud;      // 수채 농담 구름(저주파, 캔버스 고정) 강도 0~1
 uniform vec4 u_color;       // rgb(0..1) + alpha
 out vec4 frag;
 void main() {
@@ -79,6 +80,19 @@ void main() {
   float lift = min(0.16, (1.0 - f) * 0.5 + g * 0.3 * u_grainLift + hl * 0.5) * dk;
   vec3 lightened = mix(col, vec3(1.0), lift);
   col = mix(darkened, lightened, step(0.6, dk));
+  // 수채 농담 구름 — 종이가 물을 먹는 정도의 저주파 요동(옅은 자리/안료 고임).
+  // ⚠️ 반드시 캔버스 좌표 고정·결정론이어야 한다: 겹쳐 칠해도 픽셀마다 같은 값이 나와
+  // darken(min) 수렴이 유지된다(획 경계 단차 없음). dab/획 단위 랜덤이면 얼룩 재발.
+  // 균일 워시는 "연한 마커"로 읽힌다(2026-07-10 사용자 실측, i-scream 대비).
+  if (u_cloud > 0.0) {
+    // 스케일 주의: uv = v_px/scale 에서 텍셀 1개의 화면 크기 = scale/256 px.
+    // 구름 덩어리가 30~60px가 되려면 scale이 8천~1만이어야 한다(263은 1:1 = 미세 입자, 실측).
+    float n1 = texture(u_paper, v_px / 9800.0).a;
+    float n2 = texture(u_paper, v_px / 3700.0 + vec2(0.37, 0.61)).a;
+    float n = (n1 * 0.62 + n2 * 0.38 - 0.5) * 2.0; // -1..1
+    col = mix(col, vec3(1.0), max(n, 0.0) * u_cloud);   // 옅은 자리(종이가 덜 먹음)
+    col *= 1.0 - max(-n, 0.0) * u_cloud * 0.5;          // 안료 고임(살짝 진하게)
+  }
   frag = vec4(col * a, a);  // premultiplied
 }`;
 
@@ -342,6 +356,7 @@ export class WebGL2Backend implements RendererBackend {
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_grain"), eraser ? 0 : this.ctx.paperGrain);
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_grainLift"), this.ctx.grainLift ? 1 : 0);
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_streaks"), eraser ? 0 : this.ctx.streaks);
+    gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_cloud"), eraser ? 0 : this.ctx.washCloud);
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform2f(gl.getUniformLocation(this.dabProg, "u_resolution"), this.width, this.height);
     const uCenter = gl.getUniformLocation(this.dabProg, "u_center");

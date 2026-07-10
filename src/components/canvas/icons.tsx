@@ -15,6 +15,7 @@ export type IconName =
   | "marker"
   | "watercolor"
   | "oil"
+  | "inkbrush"
   | "airbrush"
   | "oilpastel"
   | "glow"
@@ -68,6 +69,14 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M14 8.5 14.6 3h2.8L18 8.5z" fill="#3D9BE0" />
       <rect x="12.6" y="8.5" width="6.8" height="13" rx="2" fill="#5BB8F5" />
       <rect x="12.6" y="21.5" width="6.8" height="4" rx="1.6" fill="#3D9BE0" />
+    </g>
+  ),
+  inkbrush: (
+    <g transform="rotate(35 16 16)" {...O}>
+      <rect x="14.4" y="2" width="3.2" height="11" rx="1.6" fill="#2D2A26" />
+      <rect x="13.9" y="13" width="4.2" height="3.4" rx="0.9" fill="#C9A227" />
+      <path d="M13.9 16.4c0 4.4.9 7.6 2.1 10.1 1.2-2.5 2.1-5.7 2.1-10.1z" fill="#FBF7F0" />
+      <path d="M14.8 21.5c.3 2.1.8 3.8 1.2 5 .4-1.2.9-2.9 1.2-5-.4-1.7-2-1.7-2.4 0z" fill="#1A1815" />
     </g>
   ),
   watercolor: (

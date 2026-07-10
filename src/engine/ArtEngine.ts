@@ -335,6 +335,7 @@ export class ArtEngine {
       wetEdge: brush.cfg.wetEdge,
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,
+      washCloud: brush.cfg.washCloud,
       paperKind: this.paperKindForMode(),
     };
   }
@@ -716,6 +717,7 @@ export class ArtEngine {
       wetEdge: brush.cfg.wetEdge,
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,
+      washCloud: brush.cfg.washCloud,
       paperKind: this.paperKindForMode(),
     };
     this.cm.backend.beginStroke(ctx);

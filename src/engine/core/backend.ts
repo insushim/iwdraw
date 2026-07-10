@@ -30,6 +30,11 @@ export interface StrokeContext {
   grainLift: boolean;
   /** 붓 방향 밝은 스트릭 강도 0~1(유화) — GL 전용(2D 폴백은 근사 생략) */
   streaks: number;
+  /**
+   * 수채 농담 구름 강도 0~1 — 캔버스 고정 저주파 노이즈로 색 농도만 요동(GL 전용).
+   * 캔버스 고정·결정론이라 겹침 수렴(darken min)을 깨지 않는다.
+   */
+  washCloud: number;
 }
 
 /*
@@ -174,6 +179,54 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
         ctx.fillStyle = `rgba(0,0,0,${0.08 + wrand() * 0.2})`;
         const s = 1 + wrand() * 2.2;
         ctx.fillRect(r + Math.cos(a) * rad, r + Math.sin(a) * rad, s, s);
+      }
+      ctx.globalCompositeOperation = "source-over";
+      break;
+    }
+    case "ink": {
+      // 붓펜(먹): 진한 코어 + 진행 방향(x) 갈필 골. 골은 "중간 알파"로 깎는다 —
+      // 살짝·빠르게 그으면(dab 알파 ~1) 골이 종이빛 갈필(비백)로 드러나고,
+      // 꾹 누르면(알파 부스트, 셰이더 clamp) 골까지 포화돼 진한 먹이 된다.
+      // rotationFollowsStroke로 골이 획 방향을 따라 이어진다(유화 bristle과 같은 원리).
+      const g = ctx.createRadialGradient(r, r, 0, r, r, r);
+      g.addColorStop(0, "rgba(255,255,255,0.97)");
+      g.addColorStop(0.86, "rgba(255,255,255,0.97)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(r, r, r, 0, Math.PI * 2);
+      ctx.fill();
+      // 갈필 골 — 고정 시드(로드마다 배치가 바뀌면 질감 요동, 색 게이트 교훈).
+      // 붓털이 갈라지는 위/아래 가장자리 골이 더 깊고, 중심축은 얕게(먹이 고이는 곳).
+      let inkSeed = 41;
+      const irand = () => {
+        inkSeed = (inkSeed * 1103515245 + 12345) & 0x7fffffff;
+        return inkSeed / 0x7fffffff;
+      };
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.lineCap = "round";
+      for (let i = 0; i < 5; i++) {
+        const yn = 0.1 + (i / 4) * 0.8; // 0.1~0.9
+        const y = size * yn + (irand() - 0.5) * 4;
+        const half = Math.sqrt(Math.max(0, r * r - (y - r) * (y - r)));
+        if (half < 5) continue;
+        const edge = Math.abs(yn - 0.5) * 2; // 0(중심)~1(가장자리)
+        // 골 깊이 상한 0.62 — 더 깊으면 꾹 눌러도(알파 1.7 클램프) 골이 포화되지 않아
+        // 모든 획이 갈필로 보인다. 0.62면 눌렀을 때 골 알파 ~0.85(먹), 스칠 때 ~0.45(갈필).
+        const depth = 0.25 + edge * 0.35 + irand() * 0.08;
+        ctx.strokeStyle = `rgba(0,0,0,${Math.min(0.62, depth)})`;
+        // 획 굵기 30~60px 축소 + 밉맵 평균화를 견디려면 팁 기준 9px+ 필요(3~8px는 씻겨나감 실측)
+        ctx.lineWidth = 9 + irand() * 7;
+        // 끊어진 대시 — 이어진 골은 기계적(마른 붓털은 스치다 끊긴다)
+        let x = r - half + irand() * 10;
+        ctx.beginPath();
+        while (x < r + half - 4) {
+          const seg = 14 + irand() * 30;
+          ctx.moveTo(x, y + (irand() - 0.5) * 2.5);
+          ctx.lineTo(Math.min(x + seg, r + half), y + (irand() - 0.5) * 2.5);
+          x += seg + 4 + irand() * 10;
+        }
+        ctx.stroke();
       }
       ctx.globalCompositeOperation = "source-over";
       break;

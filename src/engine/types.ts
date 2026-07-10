@@ -10,6 +10,7 @@ export type BrushId =
   | "marker"
   | "watercolor"
   | "oil"
+  | "inkbrush"
   | "airbrush"
   | "oilpastel"
   | "glow"

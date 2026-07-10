@@ -120,7 +120,9 @@ export const useEditor = create<EditorState>((set, get) => ({
   stabilize: 3,
   symmetry: "none",
   shapeInsert: null,
-  sketchSuggest: true,
+  // 뚝딱그림은 기본 꺼짐 — 색칠 중 자동 제안이 끼어들면 방해(2026-07-10 사용자 지시).
+  // 원할 때 마법 도구에서 켠다.
+  sketchSuggest: false,
   suggestSuppressed: false,
   suggestions: [],
   pending: null,
