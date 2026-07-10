@@ -74,8 +74,9 @@ export interface RendererBackend {
   /**
    * 진행 중 스트로크를 표시 캔버스에 라이브 프리뷰로 그린다(매 composite 프레임).
    * 스트로크가 없으면 no-op. endStroke 전에도 획이 즉시 보이게 하는 핵심.
-   * ⚠️ wetEdge·paperGrain 후처리는 의도적으로 endStroke에만 적용 —
-   * "펜을 떼면 물감이 마르며 가장자리·종이 결이 배어나는" 연출이자 프레임당 비용 절감.
+   * ⚠️ wetEdge 후처리만 의도적으로 endStroke 전용 — "펜을 떼면 물감이 마르며
+   * 가장자리가 배어나는" 연출. paperGrain·impasto는 프리뷰에도 적용(프리뷰=최종) —
+   * 손 떼는 순간 질감·명암이 변하는 팝인은 버그로 읽힌다(2026-07-10 사용자 실측).
    * 지우개(destination-out) 처리는 구현체별로 다르다 —
    * Canvas2DBackend는 레이어에 직접 지워 이미 반영되므로 no-op,
    * WebGL2Backend는 스트로크 버퍼를 매 프레임 destination-out으로 합성한다.

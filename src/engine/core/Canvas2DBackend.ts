@@ -129,9 +129,9 @@ export class Canvas2DBackend implements RendererBackend {
     if (!this.ctx) return;
     // 지우개는 레이어에 직접 그려져 이미 실시간으로 보임
     if (this.ctx.composite === "destination-out") return;
-    // 종이 결을 프리뷰에도 실시간 적용("떼는 순간 질감이 생기는" 팝인 제거)
+    // 종이 결·임파스토를 프리뷰에도 실시간 적용("떼는 순간 질감·명암이 변하는" 팝인 제거)
     let src: HTMLCanvasElement = this.strokeBuf;
-    if (this.ctx.paperGrain > 0) {
+    if (this.ctx.paperGrain > 0 || this.ctx.impasto > 0) {
       if (!this.liveBuf) {
         const c = document.createElement("canvas");
         c.width = this.width;
@@ -140,7 +140,10 @@ export class Canvas2DBackend implements RendererBackend {
       }
       this.liveBuf.clearRect(0, 0, this.width, this.height);
       this.liveBuf.drawImage(this.strokeBuf, 0, 0);
-      this.grain(this.liveBuf);
+      // endStroke와 같은 순서(임파스토 → 종이 결) — 프리뷰=최종
+      if (this.ctx.impasto > 0)
+        applyImpastoRelief(this.liveBuf, this.width, this.height, this.ctx.impasto);
+      if (this.ctx.paperGrain > 0) this.grain(this.liveBuf);
       src = this.liveBuf.canvas;
     }
     if (this.ctx.composite === "glaze") {

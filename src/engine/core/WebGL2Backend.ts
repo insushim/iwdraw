@@ -188,6 +188,10 @@ export class WebGL2Backend implements RendererBackend {
   private ctx: StrokeContext | null = null;
   /** 종이 결 모듈레이션 등 2D 포스트프로세스용(지연 생성) */
   private post2d: CanvasRenderingContext2D | null = null;
+  /** 임파스토 라이브 프리뷰 캐시 — 획이 변한 프레임만 릴리프 재계산(팬·줌 리컴포짓 절약) */
+  private live2d: CanvasRenderingContext2D | null = null;
+  private strokeRev = 0;
+  private liveRev = -1;
   private lostCb: (() => void) | null = null;
   private handleLost = (e: Event) => {
     e.preventDefault();
@@ -339,6 +343,8 @@ export class WebGL2Backend implements RendererBackend {
 
   beginStroke(ctx: StrokeContext): void {
     this.ctx = ctx;
+    this.strokeRev++;
+    this.liveRev = -1;
     const gl = this.gl;
     // 스트로크 버퍼 클리어
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.strokeFbo.fb);
@@ -350,6 +356,7 @@ export class WebGL2Backend implements RendererBackend {
 
   drawDabs(dabs: Dab[]): void {
     if (!this.ctx) return;
+    this.strokeRev++;
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.strokeFbo.fb);
     gl.viewport(0, 0, this.width, this.height);
@@ -438,6 +445,25 @@ export class WebGL2Backend implements RendererBackend {
       compositeGlaze(target, this.glCanvas, this.width, this.height);
       return;
     }
+    // 임파스토 릴리프는 프리뷰=최종(같은 함수) — 손 떼는 순간 명암이 변하는
+    // 팝인 제거(2026-07-10 사용자 실측: "유화 손 떼면 색이 변한다").
+    // 획이 변한 프레임만 재계산(리비전 캐시) — 팬·줌 리컴포짓은 캐시 재사용.
+    let src: HTMLCanvasElement = this.glCanvas;
+    if (this.ctx.impasto > 0 && c !== "destination-out") {
+      if (!this.live2d) {
+        const cv = document.createElement("canvas");
+        cv.width = this.width;
+        cv.height = this.height;
+        this.live2d = cv.getContext("2d")!;
+      }
+      if (this.liveRev !== this.strokeRev) {
+        this.live2d.clearRect(0, 0, this.width, this.height);
+        this.live2d.drawImage(this.glCanvas, 0, 0);
+        applyImpastoRelief(this.live2d, this.width, this.height, this.ctx.impasto);
+        this.liveRev = this.strokeRev;
+      }
+      src = this.live2d.canvas;
+    }
     target.save();
     target.globalAlpha = this.ctx.strokeOpacity; // wash 획 전체 불투명도(프리뷰=최종)
     target.globalCompositeOperation =
@@ -450,7 +476,7 @@ export class WebGL2Backend implements RendererBackend {
             : c === "lighter"
               ? "lighter"
               : "source-over";
-    target.drawImage(this.glCanvas, 0, 0);
+    target.drawImage(src, 0, 0);
     target.restore();
   }
 

@@ -444,7 +444,8 @@ export function applyWetEdge(
  * 우하단 안쪽에 그림자를 얇게 얹는다.
  * 밴드 = 경화(4겹)+blur 실루엣 S의 대각 오프셋 차분(S − shift(S)) — 획 내부(자기
  * 교차 포함)는 균일 알파라 차분 0 = 불변, 바깥으로도 안 새어나간다(source-atop).
- * wetEdge와 같은 endStroke 전용 후처리 정책(프리뷰 팝인 허용 전례).
+ * 프리뷰(presentStroke)와 최종(endStroke) 양쪽에서 호출된다(프리뷰=최종 —
+ * 손 뗄 때 명암 팝인은 버그로 읽힘, 2026-07-10 사용자 실측).
  */
 export function applyImpastoRelief(
   ctx: CanvasRenderingContext2D,
