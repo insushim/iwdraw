@@ -78,6 +78,14 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     setSuggestSuppressed(!!room);
     return () => setSuggestSuppressed(false);
   }, [room, engine, setSuggestSuppressed]);
+  // 정상 마운트 = 자가치유 1회권 재장전(global-error/error.tsx의 크래시 자동 복구용)
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem("arton.selfheal");
+    } catch {
+      /* 통과 */
+    }
+  }, []);
   const canUndo = useEditor((s) => s.canUndo);
   const canRedo = useEditor((s) => s.canRedo);
   const undo = useEditor((s) => s.undo);
