@@ -33,7 +33,8 @@ export class OilBrush extends BrushBase {
         // 읽힌다(2026-07-06 사용자 실측 3회 수렴, 기능 제거). 질감은 streaks+직조 백화 전담
         grainLift: true, // 유화 물감은 불투명 — 결은 구멍이 아니라 흰 캔버스 배어남(겹침 진해짐 방지)
         streaks: 0.66, // 붓 방향 밝은 스트릭 — MAX에서 살아남아 덧칠 내부에도 붓결 유지. 0.55는 i-scream 대비 디테일 부족(2026-07-10 사용자 실측)
-        impasto: 0.8, // 실루엣 좌상단 하이라이트/우하단 그림자 — 물감 두께감(endStroke 후처리)
+        impasto: 0.8, // 실루엣 좌상단 하이라이트/우하단 그림자 — 물감 두께감(프리뷰=최종)
+        wetMix: 0.5, // 젖은 물감 섞임 — 지나간 밑색을 붓에 묻혀 와 섞임(i-scream 유화 실측, 2026-07-10 사용자 요청)
       },
       rng,
     );
@@ -49,7 +50,8 @@ export class OilBrush extends BrushBase {
     const drift =
       Math.sin(p.t * 0.003 + this.strokeSeed) * 0.5 + Math.sin(p.t * 0.0013 + this.strokeSeed * 2.7) * 0.5;
     const v = 1 + drift * 0.05;
-    const c = this.settings.color;
+    // wet mixing이 켜졌으면 super가 넣은 섞인 색(paintColor) 위에 드리프트를 곱한다
+    const c = dab.color ?? this.settings.color;
     // 4단계 양자화 — Canvas2D 폴백의 색 틴트 캐시(색상별)가 dab마다 새 항목으로
     // 스래싱하지 않게(획당 유니크 색 ~5개로 제한). 오차 ≤2는 비가시.
     const q = (x: number) => Math.max(0, Math.min(252, Math.round((x * v) / 4) * 4));

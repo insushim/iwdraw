@@ -93,6 +93,14 @@ export interface BrushConfig {
   grainLift: boolean;
   /** 붓 방향 밝은 스트릭(마른 붓털 하이라이트) 강도 0~1 — bristle 계열 전용, GL 셰이더 lift */
   streaks: number;
+  /**
+   * 젖은 물감 섞임(wet mixing) 강도 0~1(유화) — 획이 밑색(활성 레이어의 기존 물감)을
+   * 붓에 묻혀 와 색이 섞인다(i-scream 유화 실측: 노랑이 청록 위를 지나면 황록으로,
+   * 벗어나면 서서히 원색 회복. 2026-07-10 사용자 요청). 값은 "원색이 밑색 쪽으로
+   * 끌려갈 수 있는 최대 비율"(캡) — 1이어도 carried가 원색을 완전히 잠식하지 않는다.
+   * 엔진이 baseSampler를 주입할 때만 동작(빈 종이·미주입 시 원색 그대로).
+   */
+  wetMix: number;
 }
 
 const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
@@ -118,6 +126,7 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   fringe: 0,
   grainLift: false,
   streaks: 0,
+  wetMix: 0,
 };
 
 /**
@@ -137,6 +146,14 @@ export class BrushBase {
   private pendingBegin: StrokePoint | null = null;
   private rng: () => number;
 
+  /** 엔진 주입(wetMix>0일 때): 활성 레이어 밑색 샘플(반경 r 평균). null = 빈 종이.
+   * 획 시작 시점의 레이어 미러를 읽으므로 획 도중 자기 물감과는 안 섞인다(의도). */
+  baseSampler: ((x: number, y: number, r: number) => RGB | null) | null = null;
+  /** 붓에 묻은 물감 — 원색에서 시작해 지나간 밑색 쪽으로 지수 수렴(거리 정규화) */
+  private carried: RGB | null = null;
+  private lastSampleVal: RGB | null = null;
+  private sinceSample = Infinity;
+
   constructor(cfg: Partial<BrushConfig> & Pick<BrushConfig, "id" | "tip">, rng?: () => number) {
     this.cfg = { ...DEFAULTS, ...cfg };
     this.rng = rng ?? Math.random;
@@ -152,6 +169,11 @@ export class BrushBase {
     this.residual = 0;
     this.traveled = 0;
     this.smoothedAngle = null;
+    // wet mixing: 붓을 대는 순간부터 밑색을 살짝 묻힌다(반 지름만큼 문지른 셈)
+    this.carried = { ...settings.color };
+    this.lastSampleVal = null;
+    this.sinceSample = Infinity;
+    this.updateCarried(p, settings.size * this.cfg.sizeScale * 0.5);
     if (this.cfg.rotationFollowsStroke) {
       // 방향이 정해지기 전 각도 0으로 찍으면 세로획 머리에 가로 블롭이 생긴다 → 보류
       this.pendingBegin = p;
@@ -171,6 +193,7 @@ export class BrushBase {
     const step = Math.max(1, this.settings.size * this.cfg.sizeScale * this.cfg.spacing);
     const dabs: Dab[] = [];
     const angle = this.smoothAngle(Math.atan2(p.y - from.y, p.x - from.x));
+    this.updateCarried(p, segLen);
 
     if (this.pendingBegin) {
       // 획 머리의 마른 붓털 트레일(진행 반대 방향) — 방향이 확정된 지금 찍는다
@@ -253,6 +276,39 @@ export class BrushBase {
     return this.smoothedAngle;
   }
 
+  /** 붓에 묻은 물감을 원색 쪽 기준으로 갱신 — 거리/브러시지름 정규화 지수 수렴(프레임률 독립) */
+  private updateCarried(p: StrokePoint, distPx: number): void {
+    if (!(this.cfg.wetMix > 0) || !this.baseSampler || !this.carried) return;
+    const dia = Math.max(4, this.settings.size * this.cfg.sizeScale);
+    // 샘플은 0.2지름 이동마다(밑색은 저주파) — 나머지 구간은 마지막 샘플로 수렴만 진행
+    this.sinceSample += distPx;
+    if (this.sinceSample >= Math.max(3, dia * 0.2)) {
+      this.lastSampleVal = this.baseSampler(p.x, p.y, dia * 0.35);
+      this.sinceSample = 0;
+    }
+    const s = this.lastSampleVal;
+    // 픽업(밑색 위, 한 지름 이동에 ~67% 수렴)은 빠르게, 회복(빈 종이)은 서서히 —
+    // i-scream 실측: 밑색을 벗어나면 원색이 점진 회복
+    const target = s ?? this.settings.color;
+    const t = 1 - Math.exp(-(s ? 1.1 : 0.33) * (distPx / dia));
+    this.carried.r += (target.r - this.carried.r) * t;
+    this.carried.g += (target.g - this.carried.g) * t;
+    this.carried.b += (target.b - this.carried.b) * t;
+  }
+
+  /** 이 dab이 쓸 물감 색 — 원색↔carried를 wetMix 캡으로 혼합(원색이 완전히 잠식되지 않게) */
+  protected paintColor(): RGB {
+    const m = this.cfg.wetMix;
+    if (!(m > 0) || !this.carried || !this.baseSampler) return this.settings.color;
+    const c = this.settings.color;
+    const w = this.carried;
+    return {
+      r: Math.round(c.r + (w.r - c.r) * m),
+      g: Math.round(c.g + (w.g - c.g) * m),
+      b: Math.round(c.b + (w.b - c.b) * m),
+    };
+  }
+
   protected makeDab(p: StrokePoint, angle: number): Dab {
     const c = this.cfg;
     const s = this.settings;
@@ -275,6 +331,8 @@ export class BrushBase {
     };
     if (c.dynamicHue) {
       dab.color = hslToRgb((this.traveled / 340) % 1, 0.9, 0.55);
+    } else if (c.wetMix > 0 && this.baseSampler) {
+      dab.color = this.paintColor();
     }
     return dab;
   }

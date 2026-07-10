@@ -393,6 +393,10 @@ export class ArtEngine {
       return;
     }
     this.brush = createBrush(this.brushId);
+    // wet mixing(유화): 획 시작 시점의 활성 레이어 미러에서 밑색을 샘플하는 콜백 주입.
+    // 미러는 1/4 축소 + willReadFrequently 캔버스 1회 리드백 — 획 도중 getImageData 0회
+    // (레이어 원본 반복 리드백은 GPU 동기화 히치, 7MB 원본 스냅샷은 과거 제거된 히치)
+    this.brush.baseSampler = this.brush.cfg.wetMix > 0 ? this.makeWetMixSampler() : null;
     this.quickShapeApplied = false;
     this.curPoints = [this.stabilizer.begin(p)];
     this.strokeStartTs = performance.now();
@@ -606,6 +610,48 @@ export class ArtEngine {
     return new Uint8ClampedArray(
       this.layers.active.ctx.getImageData(0, 0, this.width, this.height).data,
     );
+  }
+
+  /** wet mixing 밑색 샘플러(재사용 미러 캔버스, 지연 생성) */
+  private mixCtx: CanvasRenderingContext2D | null = null;
+
+  /** 활성 레이어의 1/4 미러를 1회 캡처해 배열 샘플 클로저를 만든다(획 시작마다 호출).
+   * 반환 샘플러: 반경 r 원 근방 평균 RGB(알파 가중), 칠해진 면적이 적으면 null(빈 종이). */
+  private makeWetMixSampler(): (x: number, y: number, r: number) => RGB | null {
+    const DS = 4;
+    const w = Math.ceil(this.width / DS);
+    const h = Math.ceil(this.height / DS);
+    if (!this.mixCtx) {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      this.mixCtx = c.getContext("2d", { willReadFrequently: true })!;
+    }
+    this.mixCtx.clearRect(0, 0, w, h);
+    this.mixCtx.drawImage(this.layers.active.canvas, 0, 0, w, h);
+    const d = this.mixCtx.getImageData(0, 0, w, h).data;
+    return (x, y, r) => {
+      const cx = Math.round(x / DS);
+      const cy = Math.round(y / DS);
+      const R = Math.max(1, Math.round(r / DS));
+      let rs = 0, gs = 0, bs = 0, as = 0, n = 0;
+      for (let yy = Math.max(0, cy - R); yy <= Math.min(h - 1, cy + R); yy++) {
+        for (let xx = Math.max(0, cx - R); xx <= Math.min(w - 1, cx + R); xx++) {
+          const i = (yy * w + xx) * 4;
+          const a = d[i + 3];
+          n++;
+          if (a > 40) {
+            rs += d[i] * a;
+            gs += d[i + 1] * a;
+            bs += d[i + 2] * a;
+            as += a;
+          }
+        }
+      }
+      // 칠해진 면적 12% 미만은 빈 종이 취급 — 종이(흰 배경)와는 섞지 않는다(i-scream 동일)
+      if (!n || as < n * 255 * 0.12) return null;
+      return { r: rs / as, g: gs / as, b: bs / as };
+    };
   }
 
   /** 라이브 프리뷰용 스크래치 캔버스(지연 생성, 스트로크 중에만 사용) */
