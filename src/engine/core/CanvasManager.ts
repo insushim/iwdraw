@@ -20,10 +20,13 @@ export class CanvasManager {
     display?: HTMLCanvasElement,
     forceCanvas2D = false,
     allowSoftwareGL = false,
+    /** 표시 캔버스 백킹 배율(레티나 선명도) — 레이어·백엔드는 논리 해상도 유지.
+     * 확대(줌) 시 1536px 논리 캔버스가 CSS로 재확대되며 생기던 계단 완화(2026-07-10). */
+    readonly dpr = 1,
   ) {
     this.display = display ?? document.createElement("canvas");
-    this.display.width = width;
-    this.display.height = height;
+    this.display.width = Math.round(width * dpr);
+    this.display.height = Math.round(height * dpr);
     this.displayCtx = this.display.getContext("2d")!;
 
     this.backend = forceCanvas2D

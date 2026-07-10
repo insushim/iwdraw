@@ -143,6 +143,8 @@ export class ArtEngine {
       opts.display,
       opts.forceCanvas2D || opts.backendOverride === "2d",
       opts.backendOverride === "gl",
+      // 표시 선명도(레티나·줌 계단 완화) — 캡 2: 백킹 픽셀 4배 상한(합성 비용 가드)
+      Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2),
     );
     this.layers = new LayerStack(opts.width, opts.height);
     this.history = new History(50);
@@ -1316,9 +1318,18 @@ export class ArtEngine {
 
   private compositeNow(): void {
     const ctx = this.cm.displayCtx;
+    const dpr = this.cm.dpr; // 표시 백킹 배율 — 이후 모든 그리기는 논리 좌표 그대로
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, this.width, this.height);
-    ctx.setTransform(this.view.scale, 0, 0, this.view.scale, this.view.ox, this.view.oy);
+    ctx.clearRect(0, 0, this.cm.display.width, this.cm.display.height);
+    ctx.imageSmoothingQuality = "high"; // 줌 업스케일 보간 품질(계단 완화)
+    ctx.setTransform(
+      this.view.scale * dpr,
+      0,
+      0,
+      this.view.scale * dpr,
+      this.view.ox * dpr,
+      this.view.oy * dpr,
+    );
     // 진행 중 스트로크는 활성 레이어와 스크래치에서 먼저 합성해 정확히 프리뷰 —
     // 지우개가 아래 레이어를 뚫어 보이지 않고, 레이어 opacity/blend도 그대로 반영
     this.layers.composite(ctx, (c, layer) => {

@@ -109,7 +109,14 @@ export function CanvasStage({
           width={size.width}
           height={size.height}
           className="canvas-surface h-auto max-h-full w-auto max-w-full rounded-md bg-white shadow-lift"
-          style={{ aspectRatio: `${size.width}/${size.height}`, touchAction: "none" }}
+          style={{
+            aspectRatio: `${size.width}/${size.height}`,
+            touchAction: "none",
+            // 엔진이 백킹을 DPR 배율로 키운다(레티나·줌 선명도) — 화면 레이아웃 크기는
+            // 논리 해상도 기준을 유지(거대 모니터에서 캔버스가 2배로 커지는 것 방지)
+            maxWidth: `min(100%, ${size.width}px)`,
+            maxHeight: `min(100%, ${size.height}px)`,
+          }}
           aria-label="그림 캔버스"
         />
       )}
