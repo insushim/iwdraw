@@ -11,8 +11,8 @@ export class WatercolorBrush extends BrushBase {
       {
         id: "watercolor",
         tip: "wet",
-        // 팁 플래토가 0.9→0.55로 좁아진 만큼 보정(체감 획 폭 유지, 2026-07-10 팁 재작업)
-        sizeScale: 2.2,
+        // 팁 플래토 0.8 기준 보정(체감 획 폭 유지, 2026-07-10 팁 재작업 2차)
+        sizeScale: 1.9,
         spacing: 0.15,
         flow: 1,
         jitter: 0.02,
@@ -32,7 +32,9 @@ export class WatercolorBrush extends BrushBase {
         opacityAsDilution: true, // 진하기 슬라이더도 알파가 아니라 희석으로(아래 makeDab)
         // 농담 구름: 완전 균일 워시는 "연한 마커"로 읽힌다(2026-07-10 사용자 실측).
         // 캔버스 고정 저주파 색 요동이라 겹침 수렴은 유지하면서 수채 특유의 불균일만 살림.
-        washCloud: 0.5, // 0.34는 i-scream 대비 농담이 밋밋(2026-07-10 사용자 실측)
+        // 0.5는 어두운 색에서 흰 얼룩이 "지운 자국"처럼 읽힘(2026-07-10 사용자 "이게 뭐야").
+        // 셰이더에서 색 밝기에 비례해 추가 감쇠(어두운 색일수록 백화 억제).
+        washCloud: 0.26,
         // 가장자리 스밈: 넓은 팁 폴오프(알파<1 영역)를 캔버스 고정 노이즈로 침식 —
         // 딱딱한 스티커 테두리 대신 종이에 스며든 실루엣(i-scream 수채의 핵심 인상)
         edgeNoise: 0.85,

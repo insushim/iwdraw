@@ -102,8 +102,16 @@ void main() {
     float n1 = texture(u_paper, v_px / 9800.0).a;
     float n2 = texture(u_paper, v_px / 3700.0 + vec2(0.37, 0.61)).a;
     float n = (n1 * 0.62 + n2 * 0.38 - 0.5) * 2.0; // -1..1
-    col = mix(col, vec3(1.0), max(n, 0.0) * u_cloud);   // 옅은 자리(종이가 덜 먹음)
+    // 백화(옅은 자리)는 색 밝기에 비례 — 어두운 색에서 흰 얼룩은 "지운 자국/연기"로
+    // 읽힌다(2026-07-10 사용자 실측, 진회색 획의 흰 반점).
+    float lum = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, vec3(1.0), max(n, 0.0) * u_cloud * (0.25 + 0.75 * lum));
     col *= 1.0 - max(-n, 0.0) * u_cloud * 0.5;          // 안료 고임(살짝 진하게)
+    // 물이 고였다 마른 밝은 bloom — 드문 큰 덩어리만 임계로 추출(codex 교차진단 채택).
+    // 저주파 n1의 상위 구간이라 캔버스 고정·결정론(겹침 수렴 유지).
+    // 램프를 넓게(0.6~0.88) — 좁으면(0.66~0.8) 작은 표백 점으로 튄다(실측).
+    float bloom = smoothstep(0.6, 0.88, n1) * u_cloud * (0.4 + 0.6 * lum);
+    col = mix(col, vec3(1.0), bloom * 0.35);
   }
   frag = vec4(col * a, a);  // premultiplied
 }`;
@@ -450,7 +458,7 @@ export class WebGL2Backend implements RendererBackend {
       }
       this.post2d.clearRect(0, 0, this.width, this.height);
       this.post2d.drawImage(this.glCanvas, 0, 0);
-      applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge);
+      applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge, this.ctx.paperKind);
       src = this.post2d.canvas;
     }
 

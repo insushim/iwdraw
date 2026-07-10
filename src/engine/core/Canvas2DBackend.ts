@@ -177,7 +177,7 @@ export class Canvas2DBackend implements RendererBackend {
     // wet edge(실루엣 가장자리 안료 몰림) → 종이 결 순서로 후처리
     // (종이 결은 presentStroke 라이브 경로와 동일 — 프리뷰=최종)
     if (this.ctx.wetEdge > 0) {
-      applyWetEdge(this.strokeCtx, this.width, this.height, this.ctx.wetEdge);
+      applyWetEdge(this.strokeCtx, this.width, this.height, this.ctx.wetEdge, this.ctx.paperKind);
     }
     if (this.ctx.paperGrain > 0) this.grain(this.strokeCtx);
     // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영(라이브 프리뷰와 동일해야 함)

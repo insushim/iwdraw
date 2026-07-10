@@ -383,6 +383,7 @@ export function applyWetEdge(
   width: number,
   height: number,
   strength: number,
+  kind: PaperKind = "cotton",
 ): void {
   wetTmp = scratch(wetTmp, width, height);
   wetBand = scratch(wetBand, width, height);
@@ -400,10 +401,27 @@ export function applyWetEdge(
 
   ctx.save();
   ctx.globalCompositeOperation = "source-atop"; // 실루엣 밖으로 번지지 않게
+  // ① 은은한 균일 링(베이스) — 링을 전부 균일하게 진하게 하면 "외곽선"으로 읽힌다
+  //    (2026-07-10 codex 교차진단): 실제 수채는 안료가 몰리는 곳이 군데군데다.
+  ctx.globalAlpha = Math.min(1, strength) * 0.55;
+  ctx.drawImage(wetBand.canvas, 0, 0);
+  // ② 종이 결 노이즈로 변조한 링 — 캔버스 고정 패턴이라 결정론(같은 자리는 항상 같은 몰림)
+  wetTmp.clearRect(0, 0, width, height);
+  wetTmp.drawImage(wetBand.canvas, 0, 0);
+  wetTmp.globalCompositeOperation = "destination-in";
+  wetTmp.save();
+  wetTmp.setTransform(1, 0, 0, 1, 0, 0);
+  wetTmp.scale(6, 6); // 결 특징 ~6px → 36px 덩어리로 확대(링을 따라 몰림/빠짐 반복)
+  const pat = wetTmp.createPattern(paperGrainTile(kind), "repeat");
+  if (pat) {
+    wetTmp.fillStyle = pat;
+    wetTmp.fillRect(0, 0, Math.ceil(width / 6), Math.ceil(height / 6));
+  }
+  wetTmp.restore();
+  wetTmp.globalCompositeOperation = "source-over";
   ctx.globalAlpha = Math.min(1, strength);
-  ctx.drawImage(wetBand.canvas, 0, 0);
-  ctx.drawImage(wetBand.canvas, 0, 0);
-  ctx.drawImage(wetBand.canvas, 0, 0);
+  ctx.drawImage(wetTmp.canvas, 0, 0);
+  ctx.drawImage(wetTmp.canvas, 0, 0);
   ctx.restore();
 }
 
