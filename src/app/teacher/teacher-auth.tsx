@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Button, TextInput } from "@/components/ui";
@@ -16,6 +17,8 @@ export function TeacherAuth() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState<boolean | null>(null);
+  // 개인정보 수집·이용 동의 — 가입(개인정보 수집) 시 필수(PIPA §15·§22)
+  const [agreed, setAgreed] = useState(false);
 
   useEffect(() => {
     apiFetch("/teacher/me")
@@ -28,8 +31,11 @@ export function TeacherAuth() {
     setError(null);
     try {
       const path = mode === "login" ? "/teacher/login" : "/teacher/signup";
-      const body: Record<string, string> = { email: email.trim(), password };
-      if (mode === "signup") body.name = name.trim() || "선생님";
+      const body: Record<string, string | boolean> = { email: email.trim(), password };
+      if (mode === "signup") {
+        body.name = name.trim() || "선생님";
+        body.agreed = agreed; // 서버도 동의를 강제·기록(PIPA 입증)
+      }
       const res = await apiFetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45,6 +51,7 @@ export function TeacherAuth() {
         weak_password: "비밀번호는 8자 이상이어야 해요",
         email_taken: "이미 가입된 이메일이에요. 로그인해 주세요.",
         invalid_credentials: "이메일 또는 비밀번호가 맞지 않아요",
+        consent_required: "개인정보처리방침·이용약관 동의가 필요해요",
       };
       setError(map[data.error ?? ""] ?? "문제가 생겼어요. 다시 시도해 주세요.");
     } catch {
@@ -65,7 +72,9 @@ export function TeacherAuth() {
   }
   if (authed) return <TeacherDashboard onSignOut={signOut} />;
 
-  const canSubmit = email.includes("@") && password.length >= 8 && !busy;
+  // 가입은 개인정보 동의까지 있어야 제출 가능(로그인은 불필요)
+  const canSubmit =
+    email.includes("@") && password.length >= 8 && !busy && (mode === "login" || agreed);
 
   return (
     <div className="mx-auto max-w-md rounded-bubble bg-paper p-8 shadow-soft">
@@ -100,6 +109,26 @@ export function TeacherAuth() {
           autoComplete={mode === "login" ? "current-password" : "new-password"}
           onKeyDown={(e) => e.key === "Enter" && canSubmit && submit()}
         />
+        {mode === "signup" && (
+          <label className="flex items-start gap-2 text-sm text-ink-soft">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-coral"
+            />
+            <span>
+              <Link href="/privacy" target="_blank" className="font-semibold text-ink underline">
+                개인정보처리방침
+              </Link>
+              {" 및 "}
+              <Link href="/terms" target="_blank" className="font-semibold text-ink underline">
+                이용약관
+              </Link>
+              에 동의합니다. <span className="text-coral">(필수)</span>
+            </span>
+          </label>
+        )}
         {error && <p className="text-sm text-danger">{error}</p>}
         <Button onClick={submit} disabled={!canSubmit} className="w-full">
           {busy ? "잠시만요…" : mode === "login" ? "로그인" : "회원가입"}
@@ -112,6 +141,7 @@ export function TeacherAuth() {
         onClick={() => {
           setMode(mode === "login" ? "signup" : "login");
           setError(null);
+          setAgreed(false);
         }}
       >
         {mode === "login" ? "처음이세요? 회원가입" : "이미 계정이 있으세요? 로그인"}

@@ -1,0 +1,9 @@
+# 정적 페이지(out/) 보안 응답 헤더 — Cloudflare Workers 정적 자산이 적용.
+# API(/api/*) 응답은 Worker 미들웨어가 동일 헤더를 부여한다.
+# (CSP는 Next 인라인 스크립트와 충돌 위험이 커 우선 제외 — 후속 하드닝 과제)
+/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Strict-Transport-Security: max-age=15552000; includeSubDomains

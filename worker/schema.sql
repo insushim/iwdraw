@@ -14,8 +14,10 @@ CREATE TABLE IF NOT EXISTS teachers (
   plan          TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free','pro')),
   password_hash TEXT NOT NULL,           -- PBKDF2 파생키(base64)
   password_salt TEXT NOT NULL,           -- 랜덤 salt(base64)
+  agreed_at     INTEGER,                 -- 개인정보 수집·이용 동의 시각(ms). PIPA 동의 입증용.
   created_at    INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
+-- 이미 배포된 DB: `wrangler d1 execute arton --remote --command "ALTER TABLE teachers ADD COLUMN agreed_at INTEGER"` — 2026-07-10 원격 적용 완료.
 
 -- ── 학급 ──
 CREATE TABLE IF NOT EXISTS classes (

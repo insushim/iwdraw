@@ -21,6 +21,30 @@ type Vars = { teacherId: string; studentId: string; studentClassId: string };
 type AppContext = Context<{ Bindings: Env; Variables: Vars }>;
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
+// ── 전역 보안 응답 헤더(API 응답) ──
+// 정적 페이지(out/)는 public/_headers가 담당. 여기선 Worker가 내는 /api/* 응답에 부여.
+// MIME 스니핑·클릭재킹·리퍼러 유출·불필요 권한을 방어(defense-in-depth).
+app.use("*", async (c, next) => {
+  await next();
+  // 웹소켓 업그레이드(101)·DO 프록시 응답은 헤더가 immutable → 건드리면 업그레이드가 깨진다
+  if (c.req.header("Upgrade")?.toLowerCase() === "websocket" || c.res.status === 101) return;
+  try {
+    const h = c.res.headers;
+    h.set("X-Content-Type-Options", "nosniff");
+    h.set("X-Frame-Options", "DENY"); // API 응답은 프레임에 뜰 일이 없다
+    h.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    h.set("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    // JSON API 응답만 캐시 금지(세션·개인정보 노출 방지). 이미지 라우트가 이미 지정한
+    // Cache-Control(private, max-age=600)은 덮어쓰지 않는다 — R2 읽기 폭증 방지.
+    if (!h.has("Cache-Control")) h.set("Cache-Control", "no-store");
+    if (new URL(c.req.url).protocol === "https:") {
+      h.set("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+    }
+  } catch {
+    /* immutable 헤더(외부 fetch/DO 프록시 응답) — 보안헤더 부여 생략, 요청은 정상 */
+  }
+});
+
 // ── 상수(Supabase Edge Function 포팅) ──
 const RATE_WINDOW_MS = 5 * 60_000;
 const RATE_MAX = 8; // 학생 join 시도 상한/윈도우
@@ -103,6 +127,10 @@ async function currentTeacherId(c: AppContext): Promise<string | null> {
 async function requireTeacher(c: AppContext, next: Next) {
   const id = await currentTeacherId(c);
   if (!id) return c.json({ error: "unauthorized" }, 401);
+  // 교사 행이 실제로 있는지 재확인 — 탈퇴/삭제된 교사의 잔존 세션(다른 기기·탈취 쿠키)을
+  // 즉시 차단하고, 삭제된 teacher_id를 참조하는 고아 INSERT(예: 학급 생성)를 막는다.
+  const exists = await c.env.DB.prepare("SELECT 1 FROM teachers WHERE id = ?").bind(id).first();
+  if (!exists) return c.json({ error: "unauthorized" }, 401);
   c.set("teacherId", id);
   await next();
 }
@@ -126,7 +154,12 @@ const TEMPLATE_IMAGE_RE = /^\/templates\/[a-z0-9_\-/]+\.(webp|png|jpg|jpeg)$/i;
 
 // ══════════════════════ 교사 인증 ══════════════════════
 app.post("/api/teacher/signup", async (c) => {
-  let body: { email?: string; password?: string; name?: string };
+  let body: {
+    email?: string;
+    password?: string;
+    name?: string;
+    agreed?: boolean;
+  };
   try {
     body = await c.req.json();
   } catch {
@@ -137,6 +170,8 @@ app.post("/api/teacher/signup", async (c) => {
   const name = (body.name ?? "선생님").trim().slice(0, 20) || "선생님";
   if (!EMAIL_RE.test(email)) return c.json({ error: "invalid_email" }, 400);
   if (password.length < 8) return c.json({ error: "weak_password" }, 400);
+  // 개인정보 수집·이용 동의는 서버에서도 강제(프런트 체크만으로는 입증 불가) — PIPA §15·§22
+  if (body.agreed !== true) return c.json({ error: "consent_required" }, 400);
 
   // 크리덴셜 스터핑/무차별 대입 방어(IP rate limit) — login과 예산 공유
   const ipHash = await hashIp(clientIp(c));
@@ -155,9 +190,9 @@ app.post("/api/teacher/signup", async (c) => {
   const id = genId();
   try {
     await c.env.DB.prepare(
-      "INSERT INTO teachers (id, email, name, password_hash, password_salt) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO teachers (id, email, name, password_hash, password_salt, agreed_at) VALUES (?, ?, ?, ?, ?, ?)",
     )
-      .bind(id, email, name, hash, salt)
+      .bind(id, email, name, hash, salt, Date.now())
       .run();
   } catch (e) {
     // 동시 중복 가입 레이스: UNIQUE(email) 충돌 → email_taken으로 정규화
@@ -231,6 +266,123 @@ app.get("/api/teacher/me", async (c) => {
     .first();
   if (!t) return c.json({ error: "unauthorized" }, 401);
   return c.json(t);
+});
+
+// ── 회원탈퇴(개인정보 파기, PIPA §36 삭제·§37 처리정지) ──
+// 비밀번호 재확인 후 교사 계정과 그에 딸린 개인정보·데이터를 되돌릴 수 없게 파기한다.
+// 스키마의 ON DELETE CASCADE(D1은 FK 기본 강제)에만 기대지 않고 자식 테이블부터 명시적으로
+// 삭제한다(이중 방어) — R2 작품 이미지는 CASCADE가 못 지우므로 D1 삭제 전에 키를 수집해 지운다.
+// 세션 쿠키도 즉시 무효화.
+app.post("/api/teacher/delete-account", requireTeacher, async (c) => {
+  const teacherId = c.get("teacherId");
+  let body: { password?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "bad_request" }, 400);
+  }
+  const password = body.password ?? "";
+
+  // 비밀번호 재확인 — 세션 탈취/CSRF로 남의 계정을 삭제하는 것 방지. 브루트포스 방어(rate limit).
+  const ipHash = await hashIp(clientIp(c));
+  if ((await ipAttemptCount(c, ipHash, AUTH_MARKER)) >= AUTH_RATE_MAX) {
+    await recordAttempt(c, ipHash, AUTH_MARKER, false);
+    return c.json({ error: "rate_limited" }, 429);
+  }
+  const t = await c.env.DB.prepare("SELECT password_hash, password_salt FROM teachers WHERE id = ?")
+    .bind(teacherId)
+    .first<{ password_hash: string; password_salt: string }>();
+  if (!t) return c.json({ error: "unauthorized" }, 401);
+  const ok = await verifyPassword(password, t.password_hash, t.password_salt);
+  if (!ok) {
+    await recordAttempt(c, ipHash, AUTH_MARKER, false);
+    return c.json({ error: "invalid_password" }, 403);
+  }
+
+  // R2 작품 이미지 먼저 수집·삭제(이 교사의 모든 학급 작품). 실패해도 DB 파기는 진행.
+  const { results } = await c.env.DB.prepare(
+    `SELECT a.image_path, a.thumb_path, a.timelapse_path
+       FROM artworks a JOIN classes c ON a.class_id = c.id
+      WHERE c.teacher_id = ?`,
+  )
+    .bind(teacherId)
+    .all<{
+      image_path: string;
+      thumb_path: string;
+      timelapse_path: string | null;
+    }>();
+  const keys = (results ?? [])
+    .flatMap((r) => [r.image_path, r.thumb_path, r.timelapse_path])
+    .filter((k): k is string => typeof k === "string" && k.length > 0);
+  if (keys.length) {
+    // R2 delete는 배치 1000개 상한 — 초과 시 청크(대량 작품 교사 방어).
+    // 실패해도 교사의 삭제 요청(개인정보 파기)은 진행해야 하므로 DB 파기를 막지 않되,
+    // D1 행이 사라지면 이 키를 다시 찾을 근거가 없어지므로 실패 키를 반드시 로그로 남긴다
+    // (조용히 삼키면 아동 작품 이미지가 R2에 영구 고아로 남아 추적 불가 — 교차검증 지적).
+    for (let i = 0; i < keys.length; i += 1000) {
+      const chunk = keys.slice(i, i + 1000);
+      try {
+        await c.env.BUCKET.delete(chunk);
+      } catch (e) {
+        console.error("[delete-account] R2 purge failed", {
+          teacherId,
+          keys: chunk,
+          err: String(e),
+        });
+      }
+    }
+  }
+
+  // D1 파기 — 자식 테이블부터 명시 삭제. batch()는 SQL 트랜잭션이라 원자적(부분 삭제 방지).
+  // 서브쿼리 기반이라 파라미터 상한 무관. (스키마에 ON DELETE CASCADE가 있어 실제로도 연쇄되지만,
+  // 순서상 자식부터 지우므로 cascade 동작 여부와 무관하게 결과가 동일한 이중 방어.)
+  // 실패 시 계정은 남고 R2 이미지만 먼저 지워진 부분상태가 되지만, 재시도하면 남은 행 기준으로
+  // 다시 파기가 진행되어 수렴한다 — 클라이언트가 재시도를 안내할 수 있게 명확한 JSON 오류를 준다.
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `DELETE FROM artwork_likes WHERE artwork_id IN
+         (SELECT a.id FROM artworks a JOIN classes c ON a.class_id = c.id WHERE c.teacher_id = ?)`,
+      ).bind(teacherId),
+      c.env.DB.prepare(
+        `DELETE FROM artworks WHERE class_id IN (SELECT id FROM classes WHERE teacher_id = ?)`,
+      ).bind(teacherId),
+      c.env.DB.prepare(
+        `DELETE FROM students WHERE class_id IN (SELECT id FROM classes WHERE teacher_id = ?)`,
+      ).bind(teacherId),
+      c.env.DB.prepare(
+        `DELETE FROM assignments WHERE class_id IN (SELECT id FROM classes WHERE teacher_id = ?)`,
+      ).bind(teacherId),
+      c.env.DB.prepare(
+        `DELETE FROM collab_rooms WHERE host_teacher_id = ?
+         OR class_id IN (SELECT id FROM classes WHERE teacher_id = ?)`,
+      ).bind(teacherId, teacherId),
+      c.env.DB.prepare("DELETE FROM classes WHERE teacher_id = ?").bind(teacherId),
+      c.env.DB.prepare("DELETE FROM payments WHERE teacher_id = ?").bind(teacherId),
+      c.env.DB.prepare("DELETE FROM subscriptions WHERE teacher_id = ?").bind(teacherId),
+      c.env.DB.prepare("DELETE FROM teachers WHERE id = ?").bind(teacherId),
+    ]);
+  } catch (e) {
+    console.error("[delete-account] D1 purge failed", {
+      teacherId,
+      err: String(e),
+    });
+    return c.json({ error: "delete_failed" }, 500);
+  }
+
+  // 세션 쿠키 무효화
+  const secure = new URL(c.req.url).protocol === "https:";
+  c.header(
+    "Set-Cookie",
+    serializeCookie(SESSION_COOKIE, "", {
+      maxAge: 0,
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      path: "/",
+    }),
+  );
+  return c.json({ ok: true });
 });
 
 // ══════════════════════ 교사: 학급 ══════════════════════
@@ -804,14 +956,29 @@ async function purgeExpiredArtworks(env: Env): Promise<{ deleted: number }> {
   return { deleted };
 }
 
+// join_attempts(IP 해시 rate-limit 로그)는 무기한 쌓이면 안 된다 — rate 윈도우는 5분이라
+// 7일 지난 행은 감사 가치도 없다. 개인정보(IP 파생) 보관 최소화 원칙으로 매일 정리.
+const JOIN_ATTEMPT_RETENTION_MS = 7 * DAY_MS;
+async function purgeOldJoinAttempts(env: Env): Promise<{ deleted: number }> {
+  const cutoff = Date.now() - JOIN_ATTEMPT_RETENTION_MS;
+  const res = await env.DB.prepare("DELETE FROM join_attempts WHERE created_at < ?").bind(cutoff).run();
+  return { deleted: res.meta?.changes ?? 0 };
+}
+
 export default {
   fetch: app.fetch,
   scheduled: (_controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
     ctx.waitUntil(
-      purgeExpiredArtworks(env).then(
-        (r) => console.log(`[cron] purged ${r.deleted} expired artworks`),
-        (e) => console.error("[cron] purge failed", e),
-      ),
+      Promise.allSettled([
+        purgeExpiredArtworks(env).then(
+          (r) => console.log(`[cron] purged ${r.deleted} expired artworks`),
+          (e) => console.error("[cron] purge failed", e),
+        ),
+        purgeOldJoinAttempts(env).then(
+          (r) => console.log(`[cron] purged ${r.deleted} old join_attempts`),
+          (e) => console.error("[cron] join_attempts purge failed", e),
+        ),
+      ]),
     );
   },
 } satisfies ExportedHandler<Env>;

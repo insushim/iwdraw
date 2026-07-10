@@ -28,6 +28,25 @@ export interface ArtworkRow {
   expires_at?: number; // 이 시각 이후 자동 삭제(보관 180일). 30일 이내면 갤러리에 배지
 }
 
+/** 회원 탈퇴 — 비밀번호 재확인 후 계정·개인정보·작품을 영구 파기. 성공 시 세션도 무효화됨. */
+export async function deleteAccount(
+  password: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasBackend()) return { ok: false, error: "offline" };
+  try {
+    const res = await apiFetch("/teacher/delete-account", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (res.ok) return { ok: true };
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error ?? "server" };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
 export async function listClasses(): Promise<ClassRow[]> {
   if (!hasBackend()) return [];
   try {

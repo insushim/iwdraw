@@ -192,7 +192,14 @@ export default function LandingPage() {
       <footer className="border-t border-cream-deep bg-paper py-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 text-sm text-ink-faint">
           <span>© 2026 iw corp · 아트온 ArtON</span>
-          <span>모든 도안은 자체 제작 — 저작권 걱정 없이 수업에 쓰세요</span>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-ink">
+              개인정보처리방침
+            </Link>
+            <Link href="/terms" className="hover:text-ink">
+              이용약관
+            </Link>
+          </div>
         </div>
       </footer>
     </main>

@@ -6,6 +6,7 @@ import { Button, Card } from "@/components/ui";
 import { QrCode } from "@/components/QrCode";
 import {
   createClass,
+  deleteAccount,
   listClasses,
   regenerateCode,
   toggleClassActive,
@@ -24,6 +25,7 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
   const [galleryOf, setGalleryOf] = useState<ClassRow | null>(null);
   const [assignOf, setAssignOf] = useState<ClassRow | null>(null);
   const [origin, setOrigin] = useState("");
+  const [showDelete, setShowDelete] = useState(false);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -160,6 +162,20 @@ export function TeacherDashboard({ onSignOut }: { onSignOut: () => void }) {
         도안 관리는 <Link href="/coloring" className="underline">색칠 도안</Link>에서 할 수 있어요.
       </p>
 
+      {/* 계정 설정 — 회원 탈퇴(개인정보 파기) */}
+      <div className="mt-10 border-t border-cream-deep pt-4 text-center">
+        <button
+          onClick={() => setShowDelete(true)}
+          className="text-sm text-ink-faint underline hover:text-danger"
+        >
+          회원 탈퇴
+        </button>
+      </div>
+
+      {showDelete && (
+        <DeleteAccountModal onClose={() => setShowDelete(false)} onDeleted={onSignOut} />
+      )}
+
       {/* 전자칠판 대형 표시 */}
       {big && <BigCodeModal klass={big} origin={origin} onClose={() => setBig(null)} />}
       {/* 도안 배포 */}
@@ -199,6 +215,76 @@ function BigCodeModal({
         >
           닫기
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* 회원 탈퇴 확인 — 비밀번호 재확인 후 계정·개인정보·작품을 영구 파기. 되돌릴 수 없음. */
+function DeleteAccountModal({ onClose, onDeleted }: { onClose: () => void; onDeleted: () => void }) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    const res = await deleteAccount(password);
+    setBusy(false);
+    if (res.ok) {
+      // 교사 행이 삭제돼 이후 모든 인증 요청이 401(requireTeacher 존재확인) — 전 기기 세션 무효.
+      // 현재 기기 쿠키도 서버가 지웠으니 로컬 상태만 정리하면 됨.
+      onDeleted();
+      return;
+    }
+    const map: Record<string, string> = {
+      invalid_password: "비밀번호가 맞지 않아요",
+      rate_limited: "잠시 후 다시 시도해 주세요",
+    };
+    setError(map[res.error] ?? "탈퇴 처리 중 문제가 생겼어요. 다시 시도해 주세요.");
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-ink/80 p-6"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-md rounded-bubble bg-paper p-8 shadow-lift"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="font-display text-xl text-danger">회원 탈퇴</h2>
+        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+          탈퇴하면 <b>계정 정보와 만든 모든 학급·학생·작품</b>이 영구히 삭제되며 되돌릴 수 없어요.
+          계속하려면 비밀번호를 입력해 주세요.
+        </p>
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => e.key === "Enter" && password && !busy && confirm()}
+          placeholder="비밀번호"
+          autoComplete="current-password"
+          className="mt-4 w-full rounded-card border-2 border-cream-deep bg-cream px-4 py-3 text-ink focus:border-danger"
+        />
+        {error && <p className="mt-2 text-sm font-semibold text-danger">{error}</p>}
+        <div className="mt-6 flex gap-2">
+          <Button onClick={onClose} tone="ghost" className="flex-1">
+            취소
+          </Button>
+          <button
+            onClick={confirm}
+            disabled={!password || busy}
+            className="pressable flex-1 rounded-card bg-danger py-3 font-display text-white disabled:opacity-50"
+          >
+            {busy ? "탈퇴 중…" : "영구 탈퇴"}
+          </button>
+        </div>
       </div>
     </div>
   );
