@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Jua } from "next/font/google";
+import { BootWatchdogClear } from "@/components/BootWatchdogClear";
 import "./globals.css";
 
 const jua = Jua({
@@ -57,8 +58,30 @@ export default function RootLayout({
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
           crossOrigin="anonymous"
         />
+        {/* 부트 워치독(React 밖) — 배포로 구버전 청크가 404 나면 React가 아예 못 떠서
+            에러 바운더리도 실행되지 않고 Suspense 폴백/흰 화면만 남는다(2026-07-10 실측:
+            배포 직후 새로고침 = 흰 화면). 8초 내 하이드레이션(BootWatchdogClear 마운트)이
+            없으면 SW·캐시를 정리하고 1회만 자동 새로고침(그림 IndexedDB는 보존). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){
+  function heal(){
+    try{sessionStorage.setItem("arton.selfheal.boot","1")}catch(e){}
+    var p=[];
+    try{if(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations){p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}))}}catch(e){}
+    try{if(window.caches){p.push(caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k)}))}))}}catch(e){}
+    Promise.all(p).catch(function(){}).then(function(){location.reload()});
+  }
+  try{if(sessionStorage.getItem("arton.selfheal.boot"))return}catch(e){}
+  window.__artonBoot=setTimeout(heal,8000);
+})();`,
+          }}
+        />
       </head>
-      <body className={`${jua.variable} antialiased`}>{children}</body>
+      <body className={`${jua.variable} antialiased`}>
+        <BootWatchdogClear />
+        {children}
+      </body>
     </html>
   );
 }
