@@ -58,7 +58,7 @@ export function ActionRail() {
   const [confirmClear, setConfirmClear] = useState(false);
 
   return (
-    <div className="rounded-card bg-paper p-3 shadow-soft">
+    <div className="rounded-card bg-paper p-2.5 shadow-soft">
       <span className="font-display text-base text-ink">마법 도구</span>
 
       {/* 뚝딱그림 */}
@@ -166,7 +166,7 @@ export function ActionRail() {
       </div>
 
       {/* 전체 지우기 */}
-      <div className="mt-3 border-t border-cream-deep pt-2">
+      <div className="mt-2 border-t border-cream-deep pt-1.5">
         {confirmClear ? (
           <div className="flex gap-1.5">
             <button

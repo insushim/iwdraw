@@ -63,6 +63,11 @@ export interface BrushConfig {
   strokeBlend: "buildup" | "wash";
   /** wash 모드에서 스트로크 전체에 적용되는 기본 불투명도(진하기 슬라이더와 곱) */
   washOpacity: number;
+  /**
+   * 진하기 슬라이더를 strokeOpacity(알파)가 아니라 브러시가 직접 색 희석으로 소비(수채).
+   * 알파 <1 이면 darken이어도 겹칠 때마다 한 스텝씩 어두워져 겹침 경계가 얼룩이 된다.
+   */
+  opacityAsDilution: boolean;
   /** 획 실루엣 가장자리 안료 몰림 0~1(수채 wet edge) — endStroke 후처리 */
   wetEdge: number;
   /** 획 시작·끝의 마른 붓털 트레일 강도 0~1(유화) — 진행 방향으로 저알파 fringe dab */
@@ -89,6 +94,7 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   dynamicHue: false,
   strokeBlend: "buildup",
   washOpacity: 1,
+  opacityAsDilution: false,
   wetEdge: 0,
   fringe: 0,
   grainLift: false,

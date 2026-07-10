@@ -50,7 +50,9 @@ uniform vec4 u_color;       // rgb(0..1) + alpha
 out vec4 frag;
 void main() {
   vec4 t = texture(u_tip, v_uv);
-  float a = t.a * u_color.a;
+  // u_color.a는 1을 넘을 수 있다(수채: 팁 플래토 0.94×필압을 뚫고 내부를 포화시키는 부스트).
+  // premultiplied 저장이라 a>1이면 색이 왜곡되므로 반드시 여기서 클램프.
+  float a = min(1.0, t.a * u_color.a);
   // 종이 결 — 두 모드(u_grainLift로 선택):
   //  · 침식(수채 등): 골짜기에서 안료가 빠진다(알파 ↓). 계수 0.5(0.85는 붓결 위장 실측).
   //  · 백화(유화): 알파는 유지하고 색에 흰 캔버스가 배어난다 — 알파 침식이면 겹친 획이
@@ -244,7 +246,10 @@ export class WebGL2Backend implements RendererBackend {
       const tex = gl.createTexture()!;
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      // 밉맵 필수 — 팁(128px+)을 얇은 dab(수 px)로 축소할 때 LINEAR만으로는 4텍셀
+      // 샘플이라 가장자리가 픽셀로 튄다(유화 얇은 획 재깅, 2026-07-10 사용자 실측).
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -280,7 +285,8 @@ export class WebGL2Backend implements RendererBackend {
       tex = gl.createTexture()!;
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, makeTipHighlightCanvas(kind));
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.generateMipmap(gl.TEXTURE_2D); // 스트릭 맵도 축소 앨리어싱 동일(얇은 획 흰 점 튐)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);

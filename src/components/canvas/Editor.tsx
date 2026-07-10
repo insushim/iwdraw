@@ -330,18 +330,13 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             {panelOpen ? "▸" : "◂"}
           </button>
           {panelOpen && (
-            // 넓은 화면(xl+)에선 2열로 펼쳐 색·굵기·마법도구·레이어를 스크롤 없이 한눈에.
-            // 좁은 화면은 기존대로 1열(md) / 가로 스크롤(모바일). 2열 wrapper는 모바일에서
-            // contents로 사라져 원래 1줄 흐름을 유지한다.
-            <div className="flex shrink-0 gap-2 overflow-y-auto max-md:overflow-x-auto md:w-[264px] md:flex-col md:overflow-x-hidden xl:w-[500px] xl:flex-row xl:overflow-y-hidden">
-              <div className="flex shrink-0 flex-col gap-2 max-md:contents xl:flex-1 xl:overflow-y-auto">
-                <ColorPalette />
-                <BrushControls />
-              </div>
-              <div className="flex shrink-0 flex-col gap-2 max-md:contents xl:flex-1 xl:overflow-y-auto">
-                <ActionRail />
-                <LayerPanel />
-              </div>
+            // 우측 패널은 모든 화면에서 1열 — 2열(xl)은 시선이 갈라져 불편(2026-07-10
+            // 사용자 실측). 모바일은 기존대로 가로 스크롤 1줄(contents로 흐름 유지).
+            <div className="flex shrink-0 gap-1.5 overflow-y-auto max-md:overflow-x-auto md:w-[264px] md:flex-col md:overflow-x-hidden">
+              <ColorPalette />
+              <BrushControls />
+              <ActionRail />
+              <LayerPanel />
             </div>
           )}
         </div>

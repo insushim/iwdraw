@@ -17,7 +17,7 @@ export function ColorPalette() {
   const palette = cvd ? PALETTE_CVD : PALETTE_24;
 
   return (
-    <div className="rounded-card bg-paper p-3 shadow-soft">
+    <div className="rounded-card bg-paper p-2.5 shadow-soft">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
@@ -144,7 +144,7 @@ function HsvPicker({ value, onChange }: { value: RGB; onChange: (c: RGB) => void
   const dotY = 50 + Math.sin(hRad) * s * 48;
 
   return (
-    <div className="mt-3 space-y-2.5 rounded-2xl bg-cream p-3">
+    <div className="mt-2 space-y-2 rounded-2xl bg-cream p-2.5">
       <div className="relative mx-auto h-44 w-44 touch-none">
         <canvas
           ref={canvasRef}

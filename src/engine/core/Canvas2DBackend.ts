@@ -105,7 +105,9 @@ export class Canvas2DBackend implements RendererBackend {
       const stamp = this.tinted(this.ctx.tip, color);
       const s = dab.size;
       target.save();
-      target.globalAlpha = dab.alpha;
+      // 수채는 팁 플래토 포화용으로 alpha>1을 보낼 수 있다 — globalAlpha에 1 초과
+      // 대입은 "무시"(이전 값 유지)라 반드시 클램프
+      target.globalAlpha = Math.min(1, dab.alpha);
       if (eraser) {
         target.globalCompositeOperation = "destination-out";
       } else if (this.ctx.composite === "lighter" && !this.ctx.wash) {

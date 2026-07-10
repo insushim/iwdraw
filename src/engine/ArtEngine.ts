@@ -328,7 +328,10 @@ export class ArtEngine {
       color: this.settings.color,
       paperGrain: brush.cfg.paperGrain,
       wash,
-      strokeOpacity: wash ? clamp(brush.cfg.washOpacity * this.settings.opacity, 0, 1) : 1,
+      // opacityAsDilution(수채): 진하기는 브러시가 색 희석으로 소비 — 알파는 1 유지(겹침 수렴)
+      strokeOpacity: wash
+        ? clamp(brush.cfg.washOpacity * (brush.cfg.opacityAsDilution ? 1 : this.settings.opacity), 0, 1)
+        : 1,
       wetEdge: brush.cfg.wetEdge,
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,
@@ -707,7 +710,9 @@ export class ArtEngine {
       color: meta.color,
       paperGrain: brush.cfg.paperGrain,
       wash: remoteWash,
-      strokeOpacity: remoteWash ? clamp(brush.cfg.washOpacity * meta.opacity, 0, 1) : 1,
+      strokeOpacity: remoteWash
+        ? clamp(brush.cfg.washOpacity * (brush.cfg.opacityAsDilution ? 1 : meta.opacity), 0, 1)
+        : 1,
       wetEdge: brush.cfg.wetEdge,
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,

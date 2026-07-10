@@ -43,7 +43,7 @@ export function BrushControls() {
   };
 
   return (
-    <div className="rounded-card bg-paper p-3 shadow-soft">
+    <div className="rounded-card bg-paper p-2.5 shadow-soft">
       <div className="flex items-center gap-3">
         <div
           className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-cream"
@@ -103,7 +103,7 @@ export function BrushControls() {
         </div>
       </div>
 
-      <label className="mt-3 block text-sm text-ink-soft">
+      <label className="mt-2 block text-sm text-ink-soft">
         진하기 <span className="font-semibold text-ink">{Math.round(opacity * 100)}%</span>
         <input
           type="range"
@@ -117,7 +117,7 @@ export function BrushControls() {
       </label>
 
       {mode === "watercolor" && (
-        <label className="mt-3 block text-sm text-ink-soft">
+        <label className="mt-2 block text-sm text-ink-soft">
           💧 물 양 <span className="font-semibold text-ink">{Math.round(water * 100)}%</span>
           <input
             type="range"
@@ -131,7 +131,7 @@ export function BrushControls() {
         </label>
       )}
 
-      <label className="mt-3 block text-sm text-ink-soft">
+      <label className="mt-2 block text-sm text-ink-soft">
         ✋ 손떨림 보정 <span className="font-semibold text-ink">{stabilize}</span>
         <input
           type="range"
@@ -145,7 +145,7 @@ export function BrushControls() {
       </label>
 
       {/* 필압: 펜 실필압 + 마우스/손가락 속도 시뮬. 필압이 안 오는 기기(웨일북 등)는 끄면 균일 획 */}
-      <div className="mt-3 flex items-center justify-between text-sm text-ink-soft">
+      <div className="mt-2 flex items-center justify-between text-sm text-ink-soft">
         <span>✍️ 필압 (누르는 세기·속도 반영)</span>
         <button
           onClick={togglePressure}

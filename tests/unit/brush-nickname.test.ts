@@ -30,7 +30,7 @@ describe("BrushBase dab 스트림", () => {
     }
   });
 
-  it("수채붓은 물 양이 많을수록 넓고 옅게 찍힌다", () => {
+  it("수채붓은 물 양이 많을수록 넓고 옅게(색 희석) 찍힌다", () => {
     const dry = createBrush("watercolor", mulberry32(2)).begin(
       { x: 5, y: 5, pressure: 1, t: 0 },
       { ...SETTINGS, waterAmount: 0 },
@@ -40,7 +40,17 @@ describe("BrushBase dab 스트림", () => {
       { ...SETTINGS, waterAmount: 1 },
     )[0];
     expect(wet.size).toBeGreaterThan(dry.size);
-    expect(wet.alpha).toBeLessThan(dry.alpha);
+    // 옅음은 알파가 아니라 색 희석(흰색 혼합)이다 — 알파(<1) 방식은 겹침마다
+    // darken이 한 스텝씩 어두워져 획 경계 얼룩을 만든다(2026-07-10 사용자 실측).
+    // 물이 많을수록 dab 색이 원색에서 흰색 쪽으로 멀어져야 한다.
+    expect(wet.color).toBeDefined();
+    expect(dry.color).toBeDefined();
+    const dist = (c: { r: number; g: number; b: number }) =>
+      255 * 3 - c.r - c.g - c.b; // 흰색에서 먼 정도(진하기)
+    expect(dist(wet.color!)).toBeLessThan(dist(dry.color!));
+    // 겹침 수렴을 위해 획 내부 알파는 팁 플래토를 뚫고 1로 포화(부스트 ≥1)
+    expect(wet.alpha).toBeGreaterThanOrEqual(1);
+    expect(dry.alpha).toBeGreaterThanOrEqual(1);
   });
 
   it("무지개붓은 이동에 따라 색이 바뀐다", () => {

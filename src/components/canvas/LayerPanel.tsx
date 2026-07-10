@@ -31,7 +31,7 @@ export function LayerPanel() {
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="pressable flex w-full items-center gap-2 rounded-card px-3 py-2.5 font-display text-base text-ink"
+        className="pressable flex w-full items-center gap-2 rounded-card px-3 py-2 font-display text-base text-ink"
       >
         <Icon name="layers" className="h-6 w-6" />
         <span>레이어</span>
