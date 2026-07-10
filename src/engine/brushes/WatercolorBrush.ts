@@ -38,9 +38,11 @@ export class WatercolorBrush extends BrushBase {
         // glaze: 겹침이 multiply로 점진 누적, 획³에서 포화(전수검수: 원본은 6~8겹 포화).
         // darken(min) 수렴=겹침 0(플랫 마커), 순수 multiply=무한 어두워짐(얼룩) — 둘 다 실측 실패.
         composite: "glaze",
-        // 종이결 이빨(깊은 골에서만 안료 빠짐) — buildup 누적이라 은은히 배어난다.
-        // 0.18+는 포화 워시에서 점 노이즈(실측), 0.06은 내부가 마커처럼 매끈(codex 비전 3차)
-        paperGrain: 0.12,
+        // 종이결 이빨 — ⚠️ cotton 결은 1~2px 초고주파라 buildup 누적(획 내 6겹+)에서
+        // 침식이 복리로 쌓여 "점" 반점이 된다(0.12, 물양 낮은 진한 칠에서 사용자 실측
+        // 2026-07-10 "점이 보여 거슬려"). codex의 "내부 매끈=마커" 지적보다 사용자 체감
+        // 우선 — 내부 질감은 washCloud 구름·붓결 streaks·안료고갈 드리프트가 담당.
+        paperGrain: 0.04,
         strokeBlend: "buildup",
         washOpacity: 1,
         opacityAsDilution: true, // 진하기 슬라이더도 알파가 아니라 희석으로(아래 makeDab)
