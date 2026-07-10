@@ -4,10 +4,10 @@ test.use({ launchOptions: { args: ["--enable-unsafe-swiftshader"] } });
 
 /*
  * 수채 겹침 칠 얼룩 회귀 테스트(2026-07-09 사용자 실측: 나무 수관이 얼룩덜룩).
- * 원인 = multiply 합성: 획이 겹칠 때마다 곱셈으로 어두워져 동심원 단차(얼룩).
- * 수정 = darken(채널별 min): 같은 색 겹침은 그 색으로 수렴 → 균일 워시.
- * 낙서 8회 겹침 후 획 내부 픽셀의 채널 표준편차를 단언(multiply였을 때 G std 71 실측,
- * darken 26 실측 — 임계 45).
+ * 순수 multiply = 겹칠 때마다 무한히 어두워져 동심원 단차(얼룩, G std 71 실측).
+ * darken(min) 수렴 = 얼룩 0이지만 겹침 효과도 0 → 플랫 마커(2026-07-10 사용자 실측).
+ * 현행 glaze = min(기존, max(기존×획, 획²)): 겹침 1단계만 진해지고 2겹부터 포화 —
+ * 겹침은 보이되(1겹/2겹 두 톤) 폭주는 차단(G std 16 실측, 임계 45 유지).
  */
 test("수채 겹침 칠이 얼룩(동심원 단차) 없이 균일하다", async ({ page }) => {
   await page.goto("/draw?mode=watercolor&backend=gl");

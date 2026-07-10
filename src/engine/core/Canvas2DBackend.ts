@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
-import { applyPaperGrain, applyPaperGrainLift, applyWetEdge } from "./paper";
+import { applyPaperGrain, applyPaperGrainLift, applyWetEdge, compositeGlaze } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -143,6 +143,10 @@ export class Canvas2DBackend implements RendererBackend {
       this.grain(this.liveBuf);
       src = this.liveBuf.canvas;
     }
+    if (this.ctx.composite === "glaze") {
+      compositeGlaze(target, src, this.width, this.height);
+      return;
+    }
     target.save();
     target.globalAlpha = this.ctx.strokeOpacity; // wash 획 전체 불투명도(프리뷰=최종)
     target.globalCompositeOperation =
@@ -181,6 +185,11 @@ export class Canvas2DBackend implements RendererBackend {
     }
     if (this.ctx.paperGrain > 0) this.grain(this.strokeCtx);
     // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영(라이브 프리뷰와 동일해야 함)
+    if (this.ctx.composite === "glaze") {
+      compositeGlaze(this.layerCtx, this.strokeBuf, this.width, this.height);
+      this.ctx = null;
+      return;
+    }
     this.layerCtx.save();
     this.layerCtx.globalAlpha = this.ctx.strokeOpacity;
     this.layerCtx.globalCompositeOperation =

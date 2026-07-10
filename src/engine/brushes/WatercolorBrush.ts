@@ -20,9 +20,10 @@ export class WatercolorBrush extends BrushBase {
         // 필압→알파 변동 최소화 — 획마다 알파가 다르면 겹침 수렴이 깨져 경계 단차가 남는다
         alphaPressure: 0.08,
         minSizeRatio: 0.5,
-        // darken(채널별 min): 같은 색·같은 농도의 겹침은 그 색으로 정확히 "수렴"한다.
-        // multiply는 겹칠 때마다 어두워져 얼룩(2026-07-09 실측, e2e watercolor-mottle).
-        composite: "darken",
+        // glaze: 겹침 1단계는 multiply로 진해지고(겹침이 "보인다"), 2겹부터는 획²에서
+        // 포화(얼룩 폭주 차단). darken(min) 수렴은 겹침 효과가 0이라 플랫한 마커로
+        // 읽히고(2026-07-10 사용자 실측), 순수 multiply는 무한히 어두워져 얼룩(07-09).
+        composite: "glaze",
         paperGrain: 0.07, // 모래알 반점 억제 — 0.18도 클로즈업에서 점 노이즈로 읽힘(2026-07-10 2차). 수채감은 농담 구름·가장자리 스밈이 담당
         strokeBlend: "wash", // 획 내부 균일(겹침 스캘럽 제거)
         // ⚠️ washOpacity·알파로 옅음을 만들면 안 된다 — 획 전체 알파가 1 미만이면

@@ -24,7 +24,15 @@ export type TipKind =
   | "glow";
 
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
-export type DabComposite = "source-over" | "multiply" | "darken" | "lighter" | "destination-out";
+export type DabComposite =
+  | "source-over"
+  | "multiply"
+  | "darken"
+  | "lighter"
+  | "destination-out"
+  /** 수채 글레이징: 겹침 1단계는 multiply로 진해지고, 2겹부터는 바닥(획색²)에서 포화.
+   * result = min(기존, max(기존×획, 획²)) — 겹침이 "보이되" 얼룩 폭주는 차단. */
+  | "glaze";
 
 export interface BrushConfig {
   id: BrushId;

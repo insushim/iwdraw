@@ -357,6 +357,8 @@ export function drawPaperTint(
  * 멀티 캔버스 동시 렌더가 생기면 백엔드 인스턴스 필드로 옮길 것. */
 let wetTmp: CanvasRenderingContext2D | null = null;
 let wetBand: CanvasRenderingContext2D | null = null;
+let glzSnap: CanvasRenderingContext2D | null = null;
+let glzFloor: CanvasRenderingContext2D | null = null;
 
 function scratch(
   ref: CanvasRenderingContext2D | null,
@@ -425,3 +427,43 @@ export function applyWetEdge(
   ctx.restore();
 }
 
+
+/**
+ * 수채 글레이징 합성: result = min(기존, max(기존 × 획, 획²)).
+ * · 마른 워시 위에 새 워시가 겹치면 multiply로 "한 단계" 진해진다(겹침이 보인다 —
+ *   darken(min) 수렴은 겹침 효과가 0이라 플랫한 마커로 읽힘, 2026-07-10 사용자 실측).
+ * · 2겹(획²)보다 어두워지지는 않는다(lighten 바닥) — 낙서 겹침의 얼룩 폭주 차단.
+ * · 기존보다 밝아지지도 않는다(darken 스냅샷) — 어두운 색 위에 밝은 워시를 얹어도
+ *   바닥값이 기존을 지우지 않는다.
+ * 프리뷰(presentStroke)와 최종(endStroke)이 같은 함수를 써야 한다(프리뷰=최종).
+ */
+export function compositeGlaze(
+  target: CanvasRenderingContext2D,
+  src: CanvasImageSource,
+  width: number,
+  height: number,
+): void {
+  glzSnap = scratch(glzSnap, width, height);
+  glzFloor = scratch(glzFloor, width, height);
+
+  // 기존 dst 스냅샷(밝아짐 방지 클램프용)
+  glzSnap.clearRect(0, 0, width, height);
+  glzSnap.drawImage(target.canvas, 0, 0);
+
+  // 바닥 = 획² (실루엣 내부 자기 multiply — 2겹 색)
+  glzFloor.clearRect(0, 0, width, height);
+  glzFloor.drawImage(src, 0, 0);
+  glzFloor.globalCompositeOperation = "multiply";
+  glzFloor.drawImage(src, 0, 0);
+  glzFloor.globalCompositeOperation = "source-over";
+
+  target.save();
+  target.setTransform(1, 0, 0, 1, 0, 0);
+  target.globalCompositeOperation = "multiply"; // ① 글레이즈(겹침 어두워짐)
+  target.drawImage(src, 0, 0);
+  target.globalCompositeOperation = "lighten"; // ② 획²보다 어두우면 끌어올림(포화)
+  target.drawImage(glzFloor.canvas, 0, 0);
+  target.globalCompositeOperation = "darken"; // ③ 기존보다 밝아지지는 않게
+  target.drawImage(glzSnap.canvas, 0, 0);
+  target.restore();
+}

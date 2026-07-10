@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, makeTipHighlightCanvas, type RendererBackend, type StrokeContext } from "./backend";
-import { applyWetEdge, paperGrainTile, type PaperKind } from "./paper";
+import { applyWetEdge, compositeGlaze, paperGrainTile, type PaperKind } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -425,6 +425,11 @@ export class WebGL2Backend implements RendererBackend {
     if (!this.ctx) return;
     this.blitStrokeToScreen();
     const c = this.ctx.composite;
+    if (c === "glaze") {
+      // 수채 글레이징(겹침 1단계 진해짐 + 포화) — 프리뷰=최종(endStroke와 같은 함수)
+      compositeGlaze(target, this.glCanvas, this.width, this.height);
+      return;
+    }
     target.save();
     target.globalAlpha = this.ctx.strokeOpacity; // wash 획 전체 불투명도(프리뷰=최종)
     target.globalCompositeOperation =
@@ -463,6 +468,11 @@ export class WebGL2Backend implements RendererBackend {
     }
 
     const layerCtx = (this.ctx.layerCanvas as HTMLCanvasElement).getContext("2d")!;
+    if (this.ctx.composite === "glaze") {
+      compositeGlaze(layerCtx, src, this.width, this.height);
+      this.ctx = null;
+      return;
+    }
     layerCtx.save();
     layerCtx.globalAlpha = this.ctx.strokeOpacity;
     if (this.ctx.composite === "destination-out") {
