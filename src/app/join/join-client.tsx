@@ -7,7 +7,7 @@ import { ArtonLogo } from "@/components/arton-logo";
 import { CLASS_CODE_LENGTH, hasHangul, isValidClassCode, normalizeClassCode } from "@/lib/class-code";
 import { suggestNickname, validateNickname } from "@/lib/nickname";
 import { joinClass } from "@/lib/join-client";
-import { getRememberedNickname } from "@/lib/student-session";
+import { getRememberedClassCode, getRememberedNickname } from "@/lib/student-session";
 import { hasBackend } from "@/lib/backend";
 
 type Step = "code" | "nickname";
@@ -25,6 +25,17 @@ export function JoinClient() {
   // 이 기기에서 이 학급에 마지막으로 쓴 별명 — 있으면 기본값(같은 학생으로 이어짐).
   // 별명을 까먹고 매번 새로 만들면 학급 학생 수가 계속 늘어난다(2026-07-09 보고)
   const [savedNick, setSavedNick] = useState<string | null>(null);
+
+  // 마운트 후 1회: URL로 넘어온 코드가 없으면 이 기기에서 마지막에 쓴 학급 코드를
+  // 입력란에 자동으로 채운다(웨일북 재입장 편의 — 매번 6자리 재입력 방지).
+  // localStorage는 서버에 없어 hydration 불일치를 피하려 초기값이 아닌 effect에서 읽는다.
+  useEffect(() => {
+    if (params.get("code")) return; // URL 코드가 우선
+    const remembered = getRememberedClassCode();
+    if (remembered && !code) setCode(normalizeClassCode(remembered));
+    // 마운트 시 1회만 — 사용자가 지운 코드를 다시 채우지 않는다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (step !== "nickname") return;
@@ -75,6 +86,13 @@ export function JoinClient() {
                 autoFocus
                 aria-label="학급 코드"
                 maxLength={CLASS_CODE_LENGTH}
+                // 브라우저 암호 자동완성/저장 제안 억제 — 학급 코드는 자격증명이 아니다
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                data-1p-ignore
+                data-lpignore="true"
+                data-form-type="other"
                 className="mt-6 w-full rounded-card border-2 border-cream-deep bg-cream px-5 py-4 text-center font-display text-3xl tracking-[0.3em] text-ink placeholder:tracking-normal placeholder:text-ink-faint focus:border-sky"
               />
               {imeWarn && (
@@ -108,6 +126,13 @@ export function JoinClient() {
                   aria-label="닉네임"
                   maxLength={12}
                   autoFocus
+                  // 별명은 개인정보·자격증명이 아니다 — 이름/암호 자동완성 제안 억제
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-form-type="other"
                   className="w-full rounded-card border-2 border-cream-deep bg-cream px-5 py-3 text-center font-display text-xl text-ink focus:border-sky"
                 />
                 <button

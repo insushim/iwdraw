@@ -202,26 +202,32 @@ export function StudentGallery() {
 
       {big && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-ink/80 p-6"
+          className="fixed inset-0 z-50 grid place-items-center bg-ink/80 p-3 sm:p-6"
           onClick={() => setBig(null)}
           role="dialog"
           aria-modal="true"
         >
           <div
-            className="max-h-[90dvh] max-w-4xl overflow-hidden rounded-bubble bg-paper p-4 shadow-lift"
+            className="max-h-[92dvh] w-full max-w-4xl overflow-auto rounded-bubble bg-paper p-3 shadow-lift sm:p-4"
             onClick={(e) => e.stopPropagation()}
           >
             {bigUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={bigUrl} alt={`${big.nickname} 작품`} className="max-h-[75dvh] w-auto rounded-card" />
+              <img
+                src={bigUrl}
+                alt={`${big.nickname} 작품`}
+                className="mx-auto max-h-[70dvh] w-auto max-w-full rounded-card sm:max-h-[78dvh]"
+              />
             ) : (
-              <div className="grid h-64 w-96 place-items-center text-ink-faint">불러오는 중…</div>
+              <div className="mx-auto grid h-56 w-full max-w-sm place-items-center text-ink-faint sm:h-64">
+                불러오는 중…
+              </div>
             )}
-            <div className="mt-3 flex items-center justify-between px-1">
-              <span className="font-display text-lg text-ink">{big.nickname}</span>
+            <div className="mt-3 flex items-center justify-between gap-2 px-1">
+              <span className="truncate font-display text-lg text-ink">{big.nickname}</span>
               <button
                 onClick={() => setBig(null)}
-                className="pressable rounded-card bg-ink px-5 py-2 font-display text-white"
+                className="pressable shrink-0 rounded-card bg-ink px-5 py-2 font-display text-white"
               >
                 닫기
               </button>

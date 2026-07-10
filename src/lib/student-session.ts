@@ -81,3 +81,30 @@ export function rememberNickname(code: string, nickname: string): void {
     // 저장 불가(프라이빗 모드 등) — 기억만 포기, 입장은 정상
   }
 }
+
+/* ── 이 기기에서 마지막으로 입장한 학급 코드 기억(localStorage — 탭 닫아도 유지) ──
+ * 웨일북 등 공유 기기는 보통 한 학급이 쓰므로, 재입장 때 6자리 코드를 매번 다시
+ * 치지 않도록 마지막 코드를 저장해 입장 화면 기본값으로 채운다(2026-07-09 보고). */
+
+const CODE_KEY = "arton.lastCode.v1";
+
+/** 이 기기에서 마지막에 입장한 학급 코드(없으면 null) */
+export function getRememberedClassCode(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const c = localStorage.getItem(CODE_KEY);
+    return typeof c === "string" && c.length > 0 ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 입장 성공 시 호출 — 이 기기의 마지막 학급 코드 저장 */
+export function rememberClassCode(code: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CODE_KEY, code);
+  } catch {
+    // 저장 불가(프라이빗 모드 등) — 기억만 포기, 입장은 정상
+  }
+}

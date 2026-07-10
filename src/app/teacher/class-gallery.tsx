@@ -29,6 +29,9 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [size, setSize] = useGallerySize();
+  // 클릭 시 원본(잘리지 않은 전체 이미지) 크게 보기
+  const [big, setBig] = useState<ArtworkRow | null>(null);
+  const [bigUrl, setBigUrl] = useState<string | null>(null);
 
   const askDelete = async (a: ArtworkRow) => {
     if (confirmDel !== a.id) {
@@ -80,6 +83,22 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
     },
     [],
   );
+
+  // 크게 보기 열릴 때 원본 이미지 로드(썸네일이 아닌 image_path)
+  useEffect(() => {
+    if (!big) {
+      setBigUrl(null);
+      return;
+    }
+    // 연달아 다른 작품을 클릭해도 늦게 도착한 응답이 최신 선택을 덮지 않게 가드
+    let stale = false;
+    void signedUrl(big.image_path).then((u) => {
+      if (!stale) setBigUrl(u ?? urls[big.id] ?? null);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [big, urls]);
 
   const dayGroups = groupByDay(items, (a) => a.created_at);
 
@@ -199,14 +218,19 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
             <div className={`grid gap-3 ${GALLERY_GRID[size]}`}>
               {g.items.map((a) => (
             <div key={a.id} className="group relative overflow-hidden rounded-card bg-paper shadow-soft">
-              <div className="aspect-square bg-cream">
+              <button
+                type="button"
+                onClick={() => setBig(a)}
+                aria-label={`${a.nickname ?? "학생"} 작품 크게 보기`}
+                className="block aspect-square w-full cursor-zoom-in bg-cream"
+              >
                 {urls[a.id] ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={urls[a.id]} alt={`${a.nickname ?? "학생"} 작품`} className="h-full w-full object-cover" />
                 ) : (
                   <div className="h-full w-full animate-pulse bg-cream-deep" />
                 )}
-              </div>
+              </button>
               {/* 삭제 임박 배지(30일 이내) */}
               {(() => {
                 const d =
@@ -281,6 +305,42 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
             </div>
           </section>
         ))
+      )}
+
+      {big && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-ink/80 p-3 sm:p-6"
+          onClick={() => setBig(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="max-h-[92dvh] w-full max-w-4xl overflow-auto rounded-bubble bg-paper p-3 shadow-lift sm:p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {bigUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={bigUrl}
+                alt={`${big.nickname ?? "학생"} 작품`}
+                className="mx-auto max-h-[70dvh] w-auto max-w-full rounded-card sm:max-h-[78dvh]"
+              />
+            ) : (
+              <div className="mx-auto grid h-56 w-full max-w-sm place-items-center text-ink-faint sm:h-64">
+                불러오는 중…
+              </div>
+            )}
+            <div className="mt-3 flex items-center justify-between gap-2 px-1">
+              <span className="truncate font-display text-lg text-ink">{big.nickname ?? "학생"}</span>
+              <button
+                onClick={() => setBig(null)}
+                className="pressable shrink-0 rounded-card bg-ink px-5 py-2 font-display text-white"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
