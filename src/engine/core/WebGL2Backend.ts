@@ -47,6 +47,7 @@ uniform float u_grainLift;  // 1=결을 색 백화로(불투명 유지, 유화) 
 uniform sampler2D u_tipHl;  // 붓 방향 밝은 스트릭 맵(팁 UV) — 마른 붓털 하이라이트
 uniform float u_streaks;    // 스트릭 강도 0~1
 uniform float u_cloud;      // 수채 농담 구름(저주파, 캔버스 고정) 강도 0~1
+uniform float u_edgeNoise;  // 가장자리 요철(알파<1 폴오프 영역만 침식, 캔버스 고정) 0~1
 uniform vec4 u_color;       // rgb(0..1) + alpha
 out vec4 frag;
 void main() {
@@ -60,6 +61,15 @@ void main() {
   //    진해져 불투명 물감이 아니라 반투명 마커로 읽힌다(i-scream 비교 사용자 실측 2026-07-06).
   float g = texture(u_paper, v_px / 256.0).a * u_grain;
   a *= 1.0 - g * 0.5 * (1.0 - u_grainLift);
+  // 가장자리 요철(수채 스밈): 팁 폴오프(알파<1) 영역만 캔버스 고정 노이즈로 침식.
+  // 내부(알파=1)는 인자가 1이라 불변 → 겹침 darken(min) 수렴이 유지된다(얼룩 0 원칙).
+  // 딱딱한 원형 페이드가 종이 결을 따라 울퉁불퉁 스며든 실루엣이 된다(i-scream 대비 실측).
+  if (u_edgeNoise > 0.0) {
+    float e1 = texture(u_paper, v_px / 1400.0).a;          // ~15px 요철(스밈 덩어리)
+    float e2 = texture(u_paper, v_px / 520.0 + vec2(0.71, 0.23)).a; // ~4px 잔결
+    float en = clamp((e1 * 0.7 + e2 * 0.3) * 1.8, 0.0, 1.0);
+    a *= mix(1.0, en, u_edgeNoise * (1.0 - a));
+  }
   // 임파스토 셰이드(t.r, 1=중립): 방향을 색 밝기로 "선택"한다(step) —
   // ① 크로스페이드(가중 평균)는 중간 회색에서 ±상쇄 널포인트(실측),
   // ② 팁에 밝은 밴드를 섞으면 모든 색이 회색빛(검정 실측). 둘 다 금지.
@@ -70,14 +80,16 @@ void main() {
   // 붓 방향 밝은 스트릭(마른 붓털 하이라이트) — 밝은 값은 wash(MAX)에서 살아남아
   // 덧칠 내부에도 붓결이 유지된다(어두운 골은 MAX가 지움 — i-scream 비교 실측)
   float hl = texture(u_tipHl, v_uv).a * u_streaks;
-  // 백화 모드의 밝은 색: 결 이랑 흰색 혼입 + 스트릭. 합산 캡 0.3 — 0.5는 채도 높은
+  // 백화 모드의 밝은 색: 결 이랑 흰색 혼입 + 스트릭. 합산 캡 0.34 — 0.5는 채도 높은
   // 색(로열블루)이 분필처럼 바랜다("흰색 섞은 듯", 2026-07-06 사용자 실측). 직조는
-  // 획 전체에 상시 깔리는 항이라 특히 낮게(0.32) — 스트릭은 국소라 좀 더 허용.
-  vec3 darkened = mix(col * f, vec3(1.0), min(0.3, g * 0.32 * u_grainLift + hl * 0.62));
+  // 획 전체에 상시 깔리는 항이라 특히 낮게(0.4) — 스트릭은 국소라 좀 더 허용.
+  // (0.3/0.32는 i-scream 대비 디테일 부족, 2026-07-10 사용자 실측 → 캡 안에서 소폭 상향)
+  vec3 darkened = mix(col * f, vec3(1.0), min(0.34, g * 0.4 * u_grainLift + hl * 0.62));
   // 어두운 색 하이라이트는 상한 필수 — 깊은 골(f=0.6)에 비례 계수만 쓰면 골마다
-  // 37% 백색 혼입 → 검정이 회색빛 + 흰 줄 스팸(실기기 실측). 0.16 캡이면
-  // 결이 보이면서 검정은 검정으로 남는다(백화·스트릭 기여도 같은 캡 안).
-  float lift = min(0.16, (1.0 - f) * 0.5 + g * 0.3 * u_grainLift + hl * 0.5) * dk;
+  // 37% 백색 혼입 → 검정이 회색빛 + 흰 줄 스팸(실기기 실측). 0.2 캡이면
+  // 결이 보이면서 검정은 검정으로 남는다(0.16은 i-scream 대비 디테일 부족 실측,
+  // 백화·스트릭 기여도 같은 캡 안).
+  float lift = min(0.2, (1.0 - f) * 0.5 + g * 0.3 * u_grainLift + hl * 0.5) * dk;
   vec3 lightened = mix(col, vec3(1.0), lift);
   col = mix(darkened, lightened, step(0.6, dk));
   // 수채 농담 구름 — 종이가 물을 먹는 정도의 저주파 요동(옅은 자리/안료 고임).
@@ -357,6 +369,10 @@ export class WebGL2Backend implements RendererBackend {
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_grainLift"), this.ctx.grainLift ? 1 : 0);
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_streaks"), eraser ? 0 : this.ctx.streaks);
     gl.uniform1f(gl.getUniformLocation(this.dabProg, "u_cloud"), eraser ? 0 : this.ctx.washCloud);
+    gl.uniform1f(
+      gl.getUniformLocation(this.dabProg, "u_edgeNoise"),
+      eraser ? 0 : this.ctx.edgeNoise,
+    );
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform2f(gl.getUniformLocation(this.dabProg, "u_resolution"), this.width, this.height);
     const uCenter = gl.getUniformLocation(this.dabProg, "u_center");

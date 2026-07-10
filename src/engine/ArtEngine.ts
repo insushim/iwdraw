@@ -262,7 +262,12 @@ export class ArtEngine {
   setBrush(id: BrushId): void {
     this.cancelPendingStamp(); // 붓/도구 전환 = 떠 있던 배치 취소
     this.brushId = id;
+    // 종이는 "마지막 비지우개 브러시" 기준 — 지우개로 바꿔도 화선지가 유지된다
+    const wasHanji = this.paperBrushId === "inkbrush";
+    if (id !== "eraser") this.paperBrushId = id;
+    if (wasHanji !== (this.paperBrushId === "inkbrush")) this.requestComposite(); // 종이(틴트) 즉시 갱신
   }
+  private paperBrushId: BrushId = "pencil";
   setColor(rgb: RGB | string): void {
     this.settings.color = typeof rgb === "string" ? hexToRgb(rgb) : rgb;
   }
@@ -309,8 +314,10 @@ export class ArtEngine {
   }
 
   /* ── 스트로크 파이프라인 ── */
-  /** 모드가 캔버스(종이)를 결정 — 유화=린넨천, 수채=수채용지, 그 외=매끈한 도화지 */
+  /** 모드가 캔버스(종이)를 결정 — 유화=린넨천, 수채=수채용지, 그 외=매끈한 도화지.
+   * 예외: 붓펜은 모드와 무관하게 화선지(먹이 스미는 종이). */
   private paperKindForMode(): PaperKind {
+    if (this.paperBrushId === "inkbrush") return "hanji";
     return this.mode === "oil" ? "linen" : this.mode === "watercolor" ? "cotton" : "smooth";
   }
 
@@ -336,6 +343,7 @@ export class ArtEngine {
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,
       washCloud: brush.cfg.washCloud,
+      edgeNoise: brush.cfg.edgeNoise,
       paperKind: this.paperKindForMode(),
     };
   }
@@ -718,6 +726,7 @@ export class ArtEngine {
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,
       washCloud: brush.cfg.washCloud,
+      edgeNoise: brush.cfg.edgeNoise,
       paperKind: this.paperKindForMode(),
     };
     this.cm.backend.beginStroke(ctx);

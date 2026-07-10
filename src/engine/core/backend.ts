@@ -35,6 +35,11 @@ export interface StrokeContext {
    * 캔버스 고정·결정론이라 겹침 수렴(darken min)을 깨지 않는다.
    */
   washCloud: number;
+  /**
+   * 가장자리 요철 강도 0~1 — 알파<1인 팁 폴오프 영역만 캔버스 고정 노이즈로 침식(GL 전용).
+   * 수채 워시의 스며든 실루엣. 내부(알파=1)는 불변이라 겹침 수렴 유지.
+   */
+  edgeNoise: number;
 }
 
 /*
@@ -153,34 +158,23 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       break;
     }
     case "wet": {
-      // 수채: 균일한 워시 플래토 + granulation. rim(가장자리 안료 몰림)은 dab이 아니라
+      // 수채: 워시 플래토 + "넓은" 가장자리 폴오프. rim(가장자리 안료 몰림)은 dab이 아니라
       // 획 실루엣 기준이어야 하므로 endStroke의 applyWetEdge 후처리가 담당한다.
       // (dab에 rim을 베이크하면 wash(MAX) 누적에서 dab별 고리가 사슬로 남는다 — 실측)
-      // 플래토를 0.9까지 유지 — 0.82는 가장자리 페이드가 넓어 획이 번져 보인다(사용자 실측).
-      // 플래토 알파 0.8: 0.68은 washOpacity와 곱해져 진하기 100%에서도 너무 연함(실측)
+      // 폴오프 폭 주의: 수채는 dab.alpha ×1.35 부스트(내부 포화용) 후 셰이더가 1로
+      // 클램프하므로, 폴오프가 좁으면(0.9~1.0) 부스트가 페이드 대부분을 1로 밀어올려
+      // 딱딱한 스티커 테두리가 된다(2026-07-10 사용자 실측, i-scream 대비 "마커 덩어리").
+      // 플래토 0.55 + 0.55~1.0 페이드면 부스트 후에도 바깥 ~1/3이 부드럽게 스며든다.
+      // granulation 구멍(240개)은 제거 — 부스트·paperGrain과 겹쳐 모래알 반점으로 읽힘(실측).
       const g = ctx.createRadialGradient(r, r, 0, r, r, r);
       g.addColorStop(0, "rgba(255,255,255,0.94)");
-      g.addColorStop(0.9, "rgba(255,255,255,0.94)");
+      g.addColorStop(0.55, "rgba(255,255,255,0.94)");
+      g.addColorStop(0.78, "rgba(255,255,255,0.5)");
       g.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(r, r, r, 0, Math.PI * 2);
       ctx.fill();
-      // granulation: 미세 구멍(고정 시드 — 랜덤이면 로드마다 질감 밀도 요동)
-      let wetSeed = 97;
-      const wrand = () => {
-        wetSeed = (wetSeed * 1103515245 + 12345) & 0x7fffffff;
-        return wetSeed / 0x7fffffff;
-      };
-      ctx.globalCompositeOperation = "destination-out";
-      for (let i = 0; i < 240; i++) {
-        const a = wrand() * Math.PI * 2;
-        const rad = Math.sqrt(wrand()) * r * 0.92;
-        ctx.fillStyle = `rgba(0,0,0,${0.08 + wrand() * 0.2})`;
-        const s = 1 + wrand() * 2.2;
-        ctx.fillRect(r + Math.cos(a) * rad, r + Math.sin(a) * rad, s, s);
-      }
-      ctx.globalCompositeOperation = "source-over";
       break;
     }
     case "ink": {

@@ -71,6 +71,9 @@ export interface BrushConfig {
   opacityAsDilution: boolean;
   /** 수채 농담 구름(캔버스 고정 저주파 색 요동) 강도 0~1 — GL 전용 */
   washCloud: number;
+  /** 가장자리 요철 0~1 — 알파<1인 팁 폴오프 영역만 캔버스 고정 노이즈로 침식(수채 스밈).
+   * 내부(알파=1)는 불변이라 겹침 darken 수렴을 깨지 않는다 — GL 전용 */
+  edgeNoise: number;
   /** 획 실루엣 가장자리 안료 몰림 0~1(수채 wet edge) — endStroke 후처리 */
   wetEdge: number;
   /** 획 시작·끝의 마른 붓털 트레일 강도 0~1(유화) — 진행 방향으로 저알파 fringe dab */
@@ -99,6 +102,7 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   washOpacity: 1,
   opacityAsDilution: false,
   washCloud: 0,
+  edgeNoise: 0,
   wetEdge: 0,
   fringe: 0,
   grainLift: false,

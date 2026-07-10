@@ -4,6 +4,7 @@
  *   linen(유화)  = 씨실·날실 위브가 뚜렷한 캔버스천
  *   cotton(수채) = 위브 없는 셀룰로스 요철 수채용지
  *   smooth(스케치·색칠) = 매끈한 도화지(아주 은은)
+ *   hanji(붓펜)  = 화선지 — 흡수성 얼룩 + 닥나무 긴 섬유 가닥
  * 1) grainTile: 알파맵 — 결의 골짜기(안료가 덜 앉는 곳). dab 셰이더/endStroke에서
  *    스트로크에 "물감이 종이 결 위에 앉은" 질감을 만든다.
  * 2) tintTile: 표시용 종이 결 — compositeNow에서 흰 종이 위에 깔린다(내보내기엔 미포함).
@@ -11,7 +12,7 @@
 
 const TILE = 256;
 
-export type PaperKind = "linen" | "cotton" | "smooth";
+export type PaperKind = "linen" | "cotton" | "smooth" | "hanji";
 
 /** 타일 경계에서 이어지는(wrap) 밸류 노이즈 */
 function latticeNoise(size: number, cells: number, rand: () => number): Float32Array {
@@ -141,6 +142,53 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
       const n3 = latticeNoise(TILE, 190, rand);
       const f = new Float32Array(TILE * TILE);
       for (let i = 0; i < f.length; i++) f[i] = 0.65 * n2[i] + 0.35 * n3[i];
+      return f;
+    },
+  },
+  hanji: {
+    make() {
+      // 흡수성 얼룩 — 먹이 스미는 자리의 부드러운 요철 + 미세 입자.
+      // 침식(붓펜 paperGrain)이 이 필드를 쓰므로 cotton보다 살짝 큰 결로 스밈을 만든다.
+      const rand = Math.random;
+      const n1 = latticeNoise(TILE, 80, rand);
+      const n2 = latticeNoise(TILE, 150, rand);
+      const f = new Float32Array(TILE * TILE);
+      for (let i = 0; i < f.length; i++) f[i] = 0.55 * n1[i] + 0.45 * n2[i];
+      return f;
+    },
+    grainLo: 0.58,
+    grainHi: 0.88,
+    tintLo: 0.55,
+    tintHi: 0.9,
+    tintAlpha: 13,
+    tintGamma: 0.8,
+    tintSize: 512,
+    makeTint() {
+      // 화선지의 인상은 "긴 섬유"가 만든다 — 옅은 셀룰로스 바탕 위에
+      // 닥나무 섬유 가닥(임의 각도로 완만히 휘는 1px 궤적, 타일 wrap)을 얹는다.
+      // ⚠️ 절제 필수: 곡률·개수·강도가 크면 종이가 "곱슬 낙서로 더럽혀진" 것으로
+      // 읽힌다(2026-07-10 실측 — 90가닥·곡률 0.06·강도 0.7은 낙서장). 거의 직선, 은은하게.
+      const rand = Math.random;
+      const S = 512;
+      const n = latticeNoise(S, 220, rand);
+      const f = new Float32Array(S * S);
+      for (let i = 0; i < f.length; i++) f[i] = 0.42 + (n[i] - 0.5) * 0.5;
+      for (let k = 0; k < 40; k++) {
+        let x = rand() * S;
+        let y = rand() * S;
+        let a = rand() * Math.PI * 2;
+        const len = 30 + rand() * 80;
+        const curve = (rand() - 0.5) * 0.025;
+        const str = 0.22 + rand() * 0.2;
+        for (let t = 0; t < len; t++) {
+          const xi = (Math.round(x) % S + S) % S;
+          const yi = (Math.round(y) % S + S) % S;
+          f[yi * S + xi] = Math.min(1, f[yi * S + xi] + str);
+          x += Math.cos(a);
+          y += Math.sin(a);
+          a += curve + (rand() - 0.5) * 0.02;
+        }
+      }
       return f;
     },
   },
