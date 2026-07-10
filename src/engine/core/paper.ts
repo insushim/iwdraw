@@ -439,6 +439,56 @@ export function applyWetEdge(
 
 
 /**
+ * 유화 임파스토 릴리프: 물감이 도톰하게 올라온 입체감(2026-07-10, 유화 전문가 관점
+ * 교차진단 1순위). 광원 좌상단 관례로 획 실루엣의 좌상단 안쪽에 하이라이트,
+ * 우하단 안쪽에 그림자를 얇게 얹는다.
+ * 밴드 = 경화(4겹)+blur 실루엣 S의 대각 오프셋 차분(S − shift(S)) — 획 내부(자기
+ * 교차 포함)는 균일 알파라 차분 0 = 불변, 바깥으로도 안 새어나간다(source-atop).
+ * wetEdge와 같은 endStroke 전용 후처리 정책(프리뷰 팝인 허용 전례).
+ */
+export function applyImpastoRelief(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  strength: number,
+): void {
+  const soft = (wetTmp = scratch(wetTmp, width, height));
+  const bandCtx = (wetBand = scratch(wetBand, width, height));
+
+  // 부드러운 경화 실루엣 — blur가 릴리프 램프의 폭(부드러움)을 만든다
+  bandCtx.clearRect(0, 0, width, height);
+  bandCtx.drawImage(ctx.canvas, 0, 0);
+  bandCtx.drawImage(ctx.canvas, 0, 0);
+  bandCtx.drawImage(ctx.canvas, 0, 0);
+  bandCtx.drawImage(ctx.canvas, 0, 0);
+  soft.clearRect(0, 0, width, height);
+  soft.filter = "blur(2px)";
+  soft.drawImage(bandCtx.canvas, 0, 0);
+  soft.filter = "none";
+
+  const d = 2.2; // 물감 두께감의 스케일(px) — 굵기 비례가 아니라 물리적 고정
+  const band = (dx: number, dy: number, color: string, alpha: number) => {
+    bandCtx.clearRect(0, 0, width, height);
+    bandCtx.drawImage(soft.canvas, 0, 0);
+    bandCtx.globalCompositeOperation = "destination-out";
+    bandCtx.drawImage(soft.canvas, dx, dy);
+    bandCtx.globalCompositeOperation = "source-in"; // 밴드 알파 유지, 색만 교체
+    bandCtx.fillStyle = color;
+    bandCtx.fillRect(0, 0, width, height);
+    bandCtx.globalCompositeOperation = "source-over";
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.globalAlpha = Math.min(1, strength * alpha);
+    ctx.drawImage(bandCtx.canvas, 0, 0);
+    ctx.restore();
+  };
+  // shift(+d,+d)와의 차분 = 좌상단 림, shift(−d,−d)와의 차분 = 우하단 림.
+  // 그림자를 하이라이트보다 살짝 약하게 — 아이 그림에서 어두운 테는 금방 "때"로 읽힌다.
+  band(d, d, "#ffffff", 0.22);
+  band(-d, -d, "#1a1208", 0.15);
+}
+
+/**
  * 수채 글레이징 합성: result = min(기존, max(기존 × 획, max(획³, 획 × 0.6))).
  * · 마른 워시 위에 새 워시가 겹치면 multiply로 진해진다(겹침이 보인다 — darken(min)
  *   수렴은 겹침 효과 0 = 플랫 마커, 2026-07-10 사용자 실측).

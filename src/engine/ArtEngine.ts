@@ -348,6 +348,7 @@ export class ArtEngine {
         ? clamp(brush.cfg.washOpacity * (brush.cfg.opacityAsDilution ? 1 : this.settings.opacity), 0, 1)
         : 1,
       wetEdge: brush.cfg.wetEdge,
+      impasto: brush.cfg.impasto,
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,
       washCloud: brush.cfg.washCloud,
@@ -731,6 +732,7 @@ export class ArtEngine {
         ? clamp(brush.cfg.washOpacity * (brush.cfg.opacityAsDilution ? 1 : meta.opacity), 0, 1)
         : 1,
       wetEdge: brush.cfg.wetEdge,
+      impasto: brush.cfg.impasto,
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,
       washCloud: brush.cfg.washCloud,

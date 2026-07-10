@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, makeTipHighlightCanvas, type RendererBackend, type StrokeContext } from "./backend";
-import { applyWetEdge, compositeGlaze, paperGrainTile, type PaperKind } from "./paper";
+import { applyImpastoRelief, applyWetEdge, compositeGlaze, paperGrainTile, type PaperKind } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -460,9 +460,10 @@ export class WebGL2Backend implements RendererBackend {
     this.blitStrokeToScreen();
 
     // 종이 결·마른 붓 반점은 dab 셰이더에서 실시간 적용됨(프리뷰=최종 — 펜 뗄 때
-    // 구멍 팝인 금지, 2026-07-06 사용자 실측). wet edge만 2D 후처리(수채 마름 연출)
+    // 구멍 팝인 금지, 2026-07-06 사용자 실측). wet edge·임파스토 릴리프만 2D 후처리
     let src: HTMLCanvasElement = this.glCanvas;
-    if (this.ctx.wetEdge > 0 && this.ctx.composite !== "destination-out") {
+    const post = this.ctx.wetEdge > 0 || this.ctx.impasto > 0;
+    if (post && this.ctx.composite !== "destination-out") {
       if (!this.post2d) {
         const c = document.createElement("canvas");
         c.width = this.width;
@@ -471,7 +472,10 @@ export class WebGL2Backend implements RendererBackend {
       }
       this.post2d.clearRect(0, 0, this.width, this.height);
       this.post2d.drawImage(this.glCanvas, 0, 0);
-      applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge, this.ctx.paperKind);
+      if (this.ctx.wetEdge > 0)
+        applyWetEdge(this.post2d, this.width, this.height, this.ctx.wetEdge, this.ctx.paperKind);
+      if (this.ctx.impasto > 0)
+        applyImpastoRelief(this.post2d, this.width, this.height, this.ctx.impasto);
       src = this.post2d.canvas;
     }
 

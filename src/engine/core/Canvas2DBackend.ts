@@ -1,6 +1,6 @@
 import type { BackendCaps, Dab, RGB } from "../types";
 import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
-import { applyPaperGrain, applyPaperGrainLift, applyWetEdge, compositeGlaze } from "./paper";
+import { applyImpastoRelief, applyPaperGrain, applyPaperGrainLift, applyWetEdge, compositeGlaze } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
 /*
@@ -182,6 +182,9 @@ export class Canvas2DBackend implements RendererBackend {
     // (종이 결은 presentStroke 라이브 경로와 동일 — 프리뷰=최종)
     if (this.ctx.wetEdge > 0) {
       applyWetEdge(this.strokeCtx, this.width, this.height, this.ctx.wetEdge, this.ctx.paperKind);
+    }
+    if (this.ctx.impasto > 0) {
+      applyImpastoRelief(this.strokeCtx, this.width, this.height, this.ctx.impasto);
     }
     if (this.ctx.paperGrain > 0) this.grain(this.strokeCtx);
     // 스트로크 버퍼를 레이어에 1회 합성 — 브러시 composite 반영(라이브 프리뷰와 동일해야 함)

@@ -26,6 +26,8 @@ export interface StrokeContext {
   strokeOpacity: number;
   /** 획 실루엣 가장자리 안료 몰림 강도 0~1(수채) — endStroke에서 applyWetEdge */
   wetEdge: number;
+  /** 임파스토 릴리프 강도 0~1(유화) — endStroke에서 applyImpastoRelief */
+  impasto: number;
   /** 종이 결을 색 백화로(불투명 유지, 유화) — false면 알파 침식(수채 등) */
   grainLift: boolean;
   /** 붓 방향 밝은 스트릭 강도 0~1(유화) — GL 전용(2D 폴백은 근사 생략) */
