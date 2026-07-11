@@ -40,9 +40,10 @@ export class WatercolorBrush extends BrushBase {
         composite: "glaze",
         // 종이결 이빨 — ⚠️ cotton 결은 1~2px 초고주파라 buildup 누적(획 내 6겹+)에서
         // 침식이 복리로 쌓여 "점" 반점이 된다(0.12, 물양 낮은 진한 칠에서 사용자 실측
-        // 2026-07-10 "점이 보여 거슬려"). codex의 "내부 매끈=마커" 지적보다 사용자 체감
-        // 우선 — 내부 질감은 washCloud 구름·붓결 streaks·안료고갈 드리프트가 담당.
-        paperGrain: 0.04,
+        // 2026-07-10 "점이 보여 거슬려"; 0.04에도 잔점 지적 2026-07-11 → 0.02).
+        // i-scream 원본엔 granulation이 거의 없다 — 내부 질감은 washCloud 구름·
+        // 붓결 streaks·안료고갈 드리프트가 담당.
+        paperGrain: 0.02,
         strokeBlend: "buildup",
         washOpacity: 1,
         opacityAsDilution: true, // 진하기 슬라이더도 알파가 아니라 희석으로(아래 makeDab)
@@ -63,10 +64,38 @@ export class WatercolorBrush extends BrushBase {
     this.rng2 = rng ?? Math.random;
   }
 
+  /** 뭉게 실루엣용 거리 누적(획 시작에서 리셋) — 벌지·로브 위상은 시간이 아니라
+   * 이동 거리 기반(속도 무관, codex 교차설계 2026-07-11) */
+  private dabDist = 0;
+  private lastDab: { x: number; y: number } | null = null;
+  private sinceLobe = 0;
+
   protected override makeDab(p: StrokePoint, angle: number): Dab {
     const dab = super.makeDab(p, angle);
     const w = this.settings.waterAmount;
     dab.size *= 1 + w * 0.35; // 물이 많을수록 넓게 퍼진다
+
+    // ── 뭉게 실루엣(2026-07-11 사용자: "테두리가 너무 균일") ──
+    // 원본(i-scream)의 워시는 폭이 저주파로 크게 출렁이고 둘레에 둥근 로브가 겹친
+    // 콜리플라워 실루엣. ① 크기 벌지 + ② 중심 횡변위를 서로 다른 위상의 저주파로
+    // 주면 좌/우 가장자리가 독립적으로 출렁인다(대칭이면 "숨 쉬는 리본").
+    // 주기 3.4×/5.6×size 두 사인 합성, 결정론(strokeSeed) — 랜덤 노이즈는 지저분.
+    if (this.lastDab) this.dabDist += Math.hypot(p.x - this.lastDab.x, p.y - this.lastDab.y);
+    this.lastDab = { x: p.x, y: p.y };
+    const sz = dab.size;
+    const d = this.dabDist;
+    const bulge =
+      Math.sin(d / (sz * 0.44) + this.strokeSeed * 9) * 0.6 +
+      Math.sin(d / (sz * 0.73) + this.strokeSeed * 23) * 0.4;
+    dab.size *= 1 + (0.16 + 0.2 * w) * bulge;
+    const shift =
+      Math.sin(d / (sz * 0.61) + this.strokeSeed * 41) * 0.5 +
+      Math.sin(d / (sz * 1.05) + this.strokeSeed * 67) * 0.5;
+    const px = -Math.sin(angle);
+    const py = Math.cos(angle);
+    const shiftAmp = sz * 0.11 * shift;
+    dab.x += px * shiftAmp;
+    dab.y += py * shiftAmp;
     // 물 양·진하기 → 물감 농도(흰색 희석). 전수검수(2026-07-10): 원본 한 획 유효 농도
     // 12~18%. buildup 유효 α ~0.8을 감안해 wash 시절(base 0.32+0.68w)보다 살짝 진하게 —
     // 시각 농도 = α × (1−희석색) 이 동일해지는 지점. 히스토그램(p5/p95)으로 재보정.
@@ -102,6 +131,50 @@ export class WatercolorBrush extends BrushBase {
   override begin(p: StrokePoint, settings: Parameters<BrushBase["begin"]>[1]): Dab[] {
     // p.t(타임스탬프)로 획마다 위상을 바꾼다 — Math.random 없이 결정론적 다양성
     this.strokeSeed = (p.t % 10000) * 0.00063;
+    this.dabDist = 0;
+    this.lastDab = null;
+    this.sinceLobe = 0;
     return super.begin(p, settings);
+  }
+
+  /** 뭉게 로브: 본획 둘레에 반쯤 묻힌 "묽은 물" 위성 dab(콜리플라워 실루엣의 둥근 혹).
+   * ⚠️ 안전 조건(점점점 사슬·잉크 방울 재발 방지, codex 교차설계):
+   *  · 오프셋 ≤ 0.36×size — 본획과 60~80% 겹쳐 "가장자리를 밀어내는 혹"으로만 읽힘
+   *  · 색은 본획보다 묽게(흰색 쪽 30%), 알파 0.42× — 물이 번진 자국이지 새 물감이 아님
+   *  · 빈도는 거리 기반(1.15×size마다 확률) + 좌/우 랜덤 — 규칙 배열은 기계적 */
+  override move(p: StrokePoint): Dab[] {
+    const dabs = super.move(p);
+    if (!dabs.length) return dabs;
+    const w = this.settings.waterAmount;
+    const out: Dab[] = [];
+    for (const dab of dabs) {
+      out.push(dab);
+      this.sinceLobe += dab.size * this.cfg.spacing; // dab 간격 ≈ size×spacing
+      if (this.sinceLobe < dab.size * 0.85) continue;
+      this.sinceLobe = 0;
+      if (this.rng2() >= 0.28 + 0.25 * w) continue;
+      const side = this.rng2() < 0.5 ? -1 : 1;
+      // 오프셋 상한 0.28×size — 본획이 얇아진 구간(벌지 골)에서도 로브가 떨어져
+      // "잉크 방울"로 읽히지 않게(v2 렌더 실측: 0.34는 반쯤 분리된 혹 발생)
+      const off = dab.size * (0.18 + 0.16 * w);
+      const px = -Math.sin(dab.rotation);
+      const py = Math.cos(dab.rotation);
+      const c = dab.color!;
+      // 원본 로브는 본획과 같은 톤의 "둥근 혹" — 너무 옅으면(α0.42×·백화30%) 로브가
+      // 안개로 뭉개져 경계가 사라진다(1차 렌더 실측) → 같은 톤에 가깝게, 살짝만 묽게
+      out.push({
+        x: dab.x + px * off * side,
+        y: dab.y + py * off * side,
+        size: dab.size * (0.68 + 0.27 * w),
+        alpha: Math.max(0.04, dab.alpha * 0.75),
+        rotation: dab.rotation,
+        color: {
+          r: Math.round(c.r + (255 - c.r) * 0.12),
+          g: Math.round(c.g + (255 - c.g) * 0.12),
+          b: Math.round(c.b + (255 - c.b) * 0.12),
+        },
+      });
+    }
+    return out;
   }
 }
