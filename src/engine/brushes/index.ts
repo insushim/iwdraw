@@ -1,5 +1,5 @@
 import type { BrushId } from "../types";
-import { BrushBase } from "./BrushBase";
+import { BrushBase, MIN_DAB_PX } from "./BrushBase";
 import { Pencil } from "./Pencil";
 import { ColorPencil } from "./ColorPencil";
 import { SignPen } from "./SignPen";
@@ -94,4 +94,4 @@ export const BRUSH_SIZE_SCALE: Partial<Record<BrushId, number>> = Object.fromEnt
   STROKE_BRUSHES.map((id) => [id, createBrush(id).cfg.sizeScale]),
 );
 
-export { BrushBase };
+export { BrushBase, MIN_DAB_PX };

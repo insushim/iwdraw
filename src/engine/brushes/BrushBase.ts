@@ -23,6 +23,14 @@ export type TipKind =
   | "ink"
   | "glow";
 
+/**
+ * dab 최소 지름(px) — 이보다 작으면 래스터에서 서브픽셀이 돼 획이 통째로 증발하거나
+ * 1px 점으로 찍혀 "끊긴 계단"이 된다(2026-07-13 사용자 실측, 굵기 1에서 연필 36열·
+ * 사인펜 41열이 빈 열). 2.4px면 팁의 알파 폴오프가 2~3픽셀에 걸쳐 안티에일리어싱이 살아난다.
+ * 얇은 획은 "가늘게" 보여야지 "끊겨" 보이면 안 된다 — 지각상 하한이 곧 최소 굵기.
+ */
+export const MIN_DAB_PX = 2.4;
+
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
 export type DabComposite =
   | "source-over"
@@ -190,7 +198,10 @@ export class BrushBase {
     // 세그먼트(또는 end() 안전망)까지 지연한다 — 의도된 동작
     if (segLen === 0) return [];
 
-    const step = Math.max(1, this.settings.size * this.cfg.sizeScale * this.cfg.spacing);
+    // 간격은 "실제로 찍히는" dab 지름(최소 지름 반영) 기준 — 굵기 1에서 step 1px·dab 1px면
+    // 점이 띄엄띄엄 찍혀 끊긴다. 하한 0.6px로 촘촘히 겹쳐 연속선이 되게 한다.
+    const dabDia = Math.max(MIN_DAB_PX, this.settings.size * this.cfg.sizeScale);
+    const step = Math.max(0.6, dabDia * this.cfg.spacing);
     const dabs: Dab[] = [];
     const angle = this.smoothAngle(Math.atan2(p.y - from.y, p.x - from.x));
     this.updateCarried(p, segLen);
@@ -316,7 +327,7 @@ export class BrushBase {
     const base = s.size * c.sizeScale;
 
     const sizeK = 1 - c.sizePressure * (1 - pr);
-    const size = Math.max(1, base * Math.max(c.minSizeRatio, sizeK));
+    const size = Math.max(MIN_DAB_PX, base * Math.max(c.minSizeRatio, sizeK));
     const alphaK = 1 - c.alphaPressure * (1 - pr);
     // wash는 진하기(opacity)를 dab이 아니라 스트로크 합성 시 1회 적용(strokeOpacity)
     const alpha = clamp(c.flow * (c.strokeBlend === "wash" ? 1 : s.opacity) * alphaK, 0.01, 1);

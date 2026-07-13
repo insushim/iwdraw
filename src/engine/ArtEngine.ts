@@ -24,7 +24,7 @@ import { smearSegment } from "./tools/SmudgeTool";
 import { drawPaperTint, type PaperKind } from "./core/paper";
 import { tilesForRect, copyTiles, TileSnapshotCommand, type TileRect } from "./core/tiles";
 import type { Layer } from "./core/LayerStack";
-import { BrushBase, createBrush, STROKE_BRUSHES } from "./brushes";
+import { BrushBase, createBrush, MIN_DAB_PX, STROKE_BRUSHES } from "./brushes";
 import { buildBarrierFromLineart, floodFill } from "./brushes/FillTool";
 import { PointerHandler } from "./input/PointerHandler";
 import { Gestures } from "./input/Gestures";
@@ -755,6 +755,9 @@ export class ArtEngine {
 
   private paintDabs(dabs: ReturnType<BrushBase["begin"]>, center: StrokePoint): void {
     if (!dabs.length) return;
+    // 최종 안전망 — makeDab 이후 크기를 곱하는 브러시(수채 벌지·로브, 유화 등)가 다시
+    // 서브픽셀로 내려가면 획이 끊기고 계단이 진다(2026-07-13 실측). 여기서 한 번 더 하한.
+    for (const d of dabs) if (d.size < MIN_DAB_PX) d.size = MIN_DAB_PX;
     if (this.firstDabLatency < 0) {
       this.firstDabLatency = performance.now() - this.strokeStartTs;
       this.emit("strokeLatency", { ms: this.firstDabLatency });

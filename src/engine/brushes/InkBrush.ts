@@ -1,4 +1,4 @@
-import { BrushBase } from "./BrushBase";
+import { BrushBase, MIN_DAB_PX } from "./BrushBase";
 import type { Dab, StrokePoint } from "../types";
 
 /**
@@ -44,7 +44,7 @@ export class InkBrush extends BrushBase {
     // ⚠️ 1px 하한 필수: BrushBase가 max(1,…)로 보장한 크기에 이 배율(0.45~1.15)을
     //   다시 곱하면 굵기 1에서 dab이 0.6px가 되어 서브픽셀로 증발한다 — 빠르게 그은
     //   얇은 획이 점선이 되거나 아예 안 그려진다(2026-07-13 사용자 실측·e2e 재현).
-    dab.size = Math.max(1, dab.size * (0.45 + pr * 0.7));
+    dab.size = Math.max(MIN_DAB_PX, dab.size * (0.45 + pr * 0.7));
     return dab;
   }
 }
