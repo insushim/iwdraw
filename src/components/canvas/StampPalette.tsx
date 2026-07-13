@@ -90,7 +90,7 @@ export function StampPalette() {
   );
 }
 
-/** 팔레트 썸네일 — drawStampOnCtx와 같은 규칙(evenodd + 잉크 윤곽 + 브러시색 폴백) */
+/** 팔레트 썸네일 — drawStampOnCtx와 같은 규칙(선화만, 색은 아이가 칠한다) */
 function StampThumb({ def, ink }: { def: StampDef; ink: string }) {
   return (
     <svg viewBox="-1 -1 26 26" className="h-9 w-9" aria-hidden>
@@ -98,10 +98,9 @@ function StampThumb({ def, ink }: { def: StampDef; ink: string }) {
         <path
           key={i}
           d={p.d}
-          fill={p.fill === "none" ? "none" : (p.fill ?? ink)}
-          fillRule="evenodd"
-          stroke="#2D2A26"
-          strokeWidth="1.1"
+          fill="none"
+          stroke={ink}
+          strokeWidth="1.3"
           strokeLinejoin="round"
           strokeLinecap="round"
         />

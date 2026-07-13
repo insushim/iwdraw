@@ -63,7 +63,7 @@ function withRo(word: string): string {
   return jong === 0 || jong === 8 ? `${word}로` : `${word}으로`;
 }
 
-/** 스탬프 SVG 미리보기 — drawStampOnCtx와 같은 규칙(evenodd + 잉크 윤곽 + 브러시색 폴백) */
+/** 스탬프 SVG 미리보기 — drawStampOnCtx와 같은 규칙(선화만, 색은 아이가 칠한다) */
 function StampPreview({ def, ink, className }: { def: StampDef; ink: string; className?: string }) {
   return (
     <svg viewBox="-1 -1 26 26" className={className} aria-hidden>
@@ -71,10 +71,9 @@ function StampPreview({ def, ink, className }: { def: StampDef; ink: string; cla
         <path
           key={i}
           d={p.d}
-          fill={p.fill ?? ink}
-          fillRule="evenodd"
-          stroke="#2D2A26"
-          strokeWidth="1.1"
+          fill="none"
+          stroke={ink}
+          strokeWidth="1.3"
           strokeLinejoin="round"
           strokeLinecap="round"
         />

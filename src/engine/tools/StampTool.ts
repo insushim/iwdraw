@@ -1299,20 +1299,15 @@ export function drawStampOnCtx(
   ctx.globalCompositeOperation = "source-over"; // 호출부의 지우개/블렌드 상태 오염 방지
   ctx.translate(cx - sizePx / 2, cy - sizePx / 2);
   ctx.scale(s, s);
-  ctx.lineWidth = 1.1;
+  // 뚝딱그림은 "선화(도안)"만 남긴다 — 색은 아이가 칠한다(2026-07-13 사용자 지시).
+  // 채우기를 하면 스탬프가 이미 완성된 그림이 되어 색칠할 여지가 없다.
+  ctx.lineWidth = 1.3;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  ctx.strokeStyle = "#2D2A26";
+  ctx.strokeStyle = `rgb(${ink.r},${ink.g},${ink.b})`; // 선 색은 사용자가 고른 색
   ctx.globalAlpha = 1;
   for (const p of def.paths) {
-    const path = new Path2D(p.d);
-    // fill:"none" = 선화 전용 path(자전거·가위 등) — Canvas는 fillStyle="none"을
-    // 무효값으로 무시해 직전 색으로 잘못 채우므로 fill 호출 자체를 건너뛴다
-    if (p.fill !== "none") {
-      ctx.fillStyle = p.fill ?? `rgb(${ink.r},${ink.g},${ink.b})`;
-      ctx.fill(path, "evenodd");
-    }
-    ctx.stroke(path);
+    ctx.stroke(new Path2D(p.d));
   }
   ctx.restore();
 }

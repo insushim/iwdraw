@@ -167,19 +167,23 @@ const RECIPES: Record<PaperKind, PaperRecipe> = {
       // 화선지의 인상은 "긴 섬유"가 만든다 — 옅은 셀룰로스 바탕 위에
       // 닥나무 섬유 가닥(임의 각도로 완만히 휘는 1px 궤적, 타일 wrap)을 얹는다.
       // ⚠️ 절제 필수: 곡률·개수·강도가 크면 종이가 "곱슬 낙서로 더럽혀진" 것으로
-      // 읽힌다(2026-07-10 실측 — 90가닥·곡률 0.06·강도 0.7은 낙서장). 거의 직선, 은은하게.
+      // 읽힌다(2026-07-10 실측 — 90가닥·곡률 0.06·강도 0.7은 낙서장).
+      // ⚠️⚠️ 2026-07-13 재실측(사용자, 웨일북): 빈 캔버스를 최대로 확대하면 가닥이
+      // "쓸데없는 선"으로 읽힌다 — 줌 배율만큼 궤적도 확대되기 때문. 섬유 자체는
+      // 화선지의 정체성이라 유지하되(사용자 판단), 강도를 절반으로(0.14~0.24) 낮춰
+      // 100% 배율에선 결로, 확대해도 낙서선으로 읽히지 않게 한다.
       const rand = Math.random;
       const S = 512;
       const n = latticeNoise(S, 220, rand);
       const f = new Float32Array(S * S);
       for (let i = 0; i < f.length; i++) f[i] = 0.42 + (n[i] - 0.5) * 0.5;
-      for (let k = 0; k < 40; k++) {
+      for (let k = 0; k < 34; k++) {
         let x = rand() * S;
         let y = rand() * S;
         let a = rand() * Math.PI * 2;
         const len = 30 + rand() * 80;
         const curve = (rand() - 0.5) * 0.025;
-        const str = 0.22 + rand() * 0.2;
+        const str = 0.14 + rand() * 0.1;
         for (let t = 0; t < len; t++) {
           const xi = (Math.round(x) % S + S) % S;
           const yi = (Math.round(y) % S + S) % S;

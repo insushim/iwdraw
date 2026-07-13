@@ -338,23 +338,27 @@ export class ArtEngine {
     const pxSize = this.settings.size * brush.cfg.sizeScale;
     const tip: TipKind =
       brush.cfg.tip === "bristle" && pxSize < 40 ? "bristle-bold" : brush.cfg.tip;
+    // 얇은 획 보호(2026-07-13 사용자 실측: 붓펜 굵기 1이 점선처럼 끊긴다) —
+    // 종이 결 침식·wet edge는 획 폭에 비례하는 "질감"인데, 획이 1~3px이면 골 하나가
+    // 획 전체를 관통해 알파를 0으로 만든다(= 끊김). 8px 미만은 강도를 폭에 비례 감쇠.
+    const thin = Math.min(1, pxSize / 8);
     return {
       layerCanvas: this.layers.active.canvas,
       tip,
       composite: brush.cfg.composite,
       color: this.settings.color,
-      paperGrain: brush.cfg.paperGrain,
+      paperGrain: brush.cfg.paperGrain * thin,
       wash,
       // opacityAsDilution(수채): 진하기는 브러시가 색 희석으로 소비 — 알파는 1 유지(겹침 수렴)
       strokeOpacity: wash
         ? clamp(brush.cfg.washOpacity * (brush.cfg.opacityAsDilution ? 1 : this.settings.opacity), 0, 1)
         : 1,
-      wetEdge: brush.cfg.wetEdge,
+      wetEdge: brush.cfg.wetEdge * thin,
       impasto: brush.cfg.impasto,
       grainLift: brush.cfg.grainLift,
       streaks: brush.cfg.streaks,
       washCloud: brush.cfg.washCloud,
-      edgeNoise: brush.cfg.edgeNoise,
+      edgeNoise: brush.cfg.edgeNoise * thin,
       paperKind: this.paperKindForMode(),
     };
   }

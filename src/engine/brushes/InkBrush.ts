@@ -41,7 +41,10 @@ export class InkBrush extends BrushBase {
     dab.alpha = 0.7 + pr * 1.0;
     // 굵기도 필압(=마우스는 속도)에 한 번 더 반응 — 빠른 삐침이 확실히 가늘어지게.
     // sizePressure만으로는 마우스 필압 스팬(0.35~0.85)에서 변화가 밋밋하다(실측).
-    dab.size *= 0.45 + pr * 0.7;
+    // ⚠️ 1px 하한 필수: BrushBase가 max(1,…)로 보장한 크기에 이 배율(0.45~1.15)을
+    //   다시 곱하면 굵기 1에서 dab이 0.6px가 되어 서브픽셀로 증발한다 — 빠르게 그은
+    //   얇은 획이 점선이 되거나 아예 안 그려진다(2026-07-13 사용자 실측·e2e 재현).
+    dab.size = Math.max(1, dab.size * (0.45 + pr * 0.7));
     return dab;
   }
 }
