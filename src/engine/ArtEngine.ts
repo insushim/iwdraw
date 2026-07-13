@@ -34,7 +34,7 @@ import { detectShape, QUICKSHAPE_HOLD_MS } from "./tools/QuickShape";
 import {
   shapeInsertPoints,
   densifyShape,
-  SHAPE_MIN_DRAG,
+  isShapeDragTooSmall,
   type ShapeInsertKind,
 } from "./tools/ShapeInsert";
 import { hitPending, movePending, resizePending, commitRegion } from "./tools/pendingStampMath";
@@ -1150,7 +1150,8 @@ export class ArtEngine {
       !kind ||
       this.brush ||
       this.smudging ||
-      Math.max(Math.abs(d.x1 - d.x0), Math.abs(d.y1 - d.y0)) < SHAPE_MIN_DRAG // 톡 친 것
+      // 톡 친 것 — 판정은 화면 px 기준(확대 상태의 작은 도형이 무시되던 버그, ShapeInsert 참조)
+      isShapeDragTooSmall(d.x1 - d.x0, d.y1 - d.y0, this.view.scale)
     ) {
       this.requestComposite();
       return;

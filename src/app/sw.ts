@@ -25,4 +25,22 @@ const serwist = new Serwist({
   // 오프라인 폴백이 필요해지면 HTML을 명시적으로 프리캐시에 추가한 뒤 되살릴 것.
 });
 
+/*
+ * 새 SW가 활성화되면 런타임 캐시를 전부 비운다(프리캐시는 Serwist가 자체 관리).
+ * 배포하면 청크 파일명이 바뀌는데, 런타임 캐시에 남은 "구버전 HTML"이 네트워크 지연 등으로
+ * 다시 서빙되면 그 HTML이 가리키는 청크는 이미 서버에 없어 404 → React가 아예 못 뜨고
+ * 흰 화면이 된다(2026-07-13 사용자 실측: 그리다 새로고침 = 흰 화면).
+ * 오프라인 캐시는 새 버전으로 다시 쌓이므로 손해는 없다.
+ */
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => !k.includes("precache")).map((k) => caches.delete(k))),
+      )
+      .catch(() => undefined),
+  );
+});
+
 serwist.addEventListeners();

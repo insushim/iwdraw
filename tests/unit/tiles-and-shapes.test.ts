@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { tilesForRect, copyTiles, TILE } from "@/engine/core/tiles";
 import { detectShape } from "@/engine/tools/QuickShape";
+import { isShapeDragTooSmall } from "@/engine/tools/ShapeInsert";
 import { mirrorPoint } from "@/engine/tools/Symmetry";
 import { mulberry32 } from "@/engine/types";
 import { normalizeClassCode, isValidClassCode } from "@/lib/class-code";
@@ -274,5 +275,18 @@ describe("stroke-codec (협동 delta encoding)", () => {
     const enc = encodeStroke([{ x: 1, y: 2, pressure: 1, t: 0 }]);
     expect(typeof enc).toBe("string");
     expect(enc.length).toBeGreaterThan(0);
+  });
+});
+
+describe("도형 삽입 최소 드래그(줌 보정)", () => {
+  it("100% 배율에서 톡 친 것(5px)은 도형이 되지 않는다", () => {
+    expect(isShapeDragTooSmall(5, 3, 1)).toBe(true);
+    expect(isShapeDragTooSmall(20, 4, 1)).toBe(false);
+  });
+
+  it("확대(4배)하면 캔버스 5px(=화면 20px) 드래그도 도형이 된다", () => {
+    // 회귀: 최소 드래그를 캔버스 px로 고정하면 확대 상태의 작은 도형이 통째로 무시됐다
+    expect(isShapeDragTooSmall(5, 1, 4)).toBe(false);
+    expect(isShapeDragTooSmall(1, 1, 4)).toBe(true); // 하한 2px — 실수 탭은 여전히 거른다
   });
 });

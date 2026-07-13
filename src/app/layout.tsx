@@ -59,20 +59,72 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         {/* 부트 워치독(React 밖) — 배포로 구버전 청크가 404 나면 React가 아예 못 떠서
-            에러 바운더리도 실행되지 않고 Suspense 폴백/흰 화면만 남는다(2026-07-10 실측:
-            배포 직후 새로고침 = 흰 화면). 8초 내 하이드레이션(BootWatchdogClear 마운트)이
-            없으면 SW·캐시를 정리하고 1회만 자동 새로고침(그림 IndexedDB는 보존). */}
+            에러 바운더리도 실행되지 않고 흰 화면만 남는다(2026-07-10·07-13 실측: 그리다
+            새로고침 = 흰 화면). 방어를 3중으로:
+              ① 청크 로드 실패(script error / ChunkLoadError)를 즉시 감지 → 바로 복구
+              ② 8초 내 하이드레이션(BootWatchdogClear 마운트)이 없으면 복구
+              ③ 복구는 최대 2회(2회차는 캐시 우회 쿼리로 새 문서 강제) — 그래도 못 뜨면
+                 흰 화면 대신 "다시 불러오기" 화면을 보여준다(교실에서 아이가 손쓸 수 있게)
+            SW·캐시만 지우고 그림(IndexedDB)은 보존한다. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){
-  function heal(){
-    try{sessionStorage.setItem("arton.selfheal.boot","1")}catch(e){}
+  var K="arton.selfheal.boot";
+  function tries(){try{return parseInt(sessionStorage.getItem(K)||"0",10)||0}catch(e){return 0}}
+  function purge(){
     var p=[];
     try{if(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations){p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}))}}catch(e){}
     try{if(window.caches){p.push(caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k)}))}))}}catch(e){}
-    Promise.all(p).catch(function(){}).then(function(){location.reload()});
+    return Promise.all(p).catch(function(){});
   }
-  try{if(sessionStorage.getItem("arton.selfheal.boot"))return}catch(e){}
+  function screen(failed){
+    if(document.getElementById("arton-boot-msg"))return;
+    var d=document.createElement("div");
+    d.id="arton-boot-msg";
+    d.setAttribute("style","position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#fbf7f0;color:#4a4238;font-family:system-ui,sans-serif;text-align:center;padding:24px");
+    var t=document.createElement("div");
+    t.setAttribute("style","font-size:20px;font-weight:700");
+    t.textContent=failed?"그림 앱을 불러오지 못했어요":"그림 앱을 불러오는 중이에요…";
+    d.appendChild(t);
+    if(failed){
+      var s=document.createElement("div");
+      s.setAttribute("style","font-size:15px;color:#8a7f70");
+      s.textContent="그리던 그림은 안전하게 저장돼 있어요. 아래 버튼을 눌러 주세요.";
+      d.appendChild(s);
+      var b=document.createElement("button");
+      b.setAttribute("style","margin-top:8px;padding:14px 28px;border:0;border-radius:16px;background:#f4795b;color:#fff;font-size:17px;font-weight:700;cursor:pointer");
+      b.textContent="다시 불러오기";
+      b.onclick=function(){try{sessionStorage.removeItem(K)}catch(e){}purge().then(bust)};
+      d.appendChild(b);
+    }
+    (document.body||document.documentElement).appendChild(d);
+  }
+  function bust(){
+    // 캐시 우회 — 어느 계층(SW·HTTP 캐시)에 낡은 HTML이 남아도 새 문서를 받는다
+    try{var u=new URL(location.href);u.searchParams.set("_r",String(Date.now()));location.replace(u.toString())}
+    catch(e){location.reload()}
+  }
+  function heal(){
+    if(window.__artonHealing)return;
+    window.__artonHealing=1;
+    var n=tries()+1;
+    try{sessionStorage.setItem(K,String(n))}catch(e){}
+    if(n>2){screen(true);return}
+    purge().then(function(){ n>=2?bust():location.reload() });
+  }
+  // ① 청크(_next/static) 로드 실패 = React가 못 뜬다는 확정 신호 → 8초 안 기다리고 즉시 복구.
+  //    (CDN 폰트 등 앱 밖 리소스 실패로는 복구하지 않는다 — 무한 새로고침 방지)
+  window.addEventListener("error",function(e){
+    var t=e&&e.target;
+    if(t&&t.tagName==="SCRIPT"&&String(t.src||"").indexOf("/_next/")>=0)heal();
+  },true);
+  window.addEventListener("unhandledrejection",function(e){
+    var r=e&&e.reason;
+    var m=String((r&&(r.name+" "+r.message))||r||"");
+    if(m.indexOf("ChunkLoadError")>=0||/Loading (chunk|CSS chunk)|dynamically imported module/i.test(m))heal();
+  });
+  if(tries()>2){screen(true);return}
+  window.__artonBootSlow=setTimeout(function(){screen(false)},3500); // 흰 화면 대신 안내
   window.__artonBoot=setTimeout(heal,8000);
 })();`,
           }}

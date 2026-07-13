@@ -10,8 +10,14 @@ import { useEffect } from "react";
  */
 export function BootWatchdogClear() {
   useEffect(() => {
-    const w = window as unknown as { __artonBoot?: ReturnType<typeof setTimeout> };
+    const w = window as unknown as {
+      __artonBoot?: ReturnType<typeof setTimeout>;
+      __artonBootSlow?: ReturnType<typeof setTimeout>;
+    };
     if (w.__artonBoot) clearTimeout(w.__artonBoot);
+    if (w.__artonBootSlow) clearTimeout(w.__artonBootSlow);
+    // 느린 로딩 안내 화면이 떠 있으면 걷어낸다(부팅 성공)
+    document.getElementById("arton-boot-msg")?.remove();
     try {
       sessionStorage.removeItem("arton.selfheal.boot");
     } catch {

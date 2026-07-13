@@ -496,6 +496,39 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
   return c;
 }
 
+const tipPixelCache = new Map<TipKind, { img: ImageData; epoch: number }>();
+
+/**
+ * GL 업로드용 팁 픽셀(ImageData) — 알파 0 픽셀의 셰이드 채널(RGB)을 중립(255)으로 메운다.
+ *
+ * 셰이더는 t.r을 "물감 명암"(f)으로 읽어 col*f로 곱하는데, LINEAR 필터·밉맵은 알파와
+ * 무관하게 RGB만 평균하므로 "안 그린" 텍셀(RGB=0=검정)이 이웃에 섞이면 f가 0쪽으로
+ * 끌려가 색이 검게 죽는다.
+ * · 크레용(rough): 텍셀 대부분이 알파 0인 성긴 입자 팁 → 팔레트 노랑(255,200,74)이
+ *   (217,189,125) 올리브로 탁해졌다(2026-07-13 사용자 실측 "검은색이 섞여 있다").
+ * · 마커(flat): dab 가장자리마다 검은 셰이드 테 → 획끼리 darken(min)이 그 테를 보존해
+ *   같은 색을 덧칠해도 dab 실루엣이 테두리로 남는다(사용자 실측 "동그라미가 보인다").
+ *
+ * ⚠️ 캔버스에 되쓸 수 없다: 2D 캔버스는 premultiplied 저장이라 알파 0 픽셀의 RGB는
+ * putImageData 즉시 0으로 소실된다(실측 — 캔버스에 메우는 1차 시도는 무효). 그래서
+ * 캔버스가 아니라 GL에 올릴 픽셀 배열에서 메우고, texImage2D도 캔버스가 아닌 이
+ * ImageData를 올린다(캔버스 소스는 브라우저가 다시 premultiply/unpremultiply 왕복).
+ */
+export function getTipPixels(kind: TipKind): ImageData {
+  const epoch = getTipEpoch();
+  const hit = tipPixelCache.get(kind);
+  if (hit && hit.epoch === epoch) return hit.img;
+  const c = getTipCanvas(kind);
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) d[i] = d[i + 1] = d[i + 2] = 255;
+  }
+  tipPixelCache.set(kind, { img, epoch });
+  return img;
+}
+
 export function blendToComposite(blend: BlendMode): GlobalCompositeOperation {
   switch (blend) {
     case "multiply":

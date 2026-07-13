@@ -1,5 +1,5 @@
 import type { BackendCaps, Dab, RGB } from "../types";
-import { getTipCanvas, getTipEpoch, makeTipHighlightCanvas, type RendererBackend, type StrokeContext } from "./backend";
+import { getTipCanvas, getTipEpoch, getTipPixels, makeTipHighlightCanvas, type RendererBackend, type StrokeContext } from "./backend";
 import { applyImpastoRelief, applyWetEdge, compositeGlaze, paperGrainTile, type PaperKind } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
@@ -76,7 +76,10 @@ void main() {
   // ① 크로스페이드(가중 평균)는 중간 회색에서 ±상쇄 널포인트(실측),
   // ② 팁에 밝은 밴드를 섞으면 모든 색이 회색빛(검정 실측). 둘 다 금지.
   // 밝은 색(밝기≥0.4) = 물감이 어두워지는 골, 어두운 색 = 빛 받는 하이라이트.
-  float f = t.r * (1.0 - g * 0.35 * (1.0 - u_grainLift));
+  // ⚠️ 침식 모드(grainLift=0)에서 결로 색까지 어둡게 하던 항(× (1−g·0.35))은 제거했다:
+  // 결 골짜기는 이미 알파가 빠지는데(위) 색까지 검은 쪽으로 곱하면 이중 계산이라
+  // 밝은 색이 탁해진다(크레용 노랑 → 올리브, 2026-07-13 사용자 실측). 결은 알파로만.
+  float f = t.r;
   vec3 col = u_color.rgb;
   float dk = 1.0 - max(col.r, max(col.g, col.b)); // 검을수록 1
   // 붓 방향 밝은 스트릭(마른 붓털 하이라이트) — 밝은 값은 wash(MAX)에서 살아남아
@@ -288,10 +291,12 @@ export class WebGL2Backend implements RendererBackend {
       entry = undefined;
     }
     if (!entry) {
-      const src = getTipCanvas(kind);
+      // 캔버스가 아니라 픽셀 배열로 업로드 — 셰이드 채널의 "빈 텍셀"이 중립(255)으로
+      // 메워진 데이터라야 밉맵 평균이 색을 검게 끌지 않는다(getTipPixels 주석 참조)
+      const src = getTipPixels(kind);
       const tex = gl.createTexture()!;
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, src.width, src.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, src.data);
       // 밉맵 필수 — 팁(128px+)을 얇은 dab(수 px)로 축소할 때 LINEAR만으로는 4텍셀
       // 샘플이라 가장자리가 픽셀로 튄다(유화 얇은 획 재깅, 2026-07-10 사용자 실측).
       gl.generateMipmap(gl.TEXTURE_2D);

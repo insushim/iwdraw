@@ -15,8 +15,19 @@ interface P {
 
 /** 직선의 수평/수직 스냅 허용각(도) — 아이 손떨림 보정 */
 const LINE_SNAP_DEG = 7;
-/** 이보다 작은 드래그는 톡 친 것으로 보고 무시 */
+/** 이보다 작은 드래그는 톡 친 것으로 보고 무시 — 화면 px 기준(줌 무관) */
 export const SHAPE_MIN_DRAG = 8;
+
+/**
+ * 드래그가 "톡 친 것"인지 — 화면 px로 판정한다.
+ * 캔버스 px로 고정하면 확대할수록(viewScale↑) 같은 화면 거리가 더 적은 캔버스 px가 돼
+ * 확대 상태에서 작은 도형이 통째로 무시된다(2026-07-13 사용자 실측:
+ * "확대한 다음 작게 하면 안 그려진다"). 하한 2 캔버스 px — 8배 확대에서도 실수 탭은 거른다.
+ */
+export function isShapeDragTooSmall(dx: number, dy: number, viewScale = 1): boolean {
+  const minDrag = Math.max(2, SHAPE_MIN_DRAG / Math.max(viewScale, 0.01));
+  return Math.max(Math.abs(dx), Math.abs(dy)) < minDrag;
+}
 
 /** 드래그 시작→현재 좌표로 도형 폴리라인 생성(꼭짓점/호 수준 — densify로 촘촘히) */
 export function shapeInsertPoints(
