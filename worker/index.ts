@@ -57,7 +57,10 @@ const RETENTION_MS = 180 * DAY_MS; // 작품 보관 기간(6개월). 이후 매�
 const WARN_MS = 30 * DAY_MS; // 삭제 30일 전부터 선생님께 임박 안내(대시보드/갤러리 배지).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SESSION_TTL_SEC = 60 * 60 * 24 * 30; // 30일
-const STUDENT_TTL_SEC = 60 * 60 * 6; // 6시간
+// 12시간 — 6시간은 오전에 입장한 학급이 오후 수업 중 갑자기 만료되어 "학급 코드
+// 연결이 끊겼습니다"가 뜨고 그리던 그림을 저장조차 못 했다(2026-07-13 사용자 실측).
+// 클라이언트도 401이면 조용히 재입장해 재시도한다(src/lib/student-auth.ts) — 이중 방어.
+const STUDENT_TTL_SEC = 60 * 60 * 12;
 // 미가입 이메일 로그인 시 타이밍 균일화용 더미(존재하는 계정과 동일한 PBKDF2 비용 지불).
 const DUMMY_HASH = "A".repeat(43);
 const DUMMY_SALT = "A".repeat(22);

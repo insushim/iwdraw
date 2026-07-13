@@ -31,9 +31,10 @@ GUIDE_GRAY = 205
 # 해돋이처럼 원래 대비가 낮은 그림에서 거의 안 보임 — "보고 그리기에 너무 흐리다").
 # 블렌드 결과의 대비(표준편차)가 TARGET_STD가 되도록 알파를 역산 = 어떤 그림이든
 # 비슷한 "읽힘". 대비 강한 그림(몬드리안)은 자동으로 옅게, 옅은 그림은 진하게.
-TARGET_STD_TRACE = 22.0  # 따라 그리기: 형태는 뚜렷하되 내 획이 위에 보여야
-TARGET_STD_QUARTER = 17.0  # 1/4 완성하기: 나머지 영역은 힌트 수준
-ALPHA_MIN, ALPHA_MAX = 0.22, 0.72
+# 2026-07-13 2차 실측: 22는 카드 썸네일·캔버스에서 여전히 옅다("너무 흐리지 않게")
+TARGET_STD_TRACE = 30.0  # 따라 그리기: 형태가 또렷하되 내 획이 위에 확실히 보여야
+TARGET_STD_QUARTER = 22.0  # 1/4 완성하기: 나머지 영역은 힌트 수준
+ALPHA_MIN, ALPHA_MAX = 0.30, 0.80
 
 
 # (slug, 한국어 제목, 작가, 사망년, [위키미디어 파일명 후보…])
@@ -102,6 +103,37 @@ PAINTINGS = [
     ("kkachi_horangi", "까치와 호랑이(민화)", "작자 미상(조선 민화)", 1800, ["Korean tiger and magpie painting.jpg", "Magpie and tiger minhwa"]),
     ("ejiri", "에지리의 바람(후가쿠 36경)", "가쓰시카 호쿠사이", 1849, ["Ejiri in Suruga Province.jpg", "Hokusai Ejiri in Suruga Province"]),
     ("hiroshige_rain", "오하시 다리에 내리는 소나기", "우타가와 히로시게", 1858, ["Hiroshige Atake sudden shower.jpg", "Sudden Shower over Shin-Ohashi Bridge and Atake"]),
+    # 초등 교과·전시에 자주 나오는 PD 명화 추가(2026-07-13)
+    # ⚠️ 육안 검수로 제외한 것들(재추가 금지): 쇠라 아니에르 물놀이·세잔 목욕하는 사람들·
+    # 보스 쾌락의 정원(누드), 들라크루아 민중을 이끄는 자유(시체·노출), 밀레이 오필리아(익사),
+    # 히로시게 아와의 소용돌이(검색 폴백이 실제 바다 사진을 가져옴), 프라고나르 그네(폴백 오류).
+    ("wheatfield_crows", "까마귀 나는 밀밭", "빈센트 반 고흐", 1890, ["Vincent van Gogh - Wheatfield with crows - Google Art Project.jpg"]),
+    ("potato_eaters", "감자 먹는 사람들", "빈센트 반 고흐", 1890, ["Van-willem-vincent-gogh-die-kartoffelesser-03850.jpg", "Van Gogh The Potato Eaters"]),
+    ("almond_blossom", "아몬드 꽃", "빈센트 반 고흐", 1890, ["Vincent van Gogh - Almond blossom - Google Art Project.jpg"]),
+    ("rouen_cathedral", "루앙 대성당", "클로드 모네", 1926, ["Claude Monet - Rouen Cathedral, Facade (Sunset).JPG", "Monet Rouen Cathedral"]),
+    ("umbrellas", "우산", "오귀스트 르누아르", 1919, ["Pierre-Auguste Renoir - The Umbrellas - Google Art Project.jpg"]),
+    ("girl_watering", "물뿌리개를 든 소녀", "오귀스트 르누아르", 1919, ["Pierre-Auguste Renoir - A Girl with a Watering Can - Google Art Project.jpg"]),
+    ("little_dancer", "무대 위의 무희", "에드가 드가", 1917, ["Edgar Degas - The Star - Google Art Project.jpg", "Degas The Star dancer"]),
+    ("circus", "서커스", "조르주 쇠라", 1891, ["Georges Seurat 019.jpg", "Seurat Le Cirque"]),
+    ("van_gogh_chair", "고흐의 의자", "빈센트 반 고흐", 1890, ["Vincent van Gogh - Van Gogh's Chair - Google Art Project.jpg"]),
+    ("starry_rhone", "론강의 별이 빛나는 밤", "빈센트 반 고흐", 1890, ["Starry Night Over the Rhone.jpg"]),
+    ("kiss_hayez", "입맞춤", "프란체스코 하예즈", 1882, ["Francesco Hayez 008.jpg", "Hayez Il bacio"]),
+    ("wanderer_fog", "안개 바다 위의 방랑자", "카스파르 프리드리히", 1840, ["Caspar David Friedrich - Wanderer above the sea of fog.jpg"]),
+    ("lady_ermine", "흰 담비를 안은 여인", "레오나르도 다 빈치", 1519, ["Lady with an Ermine - Leonardo da Vinci - Google Art Project.jpg"]),
+    ("vitruvian", "비트루비우스적 인간", "레오나르도 다 빈치", 1519, ["Da Vinci Vitruve Luc Viatour.jpg"]),
+    ("peasant_wedding", "농부의 결혼식", "피터르 브뤼헐", 1569, ["Pieter Bruegel de Oude - De boerenbruiloft.jpg"]),
+    ("children_games", "아이들의 놀이", "피터르 브뤼헐", 1569, ["Pieter Bruegel the Elder - Children’s Games - Google Art Project.jpg", "Bruegel Children's Games"]),
+    ("sunflowers_arles", "해바라기(뮌헨)", "빈센트 반 고흐", 1890, ["Vincent Willem van Gogh - Sunflowers - VGM F458.jpg", "Van Gogh Sunflowers Munich"]),
+    ("saint_george", "성 게오르기우스와 용", "파올로 우첼로", 1475, ["Paolo Uccello 047b.jpg", "Uccello Saint George and the Dragon"]),
+    ("bar_folies", "폴리 베르제르의 바", "에두아르 마네", 1883, ["Edouard Manet, A Bar at the Folies-Bergère.jpg"]),
+    ("whistlers_mother", "화가의 어머니", "제임스 휘슬러", 1903, ["Whistlers Mother high res.jpg", "Whistler's Mother"]),
+    ("american_landscape", "건초 만드는 사람들", "쥘 바스티앵르파주", 1884, ["Jules Bastien-Lepage - Les Foins.jpg", "Bastien-Lepage Les Foins"]),
+    ("fuji_kanagawa2", "후지산과 번개(산하백우)", "가쓰시카 호쿠사이", 1849, ["Lightnings below the summit.jpg", "Hokusai Rainstorm Beneath the Summit"]),
+    ("hiroshige_plum", "가메이도의 매화 정원", "우타가와 히로시게", 1858, ["Hiroshige Plum Park in Kameido.jpg", "Hiroshige Plum Garden Kameido"]),
+    ("bird_flower", "화조도(민화)", "작자 미상(조선 민화)", 1800, ["Korean folk painting bird flower.jpg", "Minhwa hwajodo bird flower Korea"]),
+    ("chaekgeori", "책가도(민화)", "작자 미상(조선 민화)", 1800, ["Chaekgeori.jpg", "Chaekgeori books scholar painting"]),
+    ("kim_deukshin", "야묘도추(들고양이)", "김득신", 1822, ["Kim Deuk-sin-Yamyodochu.jpg", "Yamyodochu Kim Deuksin"]),
+    ("juksan", "묵죽도", "이정", 1626, ["Yi Jeong-Bamboo.jpg", "Korean ink bamboo painting Joseon"]),
 ]
 
 

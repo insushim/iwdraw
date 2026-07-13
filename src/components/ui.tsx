@@ -69,7 +69,8 @@ export function Chip({
   } as const;
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${tones[tone]} ${className}`}
+      /* whitespace-nowrap+shrink-0: 좁은 카드에서 "고학년"이 "고학/년"으로 접혔다(2026-07-13) */
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-sm font-semibold ${tones[tone]} ${className}`}
     >
       {children}
     </span>

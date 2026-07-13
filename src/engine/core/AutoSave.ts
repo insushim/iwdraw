@@ -68,8 +68,17 @@ export class AutoSave {
     this.timer = setTimeout(() => void this.flush(), delay);
   }
 
+  /** 저장 진행 중에 들어온 flush 요청 — 끝나고 한 번 더 저장한다(대기분 유실 방지) */
+  private queued = false;
+
   async flush(): Promise<void> {
-    if (!this.pending || this.saving) return;
+    if (!this.pending) return;
+    // ⚠️ 진행 중이라고 그냥 return하면, 그때 쌓인 최신 획이 통째로 날아간다
+    // (언마운트·탭 전환 flush와 겹치면 "예전 저장본만 남는" 사고 — 2026-07-13).
+    if (this.saving) {
+      this.queued = true;
+      return;
+    }
     this.saving = true;
     const snap = this.pending;
     this.pending = null;
@@ -84,9 +93,14 @@ export class AutoSave {
       });
       db.close();
     } catch {
-      /* 저장 실패는 조용히 무시(다음 디바운스에서 재시도) */
+      /* 저장 실패(쿼터 초과 등) — 스냅샷을 되살려 다음 flush에서 재시도 */
+      if (!this.pending) this.pending = snap;
     } finally {
       this.saving = false;
+      if (this.queued) {
+        this.queued = false;
+        await this.flush(); // 저장 중에 쌓인 최신 상태를 이어서 저장
+      }
     }
   }
 

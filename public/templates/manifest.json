@@ -7043,7 +7043,7 @@
       "theme": "masters_trace",
       "title": "명화 따라 그리기",
       "category": "masters",
-      "count": 56,
+      "count": 82,
       "cover": "/templates/masters/masters_trace_starry_night.webp",
       "items": [
         {
@@ -7381,6 +7381,162 @@
           "title": "오하시 다리에 내리는 소나기 따라 그리기",
           "grade": "high",
           "image": "/templates/masters/masters_trace_hiroshige_rain.webp"
+        },
+        {
+          "id": "masters_trace_wheatfield_crows",
+          "title": "까마귀 나는 밀밭 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_wheatfield_crows.webp"
+        },
+        {
+          "id": "masters_trace_potato_eaters",
+          "title": "감자 먹는 사람들 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_potato_eaters.webp"
+        },
+        {
+          "id": "masters_trace_almond_blossom",
+          "title": "아몬드 꽃 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_almond_blossom.webp"
+        },
+        {
+          "id": "masters_trace_rouen_cathedral",
+          "title": "루앙 대성당 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_rouen_cathedral.webp"
+        },
+        {
+          "id": "masters_trace_umbrellas",
+          "title": "우산 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_umbrellas.webp"
+        },
+        {
+          "id": "masters_trace_girl_watering",
+          "title": "물뿌리개를 든 소녀 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_girl_watering.webp"
+        },
+        {
+          "id": "masters_trace_little_dancer",
+          "title": "무대 위의 무희 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_little_dancer.webp"
+        },
+        {
+          "id": "masters_trace_circus",
+          "title": "서커스 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_circus.webp"
+        },
+        {
+          "id": "masters_trace_van_gogh_chair",
+          "title": "고흐의 의자 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_van_gogh_chair.webp"
+        },
+        {
+          "id": "masters_trace_starry_rhone",
+          "title": "론강의 별이 빛나는 밤 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_starry_rhone.webp"
+        },
+        {
+          "id": "masters_trace_kiss_hayez",
+          "title": "입맞춤 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_kiss_hayez.webp"
+        },
+        {
+          "id": "masters_trace_wanderer_fog",
+          "title": "안개 바다 위의 방랑자 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_wanderer_fog.webp"
+        },
+        {
+          "id": "masters_trace_lady_ermine",
+          "title": "흰 담비를 안은 여인 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_lady_ermine.webp"
+        },
+        {
+          "id": "masters_trace_vitruvian",
+          "title": "비트루비우스적 인간 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_vitruvian.webp"
+        },
+        {
+          "id": "masters_trace_peasant_wedding",
+          "title": "농부의 결혼식 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_peasant_wedding.webp"
+        },
+        {
+          "id": "masters_trace_children_games",
+          "title": "아이들의 놀이 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_children_games.webp"
+        },
+        {
+          "id": "masters_trace_sunflowers_arles",
+          "title": "해바라기(뮌헨) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_sunflowers_arles.webp"
+        },
+        {
+          "id": "masters_trace_saint_george",
+          "title": "성 게오르기우스와 용 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_saint_george.webp"
+        },
+        {
+          "id": "masters_trace_bar_folies",
+          "title": "폴리 베르제르의 바 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_bar_folies.webp"
+        },
+        {
+          "id": "masters_trace_whistlers_mother",
+          "title": "화가의 어머니 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_whistlers_mother.webp"
+        },
+        {
+          "id": "masters_trace_american_landscape",
+          "title": "건초 만드는 사람들 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_american_landscape.webp"
+        },
+        {
+          "id": "masters_trace_fuji_kanagawa2",
+          "title": "후지산과 번개(산하백우) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_fuji_kanagawa2.webp"
+        },
+        {
+          "id": "masters_trace_hiroshige_plum",
+          "title": "가메이도의 매화 정원 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_hiroshige_plum.webp"
+        },
+        {
+          "id": "masters_trace_bird_flower",
+          "title": "화조도(민화) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_bird_flower.webp"
+        },
+        {
+          "id": "masters_trace_chaekgeori",
+          "title": "책가도(민화) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_chaekgeori.webp"
+        },
+        {
+          "id": "masters_trace_juksan",
+          "title": "묵죽도 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_juksan.webp"
         }
       ]
     },
@@ -7388,7 +7544,7 @@
       "theme": "masters_quarter",
       "title": "명화 1/4 완성하기",
       "category": "masters",
-      "count": 56,
+      "count": 82,
       "cover": "/templates/masters/masters_quarter_starry_night.webp",
       "items": [
         {
@@ -7726,6 +7882,162 @@
           "title": "오하시 다리에 내리는 소나기 1/4 완성하기",
           "grade": "mid",
           "image": "/templates/masters/masters_quarter_hiroshige_rain.webp"
+        },
+        {
+          "id": "masters_quarter_wheatfield_crows",
+          "title": "까마귀 나는 밀밭 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_wheatfield_crows.webp"
+        },
+        {
+          "id": "masters_quarter_potato_eaters",
+          "title": "감자 먹는 사람들 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_potato_eaters.webp"
+        },
+        {
+          "id": "masters_quarter_almond_blossom",
+          "title": "아몬드 꽃 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_almond_blossom.webp"
+        },
+        {
+          "id": "masters_quarter_rouen_cathedral",
+          "title": "루앙 대성당 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_rouen_cathedral.webp"
+        },
+        {
+          "id": "masters_quarter_umbrellas",
+          "title": "우산 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_umbrellas.webp"
+        },
+        {
+          "id": "masters_quarter_girl_watering",
+          "title": "물뿌리개를 든 소녀 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_girl_watering.webp"
+        },
+        {
+          "id": "masters_quarter_little_dancer",
+          "title": "무대 위의 무희 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_little_dancer.webp"
+        },
+        {
+          "id": "masters_quarter_circus",
+          "title": "서커스 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_circus.webp"
+        },
+        {
+          "id": "masters_quarter_van_gogh_chair",
+          "title": "고흐의 의자 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_van_gogh_chair.webp"
+        },
+        {
+          "id": "masters_quarter_starry_rhone",
+          "title": "론강의 별이 빛나는 밤 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_starry_rhone.webp"
+        },
+        {
+          "id": "masters_quarter_kiss_hayez",
+          "title": "입맞춤 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_kiss_hayez.webp"
+        },
+        {
+          "id": "masters_quarter_wanderer_fog",
+          "title": "안개 바다 위의 방랑자 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_wanderer_fog.webp"
+        },
+        {
+          "id": "masters_quarter_lady_ermine",
+          "title": "흰 담비를 안은 여인 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_lady_ermine.webp"
+        },
+        {
+          "id": "masters_quarter_vitruvian",
+          "title": "비트루비우스적 인간 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_vitruvian.webp"
+        },
+        {
+          "id": "masters_quarter_peasant_wedding",
+          "title": "농부의 결혼식 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_peasant_wedding.webp"
+        },
+        {
+          "id": "masters_quarter_children_games",
+          "title": "아이들의 놀이 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_children_games.webp"
+        },
+        {
+          "id": "masters_quarter_sunflowers_arles",
+          "title": "해바라기(뮌헨) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_sunflowers_arles.webp"
+        },
+        {
+          "id": "masters_quarter_saint_george",
+          "title": "성 게오르기우스와 용 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_saint_george.webp"
+        },
+        {
+          "id": "masters_quarter_bar_folies",
+          "title": "폴리 베르제르의 바 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_bar_folies.webp"
+        },
+        {
+          "id": "masters_quarter_whistlers_mother",
+          "title": "화가의 어머니 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_whistlers_mother.webp"
+        },
+        {
+          "id": "masters_quarter_american_landscape",
+          "title": "건초 만드는 사람들 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_american_landscape.webp"
+        },
+        {
+          "id": "masters_quarter_fuji_kanagawa2",
+          "title": "후지산과 번개(산하백우) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_fuji_kanagawa2.webp"
+        },
+        {
+          "id": "masters_quarter_hiroshige_plum",
+          "title": "가메이도의 매화 정원 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_hiroshige_plum.webp"
+        },
+        {
+          "id": "masters_quarter_bird_flower",
+          "title": "화조도(민화) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_bird_flower.webp"
+        },
+        {
+          "id": "masters_quarter_chaekgeori",
+          "title": "책가도(민화) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_chaekgeori.webp"
+        },
+        {
+          "id": "masters_quarter_juksan",
+          "title": "묵죽도 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_juksan.webp"
         }
       ]
     }

@@ -3,6 +3,7 @@
 import { getStudentSession } from "./student-session";
 import { hasBackend } from "./backend";
 import { apiFetch } from "./api";
+import { withStudentAuth } from "./student-auth";
 
 /*
  * 작품 제출 — /api/artwork(Worker) 경유(DESIGN-REVIEW A1).
@@ -29,11 +30,10 @@ export async function submitArtwork(input: SubmitArtworkInput): Promise<{ id: st
   form.append("thumb", input.thumb, "thumb.webp");
   if (input.timelapse) form.append("timelapse", input.timelapse, "timelapse.webm");
 
-  const res = await apiFetch("/artwork", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${session.token}` },
-    body: form,
-  });
+  // 401(6시간 토큰 만료)이면 조용히 재입장 후 1회 재시도 — 저장 순간 세션이 끊겨
+  // 그림을 못 내던 사고 방지(2026-07-13 사용자 실측). FormData는 재사용 가능.
+  const res = await withStudentAuth((h) => apiFetch("/artwork", { method: "POST", headers: h, body: form }));
+  if (!res) throw new Error("학생 세션이 없습니다");
   if (!res.ok) {
     const msg = await res.text().catch(() => "");
     throw new Error(`작품 제출 실패 (${res.status}): ${msg}`);
