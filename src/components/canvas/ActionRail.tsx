@@ -163,6 +163,19 @@ export function ActionRail() {
             );
           })}
         </div>
+        {symmetry !== "none" && (
+          <div className="mt-1 flex items-center justify-between gap-1">
+            <span className="text-[10px] leading-tight text-ink-faint">
+              파란 점을 끌어 접는 선을 옮겨요
+            </span>
+            <button
+              onClick={() => useEditor.getState().engine?.resetSymmetryAxis()}
+              className="pressable shrink-0 rounded-lg bg-cream px-2 py-1 text-[10px] font-semibold text-ink-soft hover:bg-cream-deep"
+            >
+              가운데로
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 전체 지우기 */}

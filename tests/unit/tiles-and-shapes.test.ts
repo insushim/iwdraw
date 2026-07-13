@@ -211,20 +211,25 @@ describe("QuickShape.detectShape", () => {
 });
 
 describe("Symmetry.mirrorPoint", () => {
+  // 인자는 캔버스 크기가 아니라 "축 좌표"다(2026-07-13 축 드래그 도입) — 중앙 축 = (50,50)
   const p: StrokePoint = { x: 10, y: 20, pressure: 1, t: 0 };
   it("none은 원본만", () => {
-    expect(mirrorPoint(p, "none", 100, 100)).toHaveLength(1);
+    expect(mirrorPoint(p, "none", 50, 50)).toHaveLength(1);
   });
   it("vertical은 좌우 2개", () => {
-    const r = mirrorPoint(p, "vertical", 100, 100);
+    const r = mirrorPoint(p, "vertical", 50, 50);
     expect(r).toHaveLength(2);
     expect(r[1].x).toBe(90);
     expect(r[1].y).toBe(20);
   });
   it("quad는 4개", () => {
-    const r = mirrorPoint(p, "quad", 100, 100);
+    const r = mirrorPoint(p, "quad", 50, 50);
     expect(r).toHaveLength(4);
     expect(r[3]).toMatchObject({ x: 90, y: 80 });
+  });
+  it("축을 옮기면 그 축 기준으로 반사(드래그 이동)", () => {
+    const r = mirrorPoint(p, "vertical", 30, 50); // 축 x=30
+    expect(r[1].x).toBe(50); // 2×30 − 10
   });
 });
 

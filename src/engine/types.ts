@@ -147,6 +147,8 @@ export interface EngineEvents {
   suggestReady: { candidates: SketchSuggestion[] };
   /** 떠 있는 스탬프(배치 중) 변경 — null = 배치 종료(확인/취소). UI가 확인·취소 바 표시 */
   pendingChange: { pending: { stampId: string; label: string } | null };
+  /** 데칼코마니 대칭축 이동(드래그·리셋) — UI가 "가운데로" 버튼 노출에 사용 */
+  symmetryAxis: { x: number; y: number };
 }
 
 export type EngineEventName = keyof EngineEvents;

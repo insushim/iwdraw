@@ -87,6 +87,11 @@ export class ArtEngine {
   brushId: BrushId = "pencil";
   settings: BrushSettings = { ...DEFAULT_SETTINGS };
   symmetry: SymmetryMode = "none";
+  /** 대칭축 위치(캔버스 좌표) — 기본은 정중앙, 사용자가 드래그로 옮긴다(2026-07-13 요청).
+   * 표시 전용 상태라 undo/저장 대상이 아니다(획은 이미 반영된 좌표로 굳는다). */
+  private symAxis: { x: number; y: number } | null = null;
+  /** 축 드래그 중: 어느 축을 잡았는지(x=세로선, y=가로선, 둘 다=교차 핸들) */
+  private axisDrag: { x: boolean; y: boolean } | null = null;
   quickShapeEnabled = false;
   /** 뚝딱그림(스케치 인식 → 스탬프 제안) — 색칠 모드에선 자동 비활성 */
   sketchSuggestEnabled = true;
@@ -291,6 +296,46 @@ export class ArtEngine {
     this.symmetry = m;
     this.requestComposite(); // 가이드선 즉시 표시/제거
   }
+
+  /** 대칭축 좌표(미설정이면 캔버스 중앙) */
+  private axis(): { x: number; y: number } {
+    return this.symAxis ?? { x: this.width / 2, y: this.height / 2 };
+  }
+
+  /** 대칭축을 중앙으로 되돌린다(UI: 축 리셋) */
+  resetSymmetryAxis(): void {
+    this.symAxis = null;
+    this.requestComposite();
+    this.emit("symmetryAxis", { ...this.axis() });
+  }
+
+  /** 포인터가 축(또는 교차 핸들)을 잡았는지 — 잡았으면 그리기 대신 축 이동 */
+  private axisHitTest(p: { x: number; y: number }): { x: boolean; y: boolean } | null {
+    if (this.symmetry === "none") return null;
+    const a = this.axis();
+    const tol = 14 / this.view.scale; // 화면상 약 14px(줌 무관)
+    const nearX =
+      (this.symmetry === "vertical" || this.symmetry === "quad") && Math.abs(p.x - a.x) <= tol;
+    const nearY =
+      (this.symmetry === "horizontal" || this.symmetry === "quad") && Math.abs(p.y - a.y) <= tol;
+    // quad에서 교차점 핸들을 잡으면 두 축을 함께 옮긴다
+    if (nearX && nearY) return { x: true, y: true };
+    if (nearX) return { x: true, y: false };
+    if (nearY) return { x: false, y: true };
+    return null;
+  }
+
+  private axisDragMove(p: { x: number; y: number }): void {
+    if (!this.axisDrag) return;
+    const a = this.axis();
+    // 축이 캔버스 밖으로 나가면 대칭이 화면 밖에서만 일어난다 — 안쪽으로 클램프
+    const m = 8;
+    this.symAxis = {
+      x: this.axisDrag.x ? clamp(p.x, m, this.width - m) : a.x,
+      y: this.axisDrag.y ? clamp(p.y, m, this.height - m) : a.y,
+    };
+    this.requestComposite();
+  }
   setSketchSuggest(on: boolean): void {
     this.sketchSuggestEnabled = on;
     if (!on) this.resetSuggest();
@@ -370,6 +415,13 @@ export class ArtEngine {
       this.pendingPointerDown(p);
       return;
     }
+    // 데칼코마니 축을 잡았으면 그리지 않고 축을 옮긴다(2026-07-13 요청)
+    const grab = this.axisHitTest(p);
+    if (grab) {
+      this.axisDrag = grab;
+      this.axisDragMove(p);
+      return;
+    }
     // 도형 삽입: 드래그 = 도형 배치(미리보기), 커밋은 strokeEnd에서
     if (this.shapeInsertKind) {
       // 스트로크형 브러시로만 그린다(포인터·페인트통 등이면 UI가 브러시를 바꿔줌)
@@ -419,6 +471,10 @@ export class ArtEngine {
   }
 
   private strokeMove(points: StrokePoint[]): void {
+    if (this.axisDrag) {
+      this.axisDragMove(points[points.length - 1]);
+      return;
+    }
     if (this.pending) {
       if (this.pendingDrag) this.pendingPointerMove(points[points.length - 1]);
       return;
@@ -449,6 +505,12 @@ export class ArtEngine {
   }
 
   private strokeEnd(p: StrokePoint): void {
+    if (this.axisDrag) {
+      this.axisDragMove(p);
+      this.axisDrag = null;
+      this.emit("symmetryAxis", { ...this.axis() });
+      return;
+    }
     if (this.pending) {
       this.pendingDrag = null; // 드래그만 끝남 — 배치는 확인/취소 버튼으로
       return;
@@ -494,6 +556,11 @@ export class ArtEngine {
    * ⚠️ Canvas2D 폴백의 지우개(레이어 직접)는 취소 불가 — 그 경우 이미 지운 만큼은 남는다 */
   private strokeCancel(): void {
     if (this.replaying) return;
+    if (this.axisDrag) {
+      this.axisDrag = null;
+      this.emit("symmetryAxis", { ...this.axis() });
+      return;
+    }
     if (this.shapeDrag) {
       this.shapeDrag = null;
       this.requestComposite(); // 미리보기 지우기
@@ -684,8 +751,8 @@ export class ArtEngine {
             mirrorPoint(
               { x: d.x, y: d.y, pressure: 1, t: center.t },
               this.symmetry,
-              this.width,
-              this.height,
+              this.axis().x,
+              this.axis().y,
             ).map((m) => ({ ...d, x: m.x, y: m.y })),
           );
     this.cm.backend.drawDabs(all);
@@ -1155,7 +1222,7 @@ export class ArtEngine {
         ? [points]
         : (() => {
             const per = points.map((p) =>
-              mirrorPoint({ x: p.x, y: p.y, pressure: 1, t: 0 }, this.symmetry, this.width, this.height),
+              mirrorPoint({ x: p.x, y: p.y, pressure: 1, t: 0 }, this.symmetry, this.axis().x, this.axis().y),
             );
             return per[0].map((_, k) => per.map((mp) => mp[k]));
           })();
@@ -1405,19 +1472,49 @@ export class ArtEngine {
     // 데칼코마니 가이드(표시 전용 — 내보내기·저장엔 미포함): 대칭축을 연한 점선으로.
     // 어느 선을 기준으로 접히는지 보여야 아이가 대칭을 이해하고 그린다(2026-07-09 요청).
     if (this.symmetry !== "none") {
+      const a = this.axis();
+      const k = 1 / this.view.scale; // 줌과 무관한 화면 px 환산
+      const dragging = !!this.axisDrag;
       ctx.save();
-      ctx.strokeStyle = "rgba(91,184,245,0.45)"; // sky 톤
-      ctx.lineWidth = 2 / this.view.scale; // 줌과 무관하게 화면상 2px
-      ctx.setLineDash([10 / this.view.scale, 8 / this.view.scale]);
+      ctx.strokeStyle = dragging ? "rgba(91,184,245,0.9)" : "rgba(91,184,245,0.45)"; // sky 톤
+      ctx.lineWidth = (dragging ? 3 : 2) * k;
+      ctx.setLineDash([10 * k, 8 * k]);
       ctx.beginPath();
-      if (this.symmetry === "vertical" || this.symmetry === "quad") {
-        ctx.moveTo(this.width / 2, 0);
-        ctx.lineTo(this.width / 2, this.height);
+      const vert = this.symmetry === "vertical" || this.symmetry === "quad";
+      const horz = this.symmetry === "horizontal" || this.symmetry === "quad";
+      if (vert) {
+        ctx.moveTo(a.x, 0);
+        ctx.lineTo(a.x, this.height);
       }
-      if (this.symmetry === "horizontal" || this.symmetry === "quad") {
-        ctx.moveTo(0, this.height / 2);
-        ctx.lineTo(this.width, this.height / 2);
+      if (horz) {
+        ctx.moveTo(0, a.y);
+        ctx.lineTo(this.width, a.y);
       }
+      ctx.stroke();
+      // 드래그 핸들 — 축을 손가락으로 잡아 옮길 수 있다는 걸 보여준다(2026-07-13 요청).
+      // 세로축만이면 선 중앙, 가로축만이면 선 중앙, 4방이면 교차점.
+      ctx.setLineDash([]);
+      const hx = vert ? a.x : this.width / 2;
+      const hy = horz ? a.y : this.height / 2;
+      ctx.beginPath();
+      ctx.arc(hx, hy, (dragging ? 11 : 9) * k, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.fill();
+      ctx.lineWidth = 2 * k;
+      ctx.strokeStyle = "rgba(91,184,245,0.95)";
+      ctx.stroke();
+      // 핸들 안 이동 화살표(십자/좌우/상하)
+      ctx.beginPath();
+      const r = 4 * k;
+      if (vert) {
+        ctx.moveTo(hx - r, hy);
+        ctx.lineTo(hx + r, hy);
+      }
+      if (horz) {
+        ctx.moveTo(hx, hy - r);
+        ctx.lineTo(hx, hy + r);
+      }
+      ctx.lineWidth = 1.6 * k;
       ctx.stroke();
       ctx.restore();
     }
@@ -1430,7 +1527,7 @@ export class ArtEngine {
           ? [pts]
           : (() => {
               const per = pts.map((p) =>
-                mirrorPoint({ x: p.x, y: p.y, pressure: 1, t: 0 }, this.symmetry, this.width, this.height),
+                mirrorPoint({ x: p.x, y: p.y, pressure: 1, t: 0 }, this.symmetry, this.axis().x, this.axis().y),
               );
               return per[0].map((_, k) => per.map((mp) => mp[k]));
             })();
