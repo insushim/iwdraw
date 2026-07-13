@@ -578,7 +578,7 @@ export class ArtEngine {
     this.cm.backend.cancelStroke();
     this.brush = null;
     this.smudging = false;
-    this.smudgeLast = null;
+    this.smudgeLasts = null;
     this.curPoints = [];
     this.beforeFull = null;
     this.quickShapeApplied = false;
@@ -587,7 +587,19 @@ export class ArtEngine {
 
   /* ── 번짐(스머지) — 레이어 픽셀을 문질러 끌고 간다(SmudgeTool 공용 헬퍼) ── */
   private smudging = false;
-  private smudgeLast: { x: number; y: number } | null = null;
+  /* 대칭 가지별 직전 지점 — 번짐은 dab 파이프라인(paintDabs)이 아니라 레이어를 직접
+   * 문지르므로 대칭 복제를 여기서 직접 해야 한다. 하지 않으면 데칼코마니에서 번짐만
+   * 한쪽에만 먹는다(2026-07-13 사용자 실측 "번지기 붓이 데칼코마니에서 작동 안 함"). */
+  private smudgeLasts: { x: number; y: number }[] | null = null;
+
+  /** 대칭 축 기준 복제점(대칭 없으면 자기 자신 1개) — 순서는 가지 인덱스로 고정 */
+  private mirrors(p: StrokePoint): { x: number; y: number }[] {
+    if (this.symmetry === "none") return [{ x: p.x, y: p.y }];
+    return mirrorPoint(p, this.symmetry, this.axis().x, this.axis().y).map((m) => ({
+      x: m.x,
+      y: m.y,
+    }));
+  }
 
   private smudgeSize(): number {
     return this.settings.size * 1.6; // 문지름 폭은 넉넉하게(손가락 체감)
@@ -595,25 +607,29 @@ export class ArtEngine {
 
   private smudgeBegin(p: StrokePoint): void {
     this.smudging = true;
-    this.smudgeLast = { x: p.x, y: p.y };
+    this.smudgeLasts = this.mirrors(p);
     this.curPoints = [p];
     this.beforeFull = this.snapshotActiveLayer(); // 직접 편집이라 undo 스냅샷은 시작 시
     this.strokeBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   }
 
   private smudgeMove(points: StrokePoint[]): void {
-    if (!this.smudgeLast) return;
+    const lasts = this.smudgeLasts;
+    if (!lasts) return;
     const ctx = this.layers.active.ctx;
     for (const p of points) {
       this.curPoints.push(p);
-      this.smudgeLast = smearSegment(
-        ctx,
-        this.smudgeLast,
-        p,
-        this.smudgeSize(),
-        this.settings.opacity,
-        (x, y, d) => this.trackDirty(x, y, d),
-      );
+      const ms = this.mirrors(p); // 가지 수·순서는 begin과 동일(대칭 모드는 획 중 안 바뀐다)
+      for (let i = 0; i < lasts.length && i < ms.length; i++) {
+        lasts[i] = smearSegment(
+          ctx,
+          lasts[i],
+          ms[i],
+          this.smudgeSize(),
+          this.settings.opacity,
+          (x, y, d) => this.trackDirty(x, y, d),
+        );
+      }
     }
     this.requestComposite();
   }
@@ -622,7 +638,7 @@ export class ArtEngine {
     this.resetSuggest(); // smudge도 히스토리 push — 그룹 불변식 유지
     this.smudgeMove([p]);
     this.smudging = false;
-    this.smudgeLast = null;
+    this.smudgeLasts = null;
     const bb = this.strokeBBox;
     if (isFinite(bb.minX) && this.beforeFull) {
       const layer = this.layers.active;

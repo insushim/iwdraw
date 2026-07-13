@@ -93,6 +93,8 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
   // onSave가 있다 = 학급 코드로 입장한 학생 세션 — 저장이 곧 학급 갤러리 제출
   const submits = !!onSave;
   // 첫 진입 1회 안내(세션당) — 터치 기기는 저장 버튼 툴팁을 볼 수 없다
@@ -108,37 +110,47 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
   const [showMovie, setShowMovie] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
 
-  const handleExport = useCallback(async () => {
-    const engine = engineRef.current;
-    if (!engine || saving) return;
-    setSaving(true);
-    try {
-      const layers = engine.getLayers();
-      const png = await exportPng(layers, engine.width, engine.height, {
-        background: true,
-        scale: 1,
-      });
-      const thumb = await exportThumb(layers, engine.width, engine.height);
-      if (onSave) {
-        await onSave(png, thumb);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3500); // 제출 안내 문구가 길어 읽을 시간 확보
-      } else {
-        const url = URL.createObjectURL(png);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `arton-${Date.now()}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
+  /* 저장은 두 갈래 — 학급으로 입장했어도 "내 컴퓨터에 저장"은 늘 쓸 수 있어야 한다
+   * (2026-07-13 사용자 요청: 갤러리 제출과 파일 저장은 별개의 일). */
+  const handleExport = useCallback(
+    async (mode: "submit" | "download") => {
+      const engine = engineRef.current;
+      if (!engine || saving || downloading) return;
+      const submit = mode === "submit" && !!onSave;
+      if (submit) setSaving(true);
+      else setDownloading(true);
+      try {
+        const layers = engine.getLayers();
+        const png = await exportPng(layers, engine.width, engine.height, {
+          background: true,
+          scale: 1,
+        });
+        if (submit) {
+          const thumb = await exportThumb(layers, engine.width, engine.height);
+          await onSave!(png, thumb);
+          setSaved(true);
+          setTimeout(() => setSaved(false), 3500); // 제출 안내 문구가 길어 읽을 시간 확보
+        } else {
+          const url = URL.createObjectURL(png);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `arton-${Date.now()}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          setDownloaded(true);
+          setTimeout(() => setDownloaded(false), 2500);
+        }
+      } catch {
+        // 제출 실패(네트워크·잠긴 학급 403·과속 429) — 아이에게도 알려야 재시도한다
+        setSaveError(true);
+        setTimeout(() => setSaveError(false), 3500);
+      } finally {
+        setSaving(false);
+        setDownloading(false);
       }
-    } catch {
-      // 제출 실패(네트워크·잠긴 학급 403·과속 429) — 아이에게도 알려야 재시도한다
-      setSaveError(true);
-      setTimeout(() => setSaveError(false), 3500);
-    } finally {
-      setSaving(false);
-    }
-  }, [onSave, saving]);
+    },
+    [onSave, saving, downloading],
+  );
 
   const iconBtn =
     "pressable touch-target flex items-center justify-center gap-1 rounded-full bg-paper px-3 py-2 text-sm font-semibold text-ink-soft shadow-soft";
@@ -205,7 +217,8 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             {confirmNew ? "정말요?" : "새 그림"}
           </span>
         </button>
-        {/* 내 사진·그림 가져오기 — 협동 방에서는 숨김(가져오면 방을 떠나게 되어 혼란) */}
+        {/* 그림 불러오기 — 협동 방에서는 숨김(가져오면 방을 떠나게 되어 혼란).
+            "사진"은 무슨 기능인지 헷갈린다는 실사용 피드백(2026-07-13) → "불러오기" */}
         {!room && (
           <PhotoImport
             renderButton={(openPicker, converting) => (
@@ -213,11 +226,11 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
                 onClick={openPicker}
                 disabled={converting}
                 className={iconBtn}
-                aria-label="내 사진·그림 가져오기"
-                title="사진이나 그림을 가져와서 선따기·이어 그리기"
+                aria-label="그림·사진 불러오기"
+                title="내 기기에 있는 그림이나 사진을 불러와서 선따기·이어 그리기"
               >
-                📷
-                <span className="hidden lg:inline">{converting ? "변환 중…" : "사진"}</span>
+                📂
+                <span className="hidden lg:inline">{converting ? "변환 중…" : "불러오기"}</span>
               </button>
             )}
           />
@@ -243,17 +256,40 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           <Icon name="junior" className="h-5 w-5" />
           <span className="hidden lg:inline">저학년</span>
         </button>
+        {/* 학급으로 입장했어도 파일 저장은 따로 쓸 수 있어야 한다(사용자 요청 2026-07-13) */}
+        {submits && (
+          <button
+            onClick={() => handleExport("download")}
+            disabled={downloading}
+            className={iconBtn}
+            aria-label="내 컴퓨터에 저장"
+            title="그림을 그림 파일(PNG)로 내 기기에 저장해요"
+          >
+            <Icon name="save" className="h-5 w-5" />
+            <span className="hidden lg:inline">{downloading ? "저장 중…" : "내 기기에 저장"}</span>
+          </button>
+        )}
         <button
-          onClick={handleExport}
-          disabled={saving}
+          onClick={() => handleExport(submits ? "submit" : "download")}
+          disabled={saving || (!submits && downloading)}
           className="pressable touch-target flex items-center gap-1.5 rounded-full bg-coral px-5 py-2.5 font-display text-white shadow-soft disabled:opacity-60"
-          aria-label="저장하기"
+          aria-label={submits ? "우리 반 갤러리에 보내기" : "저장하기"}
           title={
-            submits ? "저장하면 우리 반 갤러리에 바로 전시돼요" : "그림을 파일로 저장해요"
+            submits ? "우리 반 갤러리에 바로 전시돼요" : "그림을 그림 파일(PNG)로 저장해요"
           }
         >
-          <Icon name="save" className="h-5 w-5" />
-          {saving ? (submits ? "제출 중…" : "저장 중…") : "저장"}
+          {submits ? (
+            <span className="text-lg leading-none">🖼️</span>
+          ) : (
+            <Icon name="save" className="h-5 w-5" />
+          )}
+          {submits
+            ? saving
+              ? "보내는 중…"
+              : "갤러리로 보내기"
+            : downloading
+              ? "저장 중…"
+              : "저장"}
         </button>
       </header>
 
@@ -351,15 +387,17 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       </div>
 
       {showSubmitHint && !saving && !saved && (
-        <Toast>💾 다 그리고 저장을 누르면 우리 반 갤러리에 제출돼요</Toast>
+        <Toast>🖼️ 다 그리면 &ldquo;갤러리로 보내기&rdquo; — 파일로 갖고 싶으면 &ldquo;내 기기에 저장&rdquo;</Toast>
       )}
       {saveError && <Toast>😢 저장하지 못했어요 — 잠시 후 다시 눌러 주세요</Toast>}
-      {saving && <Toast>{submits ? "우리 반 갤러리로 보내는 중…" : "저장 중…"}</Toast>}
+      {saving && <Toast>우리 반 갤러리로 보내는 중…</Toast>}
+      {downloading && <Toast>내 기기에 저장하는 중…</Toast>}
       {saved && (
         <Toast tone="leaf">
           {submits ? "✅ 우리 반 갤러리에 전시했어요! 갤러리에서 확인해 보세요" : "✅ 저장했어요!"}
         </Toast>
       )}
+      {downloaded && <Toast tone="leaf">✅ 내 기기에 그림 파일로 저장했어요</Toast>}
       {showMovie && engineRef.current && (
         <MovieModal engine={engineRef.current} onClose={() => setShowMovie(false)} />
       )}
