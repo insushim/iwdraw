@@ -11,7 +11,9 @@ const O = { stroke: INK, strokeWidth: 1.4, strokeLinejoin: "round" as const };
 
 export type IconName =
   | "pencil"
+  | "colorpencil"
   | "crayon"
+  | "signpen"
   | "marker"
   | "watercolor"
   | "oil"
@@ -56,12 +58,31 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M14.9 24.3h2.2L16 27z" fill={INK} />
     </g>
   ),
+  /* 색연필: 연필과 같은 실루엣이지만 몸통이 색색 — 옅게 쌓아 칠하는 도구 */
+  colorpencil: (
+    <g transform="rotate(45 16 16)" {...O}>
+      <rect x="13" y="2.5" width="6" height="3" rx="1.4" fill="#5BB8F5" />
+      <rect x="13" y="5.5" width="6" height="6" fill="#7FD06A" />
+      <rect x="13" y="11.5" width="6" height="8.5" fill="#E5484D" />
+      <path d="M13 20h6l-3 7z" fill="#F2D9B5" />
+      <path d="M14.9 24.3h2.2L16 27z" fill="#E5484D" />
+    </g>
+  ),
   crayon: (
     <g transform="rotate(45 16 16)" {...O}>
       <path d="M13.2 7.5 16 2.5l2.8 5z" fill="#E5484D" />
       <rect x="13.2" y="7.5" width="5.6" height="17" rx="1.4" fill="#E5484D" />
       <rect x="12.4" y="12" width="7.2" height="7" rx="1" fill="#FBF7F0" />
       <path d="M14 15.5h4" stroke="#E5484D" strokeWidth="1.2" strokeLinecap="round" />
+    </g>
+  ),
+  /* 사인펜: 가는 원뿔 촉 + 캡 — 마커(납작촉)와 한눈에 구분되게 촉을 뾰족하게 */
+  signpen: (
+    <g transform="rotate(45 16 16)" {...O}>
+      <rect x="13.2" y="2.5" width="5.6" height="5" rx="1.4" fill="#7C5CD6" />
+      <rect x="13.6" y="7.5" width="4.8" height="12" rx="1.2" fill="#FBF7F0" />
+      <path d="M13.6 19.5h4.8l-1.1 3h-2.6z" fill="#A78BEA" />
+      <path d="M14.9 22.5h2.2L16 27.5z" fill="#7C5CD6" />
     </g>
   ),
   marker: (

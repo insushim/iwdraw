@@ -8,7 +8,9 @@ import { ToolIcon, type IconName } from "./icons";
 /* 도구 → 아이콘 명시 매핑: BrushId와 IconName 유니언이 별개라 캐스트 대신 컴파일 안전하게 */
 const BRUSH_ICON: Partial<Record<BrushId, IconName>> = {
   pencil: "pencil",
+  colorpencil: "colorpencil",
   crayon: "crayon",
+  signpen: "signpen",
   marker: "marker",
   watercolor: "watercolor",
   oil: "oil",

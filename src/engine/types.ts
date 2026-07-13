@@ -6,7 +6,9 @@ export type BlendMode = "normal" | "multiply" | "screen" | "overlay";
 
 export type BrushId =
   | "pencil"
+  | "colorpencil"
   | "crayon"
+  | "signpen"
   | "marker"
   | "watercolor"
   | "oil"

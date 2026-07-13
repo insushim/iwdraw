@@ -56,14 +56,17 @@ test("색칠: 도안을 고르면 색칠 모드 캔버스가 열린다", async (
   await expect(page.getByLabel("그림 캔버스")).toBeVisible();
 });
 
-test("저학년 모드: 도구가 6종으로 줄어든다", async ({ page }) => {
+test("저학년 모드: 쉬운 도구만 남는다", async ({ page }) => {
   await page.goto("/draw");
   const junior = page.getByRole("button", { name: /저학년/ });
   await junior.click();
-  // 유화붓(고학년 전용)은 저학년 모드에서 숨겨짐
+  // 유화붓·붓펜(고학년 전용)은 저학년 모드에서 숨겨짐
   await expect(page.getByRole("button", { name: "유화붓" })).toHaveCount(0);
-  // 연필은 여전히 있음
-  await expect(page.getByRole("button", { name: "연필" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "붓펜" })).toHaveCount(0);
+  // 학교에서 늘 쓰는 도구(연필·색연필·사인펜)는 남는다
+  await expect(page.getByRole("button", { name: "연필", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "색연필", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "사인펜", exact: true })).toBeVisible();
 });
 
 test("빈 캔버스: 가로/세로 방향을 바꿀 수 있다", async ({ page }) => {

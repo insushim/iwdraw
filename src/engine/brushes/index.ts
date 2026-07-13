@@ -1,6 +1,8 @@
 import type { BrushId } from "../types";
 import { BrushBase } from "./BrushBase";
 import { Pencil } from "./Pencil";
+import { ColorPencil } from "./ColorPencil";
+import { SignPen } from "./SignPen";
 import { Crayon } from "./Crayon";
 import { Marker } from "./Marker";
 import { WatercolorBrush } from "./WatercolorBrush";
@@ -17,6 +19,10 @@ export function createBrush(id: BrushId, rng?: () => number): BrushBase {
   switch (id) {
     case "pencil":
       return new Pencil(rng);
+    case "colorpencil":
+      return new ColorPencil(rng);
+    case "signpen":
+      return new SignPen(rng);
     case "crayon":
       return new Crayon(rng);
     case "marker":
@@ -44,7 +50,9 @@ export function createBrush(id: BrushId, rng?: () => number): BrushBase {
 
 export const STROKE_BRUSHES: BrushId[] = [
   "pencil",
+  "colorpencil",
   "crayon",
+  "signpen",
   "marker",
   "watercolor",
   "oil",
@@ -65,7 +73,9 @@ export interface BrushMeta {
 
 export const BRUSH_META: BrushMeta[] = [
   { id: "pencil", label: "연필", junior: true },
+  { id: "colorpencil", label: "색연필", junior: true },
   { id: "crayon", label: "크레용", junior: true },
+  { id: "signpen", label: "사인펜", junior: true },
   { id: "marker", label: "마커", junior: true },
   { id: "watercolor", label: "수채붓", junior: true },
   { id: "oil", label: "유화붓", junior: false },
