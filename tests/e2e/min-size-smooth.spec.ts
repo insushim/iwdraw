@@ -19,12 +19,12 @@ test("최소 굵기에서도 획이 끊기지 않고 부드럽다", async ({ pag
   await page.getByRole("button", { name: "색 1", exact: true }).click();
 
   const box = (await canvas.boundingBox())!;
-  const report: Record<string, { gaps: number; cov: number }> = {};
+  const report: Record<string, { gaps: number; cov: number; sd: number }> = {};
 
   for (const name of BRUSHES) {
     await page.getByRole("button", { name, exact: true }).click();
     await page.getByLabel("브러시 굵기", { exact: true }).fill("1");
-    // 완만한 대각선 — 계단이 가장 잘 드러나는 각도
+    // ① 완만한 대각선 — 끊김(빈 열)이 가장 잘 드러나는 각도
     await page.mouse.move(box.x + box.width * 0.15, box.y + box.height * 0.3);
     await page.mouse.down();
     for (let k = 1; k <= 40; k++) {
@@ -34,6 +34,20 @@ test("최소 굵기에서도 획이 끊기지 않고 부드럽다", async ({ pag
       );
     }
     await page.mouse.up();
+    await page.waitForTimeout(200);
+    // ② 수평선 3줄 — 두께가 일정해야 한다. dab마다 굵기가 오르내리면 톱니("구불구불").
+    //    톱니는 획 중심의 서브픽셀 위치에 따라 드러나기도, 숨기도 한다(실측) → 0.33px씩
+    //    어긋난 3줄을 긋고 그중 최악(최대 편차)으로 판정한다.
+    for (const dy of [0, 0.33, 0.66]) {
+      const y = box.y + box.height * 0.78 + dy + Math.round(dy) * 0;
+      const yy = y + [0, 12, 24][[0, 0.33, 0.66].indexOf(dy)];
+      await page.mouse.move(box.x + box.width * 0.15, yy);
+      await page.mouse.down();
+      for (let k = 1; k <= 40; k++)
+        await page.mouse.move(box.x + box.width * (0.15 + 0.7 * (k / 40)), yy);
+      await page.mouse.up();
+      await page.waitForTimeout(120);
+    }
     await page.waitForTimeout(400);
 
     const stat = await page.evaluate(() => {
@@ -41,21 +55,53 @@ test("최소 굵기에서도 획이 끊기지 않고 부드럽다", async ({ pag
       const ctx = el.getContext("2d")!;
       const x0 = Math.round(el.width * 0.2);
       const w = Math.round(el.width * 0.6);
-      const img = ctx.getImageData(x0, 0, w, el.height).data;
-      // 열(column)마다 칠해진 픽셀 수 — 대각선이므로 모든 열이 획을 지난다
+      const painted = (x: number, y: number, img: Uint8ClampedArray, w: number) => {
+        const i = (y * w + x) * 4;
+        return img[i] < 235 || img[i + 1] < 235 || img[i + 2] < 235;
+      };
+      // ① 대각선 구간(위쪽 절반): 끊긴 열 세기
+      const hDiag = Math.round(el.height * 0.7);
+      const diag = ctx.getImageData(x0, 0, w, hDiag).data;
       let empty = 0;
       let cov = 0;
       for (let x = 0; x < w; x++) {
-        let painted = 0;
-        for (let y = 0; y < el.height; y++) {
-          const i = (y * w + x) * 4;
-          // 백지(≈흰색)와 구분 — 어떤 색이든 칠해졌으면 밝기가 떨어진다
-          if (img[i] < 235 || img[i + 1] < 235 || img[i + 2] < 235) painted++;
-        }
-        if (painted === 0) empty++;
-        cov += painted;
+        let n = 0;
+        for (let y = 0; y < hDiag; y++) if (painted(x, y, diag, w)) n++;
+        if (n === 0) empty++;
+        cov += n;
       }
-      return { gaps: empty, cov: Math.round((cov / w) * 10) / 10 };
+      // ② 수평선 구간(아래쪽): 열별 두께의 표준편차 = 톱니 지표
+      const y0 = Math.round(el.height * 0.72);
+      const hLine = el.height - y0;
+      const line = ctx.getImageData(x0, y0, w, hLine).data;
+      // 열별 "윗변 위치"(획의 첫 칠해진 픽셀 y) — 톱니 = 이 값이 열마다 1px씩 오르내리는 것.
+      // 잉크량·이진 카운트는 톱니를 평균 내 버려 못 잡는다(실측: 회전 on/off 차이 0.02).
+      // 3줄이 한 crop 안에 있으므로 줄별로 나눠(빈 행으로 구분) 각각의 편차를 재고 최악을 쓴다.
+      const rows: number[][] = [];
+      for (let x = 0; x < w; x++) {
+        const edges: number[] = [];
+        let prevPainted = false;
+        for (let y = 0; y < hLine; y++) {
+          const p = painted(x, y, line, w);
+          if (p && !prevPainted) edges.push(y); // 각 줄의 윗변
+          prevPainted = p;
+        }
+        edges.forEach((e, i) => {
+          (rows[i] ??= []).push(e);
+        });
+      }
+      let worst = 0;
+      for (const r of rows) {
+        if (r.length < w * 0.9) continue; // 그 줄이 crop 전체를 지나지 않으면 무시
+        const m = r.reduce((a, b) => a + b, 0) / r.length;
+        const sd = Math.sqrt(r.reduce((a, b) => a + (b - m) * (b - m), 0) / r.length);
+        worst = Math.max(worst, sd);
+      }
+      return {
+        gaps: empty,
+        cov: Math.round((cov / w) * 10) / 10,
+        sd: Math.round(worst * 100) / 100,
+      };
     });
     report[name] = stat;
     // 다음 브러시를 위해 캔버스 비우기
@@ -70,5 +116,10 @@ test("최소 굵기에서도 획이 끊기지 않고 부드럽다", async ({ pag
     expect(s.gaps, `${name} 끊긴 열`).toBeLessThan(3);
     // 열당 평균 두께가 1.4px 이상 = 안티에일리어싱이 살아 있는 선(1px 점선은 계단)
     expect(s.cov, `${name} 열당 두께`).toBeGreaterThan(1.4);
+    // 수평선인데 열마다 두께가 오르내리면 톱니로 보인다 — dab 무작위 회전이 원인이었다
+    // 수평선인데 윗변이 열마다 오르내리면 톱니("구불구불")로 보인다.
+    // 원인 = dab마다 팁 쿼드를 무작위 회전 → 얇은 획에서 텍셀 커버리지가 dab마다 달라짐.
+    // 수정 전 실측: 연필 0.5 · 사인펜 0.36 / 수정 후: 전 브러시 0
+    expect(s.sd, `${name} 수평선 윗변 편차(톱니)`).toBeLessThan(0.2);
   }
 });

@@ -31,6 +31,15 @@ export type TipKind =
  */
 export const MIN_DAB_PX = 2.4;
 
+/**
+ * dab 무작위 회전을 쓰는 최소 지름(px). 이보다 작으면 회전을 고정한다.
+ * 입자 팁의 패턴이 반복돼 보이지 않게 dab마다 무작위로 회전시키는데(rotationFollowsStroke가
+ * 아닌 브러시), 얇은 획에서는 회전한 정사각 쿼드의 텍셀 커버리지가 dab마다 달라져
+ * 획 두께가 1px씩 오르내린다 = 톱니·"구불구불"(2026-07-13 사용자 실측, 사인펜 굵기 1).
+ * 8px 미만에서는 회전을 고정 — 그 크기에선 팁 패턴 반복이 눈에 띄지도 않는다.
+ */
+export const ROT_JITTER_MIN_PX = 8;
+
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
 export type DabComposite =
   | "source-over"
@@ -338,7 +347,11 @@ export class BrushBase {
       y: p.y + (j ? (this.rng() - 0.5) * j : 0),
       size,
       alpha,
-      rotation: c.rotationFollowsStroke ? angle + c.tipAngleOffset : this.rng() * Math.PI * 2,
+      rotation: c.rotationFollowsStroke
+        ? angle + c.tipAngleOffset
+        : size >= ROT_JITTER_MIN_PX
+          ? this.rng() * Math.PI * 2
+          : 0,
     };
     if (c.dynamicHue) {
       dab.color = hslToRgb((this.traveled / 340) % 1, 0.9, 0.55);
