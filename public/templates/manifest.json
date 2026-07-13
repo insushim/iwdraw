@@ -7043,7 +7043,7 @@
       "theme": "masters_trace",
       "title": "명화 따라 그리기",
       "category": "masters",
-      "count": 9,
+      "count": 56,
       "cover": "/templates/masters/masters_trace_starry_night.webp",
       "items": [
         {
@@ -7059,10 +7059,22 @@
           "image": "/templates/masters/masters_trace_bedroom.webp"
         },
         {
-          "id": "masters_trace_great_wave",
-          "title": "가나가와 해변의 큰 파도 따라 그리기",
+          "id": "masters_trace_sunflowers",
+          "title": "해바라기 따라 그리기",
           "grade": "high",
-          "image": "/templates/masters/masters_trace_great_wave.webp"
+          "image": "/templates/masters/masters_trace_sunflowers.webp"
+        },
+        {
+          "id": "masters_trace_cafe_terrace",
+          "title": "밤의 카페 테라스 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_cafe_terrace.webp"
+        },
+        {
+          "id": "masters_trace_vg_selfportrait",
+          "title": "고흐 자화상 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_vg_selfportrait.webp"
         },
         {
           "id": "masters_trace_sunrise",
@@ -7077,10 +7089,76 @@
           "image": "/templates/masters/masters_trace_water_lilies.webp"
         },
         {
+          "id": "masters_trace_japanese_bridge",
+          "title": "수련 연못의 다리 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_japanese_bridge.webp"
+        },
+        {
+          "id": "masters_trace_haystacks",
+          "title": "건초더미 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_haystacks.webp"
+        },
+        {
+          "id": "masters_trace_woman_parasol",
+          "title": "양산을 쓴 여인 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_woman_parasol.webp"
+        },
+        {
+          "id": "masters_trace_moulin_galette",
+          "title": "물랭 드 라 갈레트의 무도회 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_moulin_galette.webp"
+        },
+        {
+          "id": "masters_trace_ballet_class",
+          "title": "발레 수업 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_ballet_class.webp"
+        },
+        {
           "id": "masters_trace_grande_jatte",
           "title": "그랑드 자트 섬의 일요일 오후 따라 그리기",
           "grade": "high",
           "image": "/templates/masters/masters_trace_grande_jatte.webp"
+        },
+        {
+          "id": "masters_trace_card_players",
+          "title": "카드놀이 하는 사람들 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_card_players.webp"
+        },
+        {
+          "id": "masters_trace_fifer",
+          "title": "피리 부는 소년 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_fifer.webp"
+        },
+        {
+          "id": "masters_trace_boating_lunch",
+          "title": "뱃놀이 일행의 점심 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_boating_lunch.webp"
+        },
+        {
+          "id": "masters_trace_moulin_rouge",
+          "title": "물랭 루주에서 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_moulin_rouge.webp"
+        },
+        {
+          "id": "masters_trace_apples_oranges",
+          "title": "사과와 오렌지 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_apples_oranges.webp"
+        },
+        {
+          "id": "masters_trace_sainte_victoire",
+          "title": "생트빅투아르 산 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_sainte_victoire.webp"
         },
         {
           "id": "masters_trace_scream",
@@ -7095,10 +7173,214 @@
           "image": "/templates/masters/masters_trace_mondrian.webp"
         },
         {
+          "id": "masters_trace_the_kiss",
+          "title": "키스 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_the_kiss.webp"
+        },
+        {
+          "id": "masters_trace_tahiti_women",
+          "title": "타히티의 여인들 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_tahiti_women.webp"
+        },
+        {
+          "id": "masters_trace_irises",
+          "title": "아이리스(붓꽃) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_irises.webp"
+        },
+        {
+          "id": "masters_trace_kandinsky",
+          "title": "구성 8 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_kandinsky.webp"
+        },
+        {
+          "id": "masters_trace_senecio",
+          "title": "세네치오 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_senecio.webp"
+        },
+        {
+          "id": "masters_trace_angelus",
+          "title": "만종 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_angelus.webp"
+        },
+        {
+          "id": "masters_trace_gleaners",
+          "title": "이삭 줍는 사람들 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_gleaners.webp"
+        },
+        {
+          "id": "masters_trace_pearl_earring",
+          "title": "진주 귀걸이를 한 소녀 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_pearl_earring.webp"
+        },
+        {
+          "id": "masters_trace_mona_lisa",
+          "title": "모나리자 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_mona_lisa.webp"
+        },
+        {
+          "id": "masters_trace_birth_venus",
+          "title": "비너스의 탄생 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_birth_venus.webp"
+        },
+        {
+          "id": "masters_trace_milkmaid",
+          "title": "우유 따르는 여인 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_milkmaid.webp"
+        },
+        {
+          "id": "masters_trace_night_watch",
+          "title": "야경 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_night_watch.webp"
+        },
+        {
+          "id": "masters_trace_last_supper",
+          "title": "최후의 만찬 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_last_supper.webp"
+        },
+        {
+          "id": "masters_trace_school_athens",
+          "title": "아테네 학당 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_school_athens.webp"
+        },
+        {
+          "id": "masters_trace_creation_adam",
+          "title": "아담의 창조 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_creation_adam.webp"
+        },
+        {
+          "id": "masters_trace_hunters_snow",
+          "title": "눈 속의 사냥꾼 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_hunters_snow.webp"
+        },
+        {
+          "id": "masters_trace_tower_babel",
+          "title": "바벨탑 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_tower_babel.webp"
+        },
+        {
+          "id": "masters_trace_arnolfini",
+          "title": "아르놀피니 부부의 초상 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_arnolfini.webp"
+        },
+        {
+          "id": "masters_trace_hay_wain",
+          "title": "건초 마차 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_hay_wain.webp"
+        },
+        {
+          "id": "masters_trace_rain_steam_speed",
+          "title": "비, 증기, 그리고 속도 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_rain_steam_speed.webp"
+        },
+        {
+          "id": "masters_trace_sower",
+          "title": "씨 뿌리는 사람 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_sower.webp"
+        },
+        {
+          "id": "masters_trace_napoleon_alps",
+          "title": "알프스를 넘는 나폴레옹 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_napoleon_alps.webp"
+        },
+        {
+          "id": "masters_trace_blue_boy",
+          "title": "푸른 옷의 소년 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_blue_boy.webp"
+        },
+        {
+          "id": "masters_trace_great_wave",
+          "title": "가나가와 해변의 큰 파도 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_great_wave.webp"
+        },
+        {
+          "id": "masters_trace_red_fuji",
+          "title": "붉은 후지산(개풍쾌청) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_red_fuji.webp"
+        },
+        {
           "id": "masters_trace_ssireum",
           "title": "씨름 따라 그리기",
           "grade": "high",
           "image": "/templates/masters/masters_trace_ssireum.webp"
+        },
+        {
+          "id": "masters_trace_seodang",
+          "title": "서당 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_seodang.webp"
+        },
+        {
+          "id": "masters_trace_mudong",
+          "title": "무동(춤추는 아이) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_mudong.webp"
+        },
+        {
+          "id": "masters_trace_inwang",
+          "title": "인왕제색도 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_inwang.webp"
+        },
+        {
+          "id": "masters_trace_geumgang",
+          "title": "금강전도 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_geumgang.webp"
+        },
+        {
+          "id": "masters_trace_sehando",
+          "title": "세한도 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_sehando.webp"
+        },
+        {
+          "id": "masters_trace_mongyu",
+          "title": "몽유도원도 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_mongyu.webp"
+        },
+        {
+          "id": "masters_trace_kkachi_horangi",
+          "title": "까치와 호랑이(민화) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_kkachi_horangi.webp"
+        },
+        {
+          "id": "masters_trace_ejiri",
+          "title": "에지리의 바람(후가쿠 36경) 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_ejiri.webp"
+        },
+        {
+          "id": "masters_trace_hiroshige_rain",
+          "title": "오하시 다리에 내리는 소나기 따라 그리기",
+          "grade": "high",
+          "image": "/templates/masters/masters_trace_hiroshige_rain.webp"
         }
       ]
     },
@@ -7106,7 +7388,7 @@
       "theme": "masters_quarter",
       "title": "명화 1/4 완성하기",
       "category": "masters",
-      "count": 9,
+      "count": 56,
       "cover": "/templates/masters/masters_quarter_starry_night.webp",
       "items": [
         {
@@ -7122,10 +7404,22 @@
           "image": "/templates/masters/masters_quarter_bedroom.webp"
         },
         {
-          "id": "masters_quarter_great_wave",
-          "title": "가나가와 해변의 큰 파도 1/4 완성하기",
+          "id": "masters_quarter_sunflowers",
+          "title": "해바라기 1/4 완성하기",
           "grade": "mid",
-          "image": "/templates/masters/masters_quarter_great_wave.webp"
+          "image": "/templates/masters/masters_quarter_sunflowers.webp"
+        },
+        {
+          "id": "masters_quarter_cafe_terrace",
+          "title": "밤의 카페 테라스 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_cafe_terrace.webp"
+        },
+        {
+          "id": "masters_quarter_vg_selfportrait",
+          "title": "고흐 자화상 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_vg_selfportrait.webp"
         },
         {
           "id": "masters_quarter_sunrise",
@@ -7140,10 +7434,76 @@
           "image": "/templates/masters/masters_quarter_water_lilies.webp"
         },
         {
+          "id": "masters_quarter_japanese_bridge",
+          "title": "수련 연못의 다리 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_japanese_bridge.webp"
+        },
+        {
+          "id": "masters_quarter_haystacks",
+          "title": "건초더미 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_haystacks.webp"
+        },
+        {
+          "id": "masters_quarter_woman_parasol",
+          "title": "양산을 쓴 여인 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_woman_parasol.webp"
+        },
+        {
+          "id": "masters_quarter_moulin_galette",
+          "title": "물랭 드 라 갈레트의 무도회 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_moulin_galette.webp"
+        },
+        {
+          "id": "masters_quarter_ballet_class",
+          "title": "발레 수업 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_ballet_class.webp"
+        },
+        {
           "id": "masters_quarter_grande_jatte",
           "title": "그랑드 자트 섬의 일요일 오후 1/4 완성하기",
           "grade": "mid",
           "image": "/templates/masters/masters_quarter_grande_jatte.webp"
+        },
+        {
+          "id": "masters_quarter_card_players",
+          "title": "카드놀이 하는 사람들 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_card_players.webp"
+        },
+        {
+          "id": "masters_quarter_fifer",
+          "title": "피리 부는 소년 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_fifer.webp"
+        },
+        {
+          "id": "masters_quarter_boating_lunch",
+          "title": "뱃놀이 일행의 점심 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_boating_lunch.webp"
+        },
+        {
+          "id": "masters_quarter_moulin_rouge",
+          "title": "물랭 루주에서 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_moulin_rouge.webp"
+        },
+        {
+          "id": "masters_quarter_apples_oranges",
+          "title": "사과와 오렌지 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_apples_oranges.webp"
+        },
+        {
+          "id": "masters_quarter_sainte_victoire",
+          "title": "생트빅투아르 산 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_sainte_victoire.webp"
         },
         {
           "id": "masters_quarter_scream",
@@ -7158,10 +7518,214 @@
           "image": "/templates/masters/masters_quarter_mondrian.webp"
         },
         {
+          "id": "masters_quarter_the_kiss",
+          "title": "키스 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_the_kiss.webp"
+        },
+        {
+          "id": "masters_quarter_tahiti_women",
+          "title": "타히티의 여인들 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_tahiti_women.webp"
+        },
+        {
+          "id": "masters_quarter_irises",
+          "title": "아이리스(붓꽃) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_irises.webp"
+        },
+        {
+          "id": "masters_quarter_kandinsky",
+          "title": "구성 8 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_kandinsky.webp"
+        },
+        {
+          "id": "masters_quarter_senecio",
+          "title": "세네치오 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_senecio.webp"
+        },
+        {
+          "id": "masters_quarter_angelus",
+          "title": "만종 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_angelus.webp"
+        },
+        {
+          "id": "masters_quarter_gleaners",
+          "title": "이삭 줍는 사람들 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_gleaners.webp"
+        },
+        {
+          "id": "masters_quarter_pearl_earring",
+          "title": "진주 귀걸이를 한 소녀 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_pearl_earring.webp"
+        },
+        {
+          "id": "masters_quarter_mona_lisa",
+          "title": "모나리자 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_mona_lisa.webp"
+        },
+        {
+          "id": "masters_quarter_birth_venus",
+          "title": "비너스의 탄생 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_birth_venus.webp"
+        },
+        {
+          "id": "masters_quarter_milkmaid",
+          "title": "우유 따르는 여인 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_milkmaid.webp"
+        },
+        {
+          "id": "masters_quarter_night_watch",
+          "title": "야경 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_night_watch.webp"
+        },
+        {
+          "id": "masters_quarter_last_supper",
+          "title": "최후의 만찬 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_last_supper.webp"
+        },
+        {
+          "id": "masters_quarter_school_athens",
+          "title": "아테네 학당 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_school_athens.webp"
+        },
+        {
+          "id": "masters_quarter_creation_adam",
+          "title": "아담의 창조 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_creation_adam.webp"
+        },
+        {
+          "id": "masters_quarter_hunters_snow",
+          "title": "눈 속의 사냥꾼 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_hunters_snow.webp"
+        },
+        {
+          "id": "masters_quarter_tower_babel",
+          "title": "바벨탑 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_tower_babel.webp"
+        },
+        {
+          "id": "masters_quarter_arnolfini",
+          "title": "아르놀피니 부부의 초상 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_arnolfini.webp"
+        },
+        {
+          "id": "masters_quarter_hay_wain",
+          "title": "건초 마차 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_hay_wain.webp"
+        },
+        {
+          "id": "masters_quarter_rain_steam_speed",
+          "title": "비, 증기, 그리고 속도 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_rain_steam_speed.webp"
+        },
+        {
+          "id": "masters_quarter_sower",
+          "title": "씨 뿌리는 사람 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_sower.webp"
+        },
+        {
+          "id": "masters_quarter_napoleon_alps",
+          "title": "알프스를 넘는 나폴레옹 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_napoleon_alps.webp"
+        },
+        {
+          "id": "masters_quarter_blue_boy",
+          "title": "푸른 옷의 소년 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_blue_boy.webp"
+        },
+        {
+          "id": "masters_quarter_great_wave",
+          "title": "가나가와 해변의 큰 파도 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_great_wave.webp"
+        },
+        {
+          "id": "masters_quarter_red_fuji",
+          "title": "붉은 후지산(개풍쾌청) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_red_fuji.webp"
+        },
+        {
           "id": "masters_quarter_ssireum",
           "title": "씨름 1/4 완성하기",
           "grade": "mid",
           "image": "/templates/masters/masters_quarter_ssireum.webp"
+        },
+        {
+          "id": "masters_quarter_seodang",
+          "title": "서당 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_seodang.webp"
+        },
+        {
+          "id": "masters_quarter_mudong",
+          "title": "무동(춤추는 아이) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_mudong.webp"
+        },
+        {
+          "id": "masters_quarter_inwang",
+          "title": "인왕제색도 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_inwang.webp"
+        },
+        {
+          "id": "masters_quarter_geumgang",
+          "title": "금강전도 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_geumgang.webp"
+        },
+        {
+          "id": "masters_quarter_sehando",
+          "title": "세한도 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_sehando.webp"
+        },
+        {
+          "id": "masters_quarter_mongyu",
+          "title": "몽유도원도 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_mongyu.webp"
+        },
+        {
+          "id": "masters_quarter_kkachi_horangi",
+          "title": "까치와 호랑이(민화) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_kkachi_horangi.webp"
+        },
+        {
+          "id": "masters_quarter_ejiri",
+          "title": "에지리의 바람(후가쿠 36경) 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_ejiri.webp"
+        },
+        {
+          "id": "masters_quarter_hiroshige_rain",
+          "title": "오하시 다리에 내리는 소나기 1/4 완성하기",
+          "grade": "mid",
+          "image": "/templates/masters/masters_quarter_hiroshige_rain.webp"
         }
       ]
     }

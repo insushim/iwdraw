@@ -13,55 +13,146 @@
 재실행 안전(이미 받은 원본은 재사용, 출력은 덮어씀). manifest.json 갱신까지 수행.
 """
 
-import io
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageEnhance, ImageOps, ImageStat
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "public" / "templates" / "masters"
 MANIFEST = ROOT / "public" / "templates" / "manifest.json"
 
 W, H = 1536, 1152  # 아트온 가로 캔버스와 동일(도안은 loadLineart가 contain-fit)
-TRACE_ALPHA = 0.20  # 따라 그리기 밑그림 농도
-FAINT_ALPHA = 0.16  # 1/4 완성하기의 미완성 영역 농도
 GUIDE_GRAY = 205
 
-# (slug, 한국어 제목, 작가, 사망년, 위키미디어 파일명)
+# 밑그림 농도는 그림마다 다르게 잡는다(2026-07-13 사용자 실측: 고정 20%는 모네
+# 해돋이처럼 원래 대비가 낮은 그림에서 거의 안 보임 — "보고 그리기에 너무 흐리다").
+# 블렌드 결과의 대비(표준편차)가 TARGET_STD가 되도록 알파를 역산 = 어떤 그림이든
+# 비슷한 "읽힘". 대비 강한 그림(몬드리안)은 자동으로 옅게, 옅은 그림은 진하게.
+TARGET_STD_TRACE = 22.0  # 따라 그리기: 형태는 뚜렷하되 내 획이 위에 보여야
+TARGET_STD_QUARTER = 17.0  # 1/4 완성하기: 나머지 영역은 힌트 수준
+ALPHA_MIN, ALPHA_MAX = 0.22, 0.72
+
+
+# (slug, 한국어 제목, 작가, 사망년, [위키미디어 파일명 후보…])
+# ⚠️ 전원 작가 사후 70년 경과(한국 저작권법 만료) — 신규 추가 시 사망년 확인 필수.
+# 파일명은 위키미디어에서 개명되는 일이 있어 후보를 여러 개 둔다(실패 시 skip).
 PAINTINGS = [
-    ("starry_night", "별이 빛나는 밤", "빈센트 반 고흐", 1890, "Van Gogh - Starry Night - Google Art Project.jpg"),
-    ("bedroom", "아를의 침실", "빈센트 반 고흐", 1890, "Vincent van Gogh - De slaapkamer - Google Art Project.jpg"),
-    ("great_wave", "가나가와 해변의 큰 파도", "가쓰시카 호쿠사이", 1849, "Tsunami by hokusai 19th century.jpg"),
-    ("sunrise", "인상, 해돋이", "클로드 모네", 1926, "Monet - Impression, Sunrise.jpg"),
-    ("water_lilies", "수련", "클로드 모네", 1926, "Claude Monet - Water Lilies - 1906, Ryerson.jpg"),
-    ("grande_jatte", "그랑드 자트 섬의 일요일 오후", "조르주 쇠라", 1891, "A Sunday on La Grande Jatte, Georges Seurat, 1884.jpg"),
-    ("scream", "절규", "에드바르 뭉크", 1944, "The Scream.jpg"),
-    ("mondrian", "빨강·파랑·노랑의 구성", "피트 몬드리안", 1944, "Piet Mondriaan, 1930 - Mondrian Composition II in Red, Blue, and Yellow.jpg"),
-    ("ssireum", "씨름", "김홍도", 1806, "Danwon-Ssireum.jpg"),
-    ("seodang", "서당", "김홍도", 1806, "Danwon-Seodang.jpg"),
+    # 반 고흐
+    ("starry_night", "별이 빛나는 밤", "빈센트 반 고흐", 1890, ["Van Gogh - Starry Night - Google Art Project.jpg"]),
+    ("bedroom", "아를의 침실", "빈센트 반 고흐", 1890, ["Vincent van Gogh - De slaapkamer - Google Art Project.jpg"]),
+    ("sunflowers", "해바라기", "빈센트 반 고흐", 1890, ["Vincent Willem van Gogh 127.jpg", "Vincent van Gogh - Sunflowers (1888, National Gallery London).jpg"]),
+    ("cafe_terrace", "밤의 카페 테라스", "빈센트 반 고흐", 1890, ["Vincent Willem van Gogh - Cafe Terrace at Night (Yorck).jpg"]),
+    ("vg_selfportrait", "고흐 자화상", "빈센트 반 고흐", 1890, ["Vincent van Gogh - Self-Portrait - Google Art Project (454045).jpg", "Vincent van Gogh - Self-portrait with grey felt hat - Google Art Project.jpg"]),
+    # 모네·인상주의
+    ("sunrise", "인상, 해돋이", "클로드 모네", 1926, ["Monet - Impression, Sunrise.jpg"]),
+    ("water_lilies", "수련", "클로드 모네", 1926, ["Claude Monet - Water Lilies - 1906, Ryerson.jpg"]),
+    ("japanese_bridge", "수련 연못의 다리", "클로드 모네", 1926, ["Claude Monet - Water Lilies and Japanese Bridge - Google Art Project.jpg"]),
+    ("haystacks", "건초더미", "클로드 모네", 1926, ["Claude Monet - Meule - Google Art Project.jpg", "Monet haystacks"]),
+    ("woman_parasol", "양산을 쓴 여인", "클로드 모네", 1926, ["Claude Monet - Woman with a Parasol - Madame Monet and Her Son - Google Art Project.jpg"]),
+    ("moulin_galette", "물랭 드 라 갈레트의 무도회", "오귀스트 르누아르", 1919, ["Pierre-Auguste Renoir, Le Moulin de la Galette.jpg"]),
+    ("ballet_class", "발레 수업", "에드가 드가", 1917, ["Edgar Degas - The Ballet Class - Google Art Project.jpg", "Edgar Degas - The Dance Class - Google Art Project.jpg"]),
+    ("grande_jatte", "그랑드 자트 섬의 일요일 오후", "조르주 쇠라", 1891, ["A Sunday on La Grande Jatte, Georges Seurat, 1884.jpg"]),
+    ("card_players", "카드놀이 하는 사람들", "폴 세잔", 1906, ["Paul Cézanne, Les joueurs de carte, 1892-95.jpg", "Les Joueurs de cartes, par Paul Cézanne.jpg"]),
+    ("fifer", "피리 부는 소년", "에두아르 마네", 1883, ["Manet, Edouard - Young Flautist, or The Fifer, 1866 (2).jpg", "Manet Fifer"]),
+    ("boating_lunch", "뱃놀이 일행의 점심", "오귀스트 르누아르", 1919, ["Pierre-Auguste Renoir - Luncheon of the Boating Party - Google Art Project.jpg"]),
+    ("moulin_rouge", "물랭 루주에서", "앙리 드 툴루즈 로트렉", 1901, ["Henri de Toulouse-Lautrec - At the Moulin Rouge - Google Art Project.jpg"]),
+    ("apples_oranges", "사과와 오렌지", "폴 세잔", 1906, ["Paul Cézanne - Apples and Oranges - Google Art Project.jpg", "Cezanne apples and oranges"]),
+    ("sainte_victoire", "생트빅투아르 산", "폴 세잔", 1906, ["Paul Cézanne - Mont Sainte-Victoire - Google Art Project.jpg", "Cezanne Mont Sainte-Victoire"]),
+    # 후기인상·표현주의
+    ("scream", "절규", "에드바르 뭉크", 1944, ["The Scream.jpg"]),
+    ("mondrian", "빨강·파랑·노랑의 구성", "피트 몬드리안", 1944, ["Piet Mondriaan, 1930 - Mondrian Composition II in Red, Blue, and Yellow.jpg"]),
+    ("the_kiss", "키스", "구스타프 클림트", 1918, ["The Kiss - Gustav Klimt - Google Cultural Institute.jpg", "Gustav Klimt 016.jpg"]),
+    ("tahiti_women", "타히티의 여인들", "폴 고갱", 1903, ["Paul Gauguin 056.jpg", "Paul Gauguin - Tahitian Women on the Beach - Google Art Project.jpg"]),
+    ("irises", "아이리스(붓꽃)", "빈센트 반 고흐", 1890, ["Irises-Vincent van Gogh.jpg", "Van Gogh Irises 1889"]),
+    ("kandinsky", "구성 8", "바실리 칸딘스키", 1944, ["Vassily Kandinsky, 1923 - Composition 8, huile sur toile, 140 cm x 201 cm, Musée Guggenheim, New York.jpg", "Kandinsky Composition VIII"]),
+    ("senecio", "세네치오", "파울 클레", 1940, ["Paul Klee, Senecio, 1922.jpg", "Klee Senecio"]),
+    # 사실주의·바로크·르네상스
+    ("angelus", "만종", "장 프랑수아 밀레", 1875, ["JEAN-FRANÇOIS MILLET - El Ángelus (Museo de Orsay, 1857-1859. Óleo sobre lienzo, 55.5 x 66 cm).jpg", "Jean-François Millet (II) 013.jpg"]),
+    ("gleaners", "이삭 줍는 사람들", "장 프랑수아 밀레", 1875, ["Jean-François Millet (II) - The Gleaners - Google Art Project 2.jpg", "Jean-François Millet (II) 001.jpg"]),
+    ("pearl_earring", "진주 귀걸이를 한 소녀", "요하네스 베르메르", 1675, ["Meisje met de parel.jpg", "1665 Girl with a Pearl Earring.jpg"]),
+    ("mona_lisa", "모나리자", "레오나르도 다 빈치", 1519, ["Mona Lisa, by Leonardo da Vinci, from C2RMF retouched.jpg"]),
+    ("birth_venus", "비너스의 탄생", "산드로 보티첼리", 1510, ["Sandro Botticelli - La nascita di Venere - Google Art Project - edited.jpg"]),
+    ("milkmaid", "우유 따르는 여인", "요하네스 베르메르", 1675, ["Johannes Vermeer - Het melkmeisje - Google Art Project.jpg"]),
+    ("night_watch", "야경", "렘브란트", 1669, ["The Night Watch - HD.jpg", "Rembrandt Night Watch"]),
+    ("last_supper", "최후의 만찬", "레오나르도 다 빈치", 1519, ["Leonardo da Vinci (1452-1519) - The Last Supper (1495-1498).jpg"]),
+    ("school_athens", "아테네 학당", "라파엘로", 1520, ["\"The School of Athens\" by Raffaello Sanzio da Urbino.jpg", "Raphael School of Athens"]),
+    ("creation_adam", "아담의 창조", "미켈란젤로", 1564, ["Michelangelo - Creation of Adam (cropped).jpg", "Creation of Adam Michelangelo"]),
+    ("hunters_snow", "눈 속의 사냥꾼", "피터르 브뤼헐", 1569, ["Pieter Bruegel the Elder - Hunters in the Snow (Winter) - Google Art Project.jpg"]),
+    ("tower_babel", "바벨탑", "피터르 브뤼헐", 1569, ["Pieter Bruegel the Elder - The Tower of Babel (Vienna) - Google Art Project - edited.jpg"]),
+    ("arnolfini", "아르놀피니 부부의 초상", "얀 반 에이크", 1441, ["Van Eyck - Arnolfini Portrait.jpg"]),
+    ("hay_wain", "건초 마차", "존 컨스터블", 1837, ["John Constable The Hay Wain.jpg", "Constable Hay Wain"]),
+    ("rain_steam_speed", "비, 증기, 그리고 속도", "윌리엄 터너", 1851, ["Rain Steam and Speed the Great Western Railway.jpg"]),
+    ("sower", "씨 뿌리는 사람", "장 프랑수아 밀레", 1875, ["Jean-François Millet - The Sower - Google Art Project.jpg", "Millet The Sower"]),
+    ("napoleon_alps", "알프스를 넘는 나폴레옹", "자크 루이 다비드", 1825, ["Jacques-Louis David - Bonaparte franchissant le Grand-Saint-Bernard, 20 mai 1800 - Google Art Project.jpg"]),
+    ("blue_boy", "푸른 옷의 소년", "토머스 게인즈버러", 1788, ["Thomas Gainsborough - The Blue Boy (c. 1770).jpg", "Gainsborough Blue Boy"]),
+    # 동아시아
+    ("great_wave", "가나가와 해변의 큰 파도", "가쓰시카 호쿠사이", 1849, ["Tsunami by hokusai 19th century.jpg"]),
+    ("red_fuji", "붉은 후지산(개풍쾌청)", "가쓰시카 호쿠사이", 1849, ["Red Fuji southern wind clear morning.jpg"]),
+    ("ssireum", "씨름", "김홍도", 1806, ["Danwon-Ssireum.jpg"]),
+    ("seodang", "서당", "김홍도", 1806, ["Danwon Seodang.jpg", "Danwon-Seodang.jpg"]),
+    ("mudong", "무동(춤추는 아이)", "김홍도", 1806, ["Danwon Mudong.jpg", "Kim Hongdo dance"]),
+    # ⚠️ 신윤복 단오풍정 제외 — 목욕 장면(노출)이 있어 초등 교실용 부적합(2026-07-13 검수)
+    ("inwang", "인왕제색도", "정선", 1759, ["Inwangjesaekdo.jpg", "Inwang jesaekdo"]),
+    ("geumgang", "금강전도", "정선", 1759, ["Jeong Seon-Geumgang jeondo.jpg", "Geumgangjeondo"]),
+    ("sehando", "세한도", "김정희", 1856, ["Sehando.jpg", "Kim Jeong-hui Sehando"]),
+    ("mongyu", "몽유도원도", "안견", 1470, ["Dream Journey to the Peach Blossom Land.jpg", "Mongyudowondo An Gyeon"]),
+    ("kkachi_horangi", "까치와 호랑이(민화)", "작자 미상(조선 민화)", 1800, ["Korean tiger and magpie painting.jpg", "Magpie and tiger minhwa"]),
+    ("ejiri", "에지리의 바람(후가쿠 36경)", "가쓰시카 호쿠사이", 1849, ["Ejiri in Suruga Province.jpg", "Hokusai Ejiri in Suruga Province"]),
+    ("hiroshige_rain", "오하시 다리에 내리는 소나기", "우타가와 히로시게", 1858, ["Hiroshige Atake sudden shower.jpg", "Sudden Shower over Shin-Ohashi Bridge and Atake"]),
 ]
 
 
-def download(name: str, dest: Path) -> bool:
-    """위키미디어 Special:FilePath — 원본 리다이렉트(폭 1600 축소본)."""
+def commons_search(query: str, limit: int = 4) -> list[str]:
+    """커먼즈 파일 검색 — 정확한 파일명을 몰라도(개명·이형) 상위 후보를 얻는다."""
+    import urllib.parse
+
+    url = (
+        "https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch="
+        + urllib.parse.quote(f"filetype:bitmap {query}")
+        + f"&srnamespace=6&srlimit={limit}&format=json"
+    )
+    r = subprocess.run(["curl", "-s", "--max-time", "30", url], capture_output=True)
+    try:
+        hits = json.loads(r.stdout)["query"]["search"]
+    except Exception:
+        return []
+    return [h["title"].removeprefix("File:") for h in hits]
+
+
+def download(names: list[str], dest: Path) -> bool:
+    """위키미디어 Special:FilePath — 파일명 후보를 순서대로 시도(개명·이형 대응).
+    후보가 모두 실패하면 마지막 항목을 검색어로 커먼즈 검색 폴백."""
     if dest.exists() and dest.stat().st_size > 50_000:
         return True
-    url = "https://commons.wikimedia.org/wiki/Special:FilePath/" + name.replace(" ", "_") + "?width=1600"
-    r = subprocess.run(
-        ["curl", "-sL", "--max-time", "120", "-A", "ArtON-edu/1.0 (classroom art app; PD sources)", "-o", str(dest), url],
-        capture_output=True,
-    )
-    if r.returncode != 0 or not dest.exists() or dest.stat().st_size < 50_000:
-        return False
-    try:
-        Image.open(dest).verify()
-        return True
-    except Exception:
-        dest.unlink(missing_ok=True)
-        return False
+
+    def fetch(name: str) -> bool:
+        url = "https://commons.wikimedia.org/wiki/Special:FilePath/" + name.replace(" ", "_") + "?width=1600"
+        r = subprocess.run(
+            ["curl", "-sL", "--max-time", "120", "-A", "ArtON-edu/1.0 (classroom art app; PD sources)", "-o", str(dest), url],
+            capture_output=True,
+        )
+        if r.returncode != 0 or not dest.exists() or dest.stat().st_size < 50_000:
+            dest.unlink(missing_ok=True)
+            return False
+        try:
+            Image.open(dest).verify()
+            return True
+        except Exception:
+            dest.unlink(missing_ok=True)
+            return False
+
+    for name in names:
+        if fetch(name):
+            return True
+    # 폴백: 마지막 후보를 검색어로 커먼즈 검색(파일명이 개명됐거나 오타여도 잡힘)
+    for name in commons_search(names[-1]):
+        if fetch(name):
+            print(f"  (검색 폴백으로 찾음: {name})", file=sys.stderr)
+            return True
+    return False
 
 
 def fit_on_canvas(img: Image.Image) -> tuple[Image.Image, tuple[int, int, int, int]]:
@@ -76,9 +167,23 @@ def fit_on_canvas(img: Image.Image) -> tuple[Image.Image, tuple[int, int, int, i
     return canvas, (x0, y0, x0 + dw, y0 + dh)
 
 
-def faint(canvas: Image.Image, alpha: float) -> Image.Image:
-    white = Image.new("RGB", canvas.size, "white")
-    return Image.blend(white, canvas, alpha)
+def prepped(canvas: Image.Image) -> Image.Image:
+    """밑그림 소스 보정 — 옅은 원작(모네 해돋이 등)도 형태가 읽히게.
+    ① autocontrast(양끝 0.5% 컷)로 톤 레인지 확장 ② 채도를 약간 낮춰(0.85) 밑그림이
+    아이 물감색과 경쟁하지 않게. 원작 재현이 아니라 '보고 그리는 밑그림'이 목적."""
+    c = ImageOps.autocontrast(canvas, cutoff=0.5)
+    return ImageEnhance.Color(c).enhance(0.85)
+
+
+def faint_adaptive(canvas: Image.Image, target_std: float) -> tuple[Image.Image, float]:
+    """흰 배경과 블렌드하되, 결과 대비(표준편차)가 target_std가 되도록 알파를 역산.
+    blend(white, img, a)의 표준편차는 a × std(img) — 선형이라 역산이 정확하다."""
+    src = prepped(canvas)
+    base = ImageStat.Stat(src.convert("L")).stddev[0]
+    alpha = target_std / base if base > 1 else ALPHA_MAX
+    alpha = max(ALPHA_MIN, min(ALPHA_MAX, alpha))
+    white = Image.new("RGB", src.size, "white")
+    return Image.blend(white, src, alpha), alpha
 
 
 def save_webp(img: Image.Image, path: Path) -> None:
@@ -91,18 +196,19 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     ok_list = []
-    for slug, title, artist, died, fname in PAINTINGS:
+    for slug, title, artist, died, fnames in PAINTINGS:
         src = work / f"{slug}.img"
-        if not download(fname, src):
-            print(f"skip (다운로드 실패): {slug} — {fname}", file=sys.stderr)
+        if not download(fnames, src):
+            print(f"skip (다운로드 실패): {slug} — {fnames[0]}", file=sys.stderr)
             continue
         canvas, rect = fit_on_canvas(Image.open(src))
 
-        # 따라 그리기: 전체 옅게
-        save_webp(faint(canvas, TRACE_ALPHA), OUT_DIR / f"masters_trace_{slug}.webp")
+        # 따라 그리기: 전체를 적응형 농도로(대비 목표 기준 — 그림마다 알파가 다르다)
+        trace, a_t = faint_adaptive(canvas, TARGET_STD_TRACE)
+        save_webp(trace, OUT_DIR / f"masters_trace_{slug}.webp")
 
         # 1/4 완성하기: 옅은 전체 + 좌상단 1/4 원본 + 십자 가이드(그림 rect 기준)
-        q = faint(canvas, FAINT_ALPHA)
+        q, a_q = faint_adaptive(canvas, TARGET_STD_QUARTER)
         x0, y0, x1, y1 = rect
         cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
         q.paste(canvas.crop((x0, y0, cx, cy)), (x0, y0))
@@ -112,8 +218,8 @@ def main() -> None:
         d.line([(cx, y0), (cx, y1)], fill=g, width=3)
         save_webp(q, OUT_DIR / f"masters_quarter_{slug}.webp")
 
-        ok_list.append((slug, title, artist, died, fname))
-        print(f"ok: {slug} ({title})")
+        ok_list.append((slug, title, artist, died, fnames[0]))
+        print(f"ok: {slug} ({title}) — trace α={a_t:.2f} quarter α={a_q:.2f}")
 
     if not ok_list:
         sys.exit("생성된 명화가 없습니다")
