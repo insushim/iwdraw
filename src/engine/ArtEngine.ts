@@ -1730,7 +1730,22 @@ export class ArtEngine {
       if (!layer) continue;
       const img = await blobToImage(saved.png);
       layer.ctx.clearRect(0, 0, this.width, this.height);
-      layer.ctx.drawImage(img, 0, 0);
+      /*
+       * 저장 당시 캔버스 크기 ≠ 지금 캔버스 크기일 수 있다 — 선따기는 원본 사진 비율로
+       * 캔버스를 잡는데, 새로 들어오면(도안 파라미터 없음) 기본 비율로 마운트된다.
+       * 1:1로 그리면 큰 그림의 좌상단만 보여 "확대된 상태"가 된다(2026-07-14 사용자 실측).
+       * → 비율 유지 축소(contain) + 중앙 정렬. 크기가 같으면 리샘플 없이 그대로.
+       */
+      const sw = state.width || img.width;
+      const sh = state.height || img.height;
+      if (sw === this.width && sh === this.height) {
+        layer.ctx.drawImage(img, 0, 0);
+      } else {
+        const k = Math.min(this.width / sw, this.height / sh);
+        const dw = sw * k;
+        const dh = sh * k;
+        layer.ctx.drawImage(img, (this.width - dw) / 2, (this.height - dh) / 2, dw, dh);
+      }
       this.layers.setVisible(layer.id, saved.visible);
       this.layers.setOpacity(layer.id, saved.opacity);
       this.layers.setBlend(layer.id, saved.blend as LayerInfo["blend"]);
