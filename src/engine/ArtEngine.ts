@@ -22,7 +22,7 @@ import { StrokeRecorder } from "./core/StrokeRecorder";
 import { AutoSave, type SavedState } from "./core/AutoSave";
 import { smearSegment } from "./tools/SmudgeTool";
 import { drawPaperTint, type PaperKind } from "./core/paper";
-import { tilesForRect, copyTiles, TileSnapshotCommand, type TileRect } from "./core/tiles";
+import { tilesForRect, copyTiles, readTiles, TileSnapshotCommand, type TileRect } from "./core/tiles";
 import type { Layer } from "./core/LayerStack";
 import { BrushBase, createBrush, MIN_DAB_PX, STROKE_BRUSHES } from "./brushes";
 import { buildBarrierFromLineart, floodFill } from "./brushes/FillTool";
@@ -461,8 +461,8 @@ export class ArtEngine {
     // undo용 before 스냅샷 — destination-out(지우개류)만 여기서(레이어에 직접 그리는 백엔드가 있음).
     // 다른 브러시는 endStroke 합성 직전까지 레이어가 안 변하므로 그때 캡처
     // (스트로크 시작 시 7MB getImageData 동기 readback 히치 제거).
-    this.beforeFull =
-      this.brush.cfg.composite === "destination-out" ? this.snapshotActiveLayer() : null;
+    // 지우개(destination-out)는 레이어를 직접 지운다 → 닿는 타일만 copy-on-write로 보존
+    this.cow = this.brush.cfg.composite === "destination-out" ? new Map() : null;
 
     this.cm.backend.beginStroke(this.brushContext());
     const dabs = this.brush.begin(this.curPoints[0], this.settings);
@@ -540,8 +540,9 @@ export class ArtEngine {
       if (shape) this.applyQuickShape(shape.kind, shape.points);
     }
 
-    // 합성 직전 스냅샷(레이어는 아직 미변경 상태)
-    if (!this.beforeFull) this.beforeFull = this.snapshotActiveLayer();
+    // 합성 직전 스냅샷(레이어는 아직 미변경 상태) — 더티 타일만 읽는다.
+    // 전체 캔버스 getImageData(6.4MB)를 획마다 하면 저사양 기기에서 GC 스파이크(실측).
+    if (!this.beforeFull) this.captureBeforeTiles();
     if (this.quickShapeApplied) {
       // 도형이 프리핸드를 "대체"한다 — 프리핸드 스트로크 버퍼를 합성하면
       // 원본 쪽만 이중으로 진해진다(데칼코마니 실측 버그). 버퍼는 폐기.
@@ -567,20 +568,28 @@ export class ArtEngine {
     }
     if (!this.brush && !this.smudging) return;
     this.clearHold();
-    // 레이어를 직접 고치는 도구(번짐, Canvas2D 지우개)는 begin 스냅샷으로 원복
-    if (this.beforeFull && (this.smudging || this.brush?.cfg.composite === "destination-out")) {
+    // 레이어를 직접 고치는 도구(번짐, 지우개)는 보존해 둔 픽셀로 원복
+    const cowSnap = this.cowSnapshot();
+    if (cowSnap) {
+      const ctx = this.layers.active.ctx;
+      cowSnap.tiles.forEach((t, i) => {
+        ctx.putImageData(new ImageData(cowSnap.data[i].slice(), t.w, t.h), t.x, t.y);
+      });
+    } else if (this.beforeFull && this.smudging) {
       this.layers.active.ctx.putImageData(
         new ImageData(this.beforeFull.slice(), this.width, this.height),
         0,
         0,
       );
     }
+    this.cow = null;
     this.cm.backend.cancelStroke();
     this.brush = null;
     this.smudging = false;
     this.smudgeLasts = null;
     this.curPoints = [];
     this.beforeFull = null;
+    this.beforeTiles = null;
     this.quickShapeApplied = false;
     this.requestComposite(); // 라이브 프리뷰에 떠 있던 획 지우기
   }
@@ -609,7 +618,7 @@ export class ArtEngine {
     this.smudging = true;
     this.smudgeLasts = this.mirrors(p);
     this.curPoints = [p];
-    this.beforeFull = this.snapshotActiveLayer(); // 직접 편집이라 undo 스냅샷은 시작 시
+    this.cow = new Map(); // 직접 편집 — 문지르기 직전에 닿는 타일만 보존(COW)
     this.strokeBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   }
 
@@ -620,7 +629,15 @@ export class ArtEngine {
     for (const p of points) {
       this.curPoints.push(p);
       const ms = this.mirrors(p); // 가지 수·순서는 begin과 동일(대칭 모드는 획 중 안 바뀐다)
+      const r = this.smudgeSize() / 2 + 2;
       for (let i = 0; i < lasts.length && i < ms.length; i++) {
+        // ⚠️ 문지르기 전에 원본 타일 확보(뒤에 하면 이미 뭉개진 픽셀이 undo 대상이 된다)
+        this.cowTouch(
+          Math.min(lasts[i].x, ms[i].x) - r,
+          Math.min(lasts[i].y, ms[i].y) - r,
+          Math.max(lasts[i].x, ms[i].x) + r,
+          Math.max(lasts[i].y, ms[i].y) + r,
+        );
         lasts[i] = smearSegment(
           ctx,
           lasts[i],
@@ -640,15 +657,13 @@ export class ArtEngine {
     this.smudging = false;
     this.smudgeLasts = null;
     const bb = this.strokeBBox;
-    if (isFinite(bb.minX) && this.beforeFull) {
+    const cowSnap = this.cowSnapshot();
+    this.cow = null;
+    if (isFinite(bb.minX) && cowSnap) {
       const layer = this.layers.active;
-      const x = Math.max(0, Math.floor(bb.minX));
-      const y = Math.max(0, Math.floor(bb.minY));
-      const w = Math.min(this.width - x, Math.ceil(bb.maxX - x));
-      const h = Math.min(this.height - y, Math.ceil(bb.maxY - y));
-      const tiles = tilesForRect(x, y, w, h, this.width, this.height);
-      const after = copyTiles(layer.ctx.getImageData(0, 0, this.width, this.height).data, this.width, tiles);
-      const before = copyTiles(this.beforeFull, this.width, tiles);
+      const tiles = cowSnap.tiles;
+      const after = readTiles(layer.ctx, tiles);
+      const before = cowSnap.data;
       this.pushTileCommand(layer, tiles, before, after);
       // 무비 재생용 기록(재생도 같은 smearSegment 사용). 협동 브로드캐스트는 안 함 —
       // 원격 레이어 분리 구조에서 남의 픽셀을 문지를 수 없다(의도).
@@ -691,6 +706,56 @@ export class ArtEngine {
     ctx.globalCompositeOperation = "source-over";
     const d = ctx.getImageData(0, 0, 1, 1).data;
     return { r: d[0], g: d[1], b: d[2] };
+  }
+
+  /** 획 시작 전 상태 — 더티 타일만 */
+  private beforeTiles: { tiles: TileRect[]; data: Uint8ClampedArray[] } | null = null;
+
+  /*
+   * 지우개·번짐은 레이어를 실시간으로 고치므로 "고치기 전" 픽셀을 미리 갖고 있어야 한다.
+   * 예전엔 획 시작 때 전체 캔버스(6.4MB)를 스냅샷했다 — 저사양 기기에서 지우개 획마다
+   * 리드백 + 6.4MB 가비지 → 렉(2026-07-14 실측: 지우개 세션의 멈춤 총합이 크레용의 3~8배).
+   * 지금은 copy-on-write: dab이 닿는 타일만, 닿기 직전에 1회 복사한다.
+   */
+  private cow: Map<number, { rect: TileRect; data: Uint8ClampedArray }> | null = null;
+
+  /** 이 사각형이 덮는 타일 중 아직 복사 안 한 것을 지금 복사해 둔다 */
+  private cowTouch(minX: number, minY: number, maxX: number, maxY: number): void {
+    const cow = this.cow;
+    if (!cow) return;
+    const x = Math.max(0, Math.floor(minX));
+    const y = Math.max(0, Math.floor(minY));
+    const w = Math.min(this.width - x, Math.ceil(maxX - x));
+    const h = Math.min(this.height - y, Math.ceil(maxY - y));
+    if (w <= 0 || h <= 0) return;
+    const ctx = this.layers.active.ctx;
+    for (const t of tilesForRect(x, y, w, h, this.width, this.height)) {
+      const key = t.ty * 4096 + t.tx;
+      if (cow.has(key)) continue;
+      cow.set(key, { rect: t, data: new Uint8ClampedArray(ctx.getImageData(t.x, t.y, t.w, t.h).data) });
+    }
+  }
+
+  /** COW로 모아 둔 "고치기 전" 타일 — 히스토리 커맨드용(순서 고정) */
+  private cowSnapshot(): { tiles: TileRect[]; data: Uint8ClampedArray[] } | null {
+    if (!this.cow || this.cow.size === 0) return null;
+    const entries = [...this.cow.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+    return { tiles: entries.map((e) => e.rect), data: entries.map((e) => e.data) };
+  }
+
+  /** 지금까지의 더티 bbox에 해당하는 타일들을 레이어에서 읽어 둔다(합성 직전 호출) */
+  private captureBeforeTiles(): void {
+    const bb = this.strokeBBox;
+    if (!isFinite(bb.minX)) {
+      this.beforeTiles = null;
+      return;
+    }
+    const x = Math.max(0, Math.floor(bb.minX));
+    const y = Math.max(0, Math.floor(bb.minY));
+    const w = Math.min(this.width - x, Math.ceil(bb.maxX - x));
+    const h = Math.min(this.height - y, Math.ceil(bb.maxY - y));
+    const tiles = tilesForRect(x, y, w, h, this.width, this.height);
+    this.beforeTiles = { tiles, data: readTiles(this.layers.active.ctx, tiles) };
   }
 
   private snapshotActiveLayer(): Uint8ClampedArray {
@@ -774,6 +839,13 @@ export class ArtEngine {
               this.axis().y,
             ).map((m) => ({ ...d, x: m.x, y: m.y })),
           );
+    if (this.cow) {
+      // ⚠️ 반드시 그리기 전에 — 지운 뒤 복사하면 "지워진 상태"가 undo 대상이 된다
+      for (const d of all) {
+        const r = d.size / 2 + 2;
+        this.cowTouch(d.x - r, d.y - r, d.x + r, d.y + r);
+      }
+    }
     this.cm.backend.drawDabs(all);
     for (const d of all) this.trackDirty(d.x, d.y, d.size);
     this.requestComposite();
@@ -791,8 +863,11 @@ export class ArtEngine {
   private finalizeStroke(alreadyRecorded: boolean): void {
     const bb = this.strokeBBox;
     const layer = this.layers.active;
-    if (!isFinite(bb.minX) || !this.beforeFull) {
+    const cowSnap = this.cowSnapshot();
+    this.cow = null;
+    if (!isFinite(bb.minX) || (!this.beforeFull && !this.beforeTiles && !cowSnap)) {
       this.beforeFull = null;
+      this.beforeTiles = null;
       this.brush = null;
       return;
     }
@@ -800,14 +875,13 @@ export class ArtEngine {
     const y = Math.max(0, Math.floor(bb.minY));
     const w = Math.min(this.width - x, Math.ceil(bb.maxX - x));
     const h = Math.min(this.height - y, Math.ceil(bb.maxY - y));
-    const tiles = tilesForRect(x, y, w, h, this.width, this.height);
-    const after = copyTiles(
-      layer.ctx.getImageData(0, 0, this.width, this.height).data,
-      this.width,
-      tiles,
-    );
-    const before = copyTiles(this.beforeFull, this.width, tiles);
+    // 지우개 = COW 타일, 일반 브러시 = 합성 직전에 읽은 더티 타일
+    const snap = cowSnap ?? this.beforeTiles;
+    const tiles = snap?.tiles ?? tilesForRect(x, y, w, h, this.width, this.height);
+    const before = snap?.data ?? copyTiles(this.beforeFull!, this.width, tiles);
+    const after = readTiles(layer.ctx, tiles);
     this.beforeFull = null;
+    this.beforeTiles = null;
     this.pushTileCommand(layer, tiles, before, after);
 
     if (!alreadyRecorded) {
@@ -1191,8 +1265,8 @@ export class ArtEngine {
     this.firstDabLatency = -1;
     this.strokeBBox = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
     // strokeBegin과 동일한 undo before 규칙(지우개류는 레이어 직접 편집이라 선캡처)
-    this.beforeFull =
-      this.brush.cfg.composite === "destination-out" ? this.snapshotActiveLayer() : null;
+    // 지우개(destination-out)는 레이어를 직접 지운다 → 닿는 타일만 copy-on-write로 보존
+    this.cow = this.brush.cfg.composite === "destination-out" ? new Map() : null;
     this.cm.backend.beginStroke(this.brushContext());
     this.paintDabs(this.brush.begin(pts[0], this.settings), pts[0]);
     for (let i = 1; i < pts.length; i++) {
@@ -1606,13 +1680,20 @@ export class ArtEngine {
   private scheduleAutoSave(): void {
     this.autosave.schedule(() => this.snapshotState());
   }
-  private snapshotState(): SavedState {
+  /*
+   * ⚠️ toDataURL(동기 PNG 인코딩 + base64 문자열)로 전 레이어를 굽던 것을 toBlob으로 교체.
+   * 저사양 기기(웨일북)에서 레이어당 수백 ms 메인스레드 정지 → 5~15초마다 렉(2026-07-14
+   * 사용자 보고). toBlob은 인코딩이 메인스레드를 막지 않고 base64 왕복(수 MB 문자열
+   * 생성 → atob → Uint8Array)도 사라진다.
+   */
+  private async snapshotState(): Promise<SavedState> {
+    const pngs = await Promise.all(this.layers.list.map((l) => canvasToPng(l.canvas)));
     return {
       savedAt: Date.now(),
       width: this.width,
       height: this.height,
       mode: this.mode,
-      layers: this.layers.list.map((l) => ({
+      layers: this.layers.list.map((l, i) => ({
         id: l.id,
         name: l.name,
         visible: l.visible,
@@ -1620,7 +1701,7 @@ export class ArtEngine {
         blend: l.blend,
         isLineart: l.isLineart,
         isBase: l.isBase,
-        png: dataURLToBlobSync(l.canvas.toDataURL("image/png")),
+        png: pngs[i],
       })),
       recorder: this.recorder.serialize(),
     };
@@ -1720,6 +1801,19 @@ function blobToImage(blob: Blob): Promise<HTMLImageElement> {
     img.src = url;
   });
 }
+/** 레이어 → PNG Blob(비동기 인코딩). toBlob 미지원 환경은 toDataURL로 폴백 */
+function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve) => {
+    if (typeof canvas.toBlob !== "function") {
+      resolve(dataURLToBlobSync(canvas.toDataURL("image/png")));
+      return;
+    }
+    canvas.toBlob((b) => {
+      resolve(b ?? dataURLToBlobSync(canvas.toDataURL("image/png")));
+    }, "image/png");
+  });
+}
+
 function dataURLToBlobSync(dataURL: string): Blob {
   const [head, body] = dataURL.split(",");
   const mime = /:(.*?);/.exec(head)?.[1] ?? "image/png";

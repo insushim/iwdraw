@@ -46,7 +46,7 @@ export class AutoSave {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly debounceMs: number;
   private readonly maxWaitMs: number;
-  private pending: (() => SavedState) | null = null;
+  private pending: (() => SavedState | Promise<SavedState>) | null = null;
   private saving = false;
   /** 첫 schedule 시각 — 디바운스가 계속 리셋돼도 maxWait을 넘기면 강제 플러시 */
   private pendingSince = 0;
@@ -57,7 +57,7 @@ export class AutoSave {
   }
 
   /** 상태 스냅샷 팩토리를 등록 — 디바운스 후 1회만 실제 저장 */
-  schedule(snapshot: () => SavedState): void {
+  schedule(snapshot: () => SavedState | Promise<SavedState>): void {
     if (!this.pending) this.pendingSince = Date.now();
     this.pending = snapshot;
     if (this.timer) clearTimeout(this.timer);
@@ -83,7 +83,7 @@ export class AutoSave {
     const snap = this.pending;
     this.pending = null;
     try {
-      const state = snap();
+      const state = await snap();
       const db = await openDb();
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORE, "readwrite");

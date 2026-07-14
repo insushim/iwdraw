@@ -88,3 +88,15 @@ export function copyTiles(
     return out;
   });
 }
+
+/**
+ * 레이어에서 해당 타일만 직접 읽어온다 — 전체 캔버스 getImageData(1600×1000 = 6.4MB)를
+ * 획마다 두 번(before/after) 하던 것을 더티 타일(보통 수백 KB)로 줄인다.
+ * 저사양 기기(웨일북)에서 이 리드백과 그 가비지가 획마다 GC 스파이크를 만들었다(2026-07-14).
+ */
+export function readTiles(
+  ctx: CanvasRenderingContext2D,
+  tiles: TileRect[],
+): Uint8ClampedArray[] {
+  return tiles.map((t) => new Uint8ClampedArray(ctx.getImageData(t.x, t.y, t.w, t.h).data));
+}

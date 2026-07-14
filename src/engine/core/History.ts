@@ -13,6 +13,25 @@ export interface Command {
   dispose?(): void;
 }
 
+/**
+ * 기기 사정에 맞춘 undo 메모리 예산.
+ * 타일 스냅샷은 캔버스 픽셀(JS 힙 밖) — 300MB 고정 예산은 웨일북(4GB, 통합 GPU)에서
+ * 메모리 압박 → GC·스왑 → "쓰다 보면 렉, 브라우저 껐다 켜면 회복"의 주범이 된다.
+ * 되돌리기 단계 수(50)는 유지하되 바이트 예산으로 오래된 것부터 밀어낸다.
+ */
+export function historyBudgetBytes(): number {
+  const mem =
+    typeof navigator !== "undefined"
+      ? (navigator as unknown as { deviceMemory?: number }).deviceMemory
+      : undefined;
+  const MB = 1024 * 1024;
+  if (!mem) return 128 * MB; // 미상(사파리 등) — 중간값
+  if (mem <= 2) return 32 * MB;
+  if (mem <= 4) return 64 * MB; // 웨일북급
+  if (mem <= 8) return 128 * MB;
+  return 256 * MB;
+}
+
 export class History {
   private undoStack: Command[] = [];
   private redoStack: Command[] = [];
@@ -20,7 +39,7 @@ export class History {
   private readonly maxBytes: number;
   private bytes = 0;
 
-  constructor(limit = 50, maxBytes = 300 * 1024 * 1024) {
+  constructor(limit = 50, maxBytes = historyBudgetBytes()) {
     this.limit = limit;
     this.maxBytes = maxBytes;
   }
