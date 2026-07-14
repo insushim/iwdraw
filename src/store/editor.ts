@@ -32,6 +32,10 @@ export interface EditorState {
   /** 스포이트 진입 전 붓 — 색 찍으면 자동 복귀 */
   prevBrush: BrushId | null;
   size: number;
+  /** 그림 도구들이 공유하는 굵기(연필·마커·붓…) */
+  drawSize: number;
+  /** 도구별 굵기를 따로 기억하는 도구 — 지우개·번짐(2026-07-14 요청: 매번 다시 맞추기 불편) */
+  sizeByTool: Partial<Record<BrushId, number>>;
   opacity: number;
   water: number;
   stabilize: number;
@@ -112,6 +116,12 @@ let unsub: Array<() => void> = [];
 
 const DEFAULT_PALETTE_INK: RGB = { r: 45, g: 42, b: 38 };
 
+/* 굵기를 따로 기억하는 도구 — 지우개·번짐은 보통 그림 붓보다 굵게 쓴다.
+ * 공용 굵기 하나만 두면 지우려고 키운 값이 그림 붓에도 그대로 남아 매번 다시 맞춰야 했다
+ * (2026-07-14 사용자: "불편하네"). */
+const SEPARATE_SIZE_TOOLS: BrushId[] = ["eraser", "smudge"];
+const DEFAULT_TOOL_SIZE = 34;
+
 export const useEditor = create<EditorState>((set, get) => ({
   engine: null,
   ready: false,
@@ -122,6 +132,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   pressureOn: true,
   prevBrush: null,
   size: 18,
+  drawSize: 18,
+  sizeByTool: { eraser: 34, smudge: 34 },
   opacity: 1,
   water: 0.6,
   stabilize: 3,
@@ -238,9 +250,16 @@ export const useEditor = create<EditorState>((set, get) => ({
   setBrush: (b) => {
     get().engine?.setBrush(b);
     get().engine?.setShapeInsert(null); // 붓을 고르면 도형 모드 해제(그리기로 복귀)
+    // 지우개·번짐은 굵기를 따로 기억한다 — 지우려고 굵게 키운 값이 그림 붓까지 굵게 만들던 불편 해소
+    const s0 = get();
+    const next = SEPARATE_SIZE_TOOLS.includes(b)
+      ? s0.sizeByTool[b] ?? DEFAULT_TOOL_SIZE
+      : s0.drawSize;
+    if (next !== s0.size) get().engine?.setSize(next);
     // 스포이트 진입 시 이전 붓 기억(색 찍으면 자동 복귀), 스포이트→스포이트는 유지
     set((s) => ({
       brush: b,
+      size: next,
       shapeInsert: null,
       prevBrush: b === "eyedropper" ? (s.brush === "eyedropper" ? s.prevBrush : s.brush) : null,
     }));
@@ -258,7 +277,11 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
   setSize: (n) => {
     get().engine?.setSize(n);
-    set({ size: n });
+    set((s) =>
+      SEPARATE_SIZE_TOOLS.includes(s.brush)
+        ? { size: n, sizeByTool: { ...s.sizeByTool, [s.brush]: n } }
+        : { size: n, drawSize: n },
+    );
   },
   setOpacity: (n) => {
     get().engine?.setOpacity(n);
