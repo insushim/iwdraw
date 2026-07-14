@@ -79,6 +79,8 @@ export function CanvasStage({
       backendOverride,
     });
     engineRef.current = engine;
+    // QA/디버그 핸들 — 확대 배율 등 내부 상태를 e2e에서 실측한다
+    (window as unknown as { __artonEngine?: ArtEngine }).__artonEngine = engine;
     attach(engine);
     const store = useEditor.getState();
     if (lineartSrc) {

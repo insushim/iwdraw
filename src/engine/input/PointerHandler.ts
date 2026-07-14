@@ -21,15 +21,19 @@ export type ToLocal = (clientX: number, clientY: number) => { x: number; y: numb
 
 /*
  * 팜 리젝션(2026-07-14 사용자 요청 — 웨일북에서 아이들이 손을 대고 그린다).
- * 브라우저는 손바닥 접촉도 그냥 touch 포인터로 준다. 두 가지 규칙으로 거른다:
- *  ① 펜이 쓰이는 중(펜이 닿아 있거나 마지막 펜 입력 후 PEN_LOCKOUT_MS 이내)이면 touch는 전부 무시
- *     — 스타일러스로 그릴 때 손바닥·손날이 닿아도 획이 끊기거나 캔버스가 확대되지 않는다.
- *  ② 접촉 면적이 큰 touch(손가락은 보통 ≤30px, 손바닥·손날은 훨씬 크다)는 무시.
- *     기기가 접촉 크기를 안 주면(0/1 고정) 이 규칙은 자동으로 비활성 = 손가락 그리기는 그대로.
- * 손가락으로만 그리는 아이(펜 없음)에는 ①이 발동하지 않으므로 기존 동작이 유지된다.
+ * 규칙은 **하나뿐**: 펜이 화면에 실제로 닿아 있거나 뗀 직후(PEN_LOCKOUT_MS) 들어오는 touch는
+ * 손바닥으로 보고 버린다. 펜을 안 쓰는 아이의 손가락 그리기·두 손가락 확대는 전혀 건드리지 않는다.
+ *
+ * ⚠️ 접촉 면적(e.width/e.height) 규칙은 2026-07-14 실측으로 폐기했다 — 웨일북 터치스크린은
+ * 보통 손가락 접촉도 큰 값으로 보고해서 모든 터치가 손바닥으로 오판됐다(그리기·핀치 전멸).
+ * 펜 호버(화면에 안 닿은 상태)도 잠금 트리거로 쓰지 않는다 — 펜이 근처에 있기만 해도 손이 죽는다.
  */
-const PEN_LOCKOUT_MS = 1500;
-const PALM_CONTACT_PX = 45;
+const PEN_LOCKOUT_MS = 1200;
+
+/** 펜이 화면에 닿아 있는가(호버 아님) — buttons 비트 or 필압 */
+function penIsContacting(e: PointerEvent): boolean {
+  return e.pointerType === "pen" && (e.buttons & 1) !== 0;
+}
 
 export class PointerHandler {
   private active = new Map<number, PointerEvent>();
@@ -44,12 +48,9 @@ export class PointerHandler {
     return this.penDown || now - this.lastPenTs < PEN_LOCKOUT_MS;
   }
 
-  /** 이 포인터를 손바닥으로 보고 버릴까 */
+  /** 이 포인터를 손바닥으로 보고 버릴까 — 펜이 닿아 있는 동안의 touch만 */
   private isPalm(e: PointerEvent): boolean {
-    if (e.pointerType !== "touch") return false;
-    if (this.penInUse(e.timeStamp)) return true; // ① 펜 사용 중 = 손은 전부 손바닥 취급
-    // ② 접촉 면적(기기가 안 주면 1 이하 → 판정 안 함)
-    return e.width > PALM_CONTACT_PX || e.height > PALM_CONTACT_PX;
+    return e.pointerType === "touch" && this.penInUse(e.timeStamp);
   }
   private drawing = false;
   private drawingPointerId = -1;
@@ -140,7 +141,7 @@ export class PointerHandler {
   };
 
   private handleMove = (e: PointerEvent) => {
-    if (e.pointerType === "pen") this.lastPenTs = e.timeStamp;
+    if (penIsContacting(e)) this.lastPenTs = e.timeStamp; // 호버는 무시 — 펜이 근처에 있다고 손을 막지 않는다
     if (this.rejected.has(e.pointerId)) return;
     // 펜을 대는 순간 이미 닿아 있던 손가락(=손바닥)도 즉시 버린다 — 손이 먼저 닿는 게 보통
     if (e.pointerType === "touch" && this.penInUse(e.timeStamp) && this.active.has(e.pointerId)) {
