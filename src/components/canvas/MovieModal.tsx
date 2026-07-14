@@ -5,6 +5,7 @@ import type { ArtEngine } from "@/engine/ArtEngine";
 import { createBrush } from "@/engine/brushes";
 import { smearSegment } from "@/engine/tools/SmudgeTool";
 import { drawStampOnCtx, getStamp } from "@/engine/tools/StampTool";
+import { drawTextOnCtx } from "@/engine/tools/TextInsert";
 import { floodFill } from "@/engine/brushes/FillTool";
 import { playMovie, recordMovie, type MovieSpeed, type ReplayHandle } from "@/engine/export/TimelapseExporter";
 import { Button } from "@/components/ui";
@@ -144,6 +145,19 @@ function replayOne(
     const st = stroke.extra.stamp as { id: string; cx: number; cy: number; size: number };
     const def = getStamp(st.id);
     if (def) drawStampOnCtx(ctx, def, st.cx, st.cy, st.size, stroke.settings.color);
+    return;
+  }
+  if (stroke.extra?.text) {
+    // 글씨: 스탬프와 같이 progress 100%에서 한 번에 등장
+    if (progress < 1) return;
+    const tx = stroke.extra.text as {
+      value: string;
+      family: string;
+      cx: number;
+      cy: number;
+      size: number;
+    };
+    drawTextOnCtx(ctx, { value: tx.value, family: tx.family }, tx.cx, tx.cy, tx.size, stroke.settings.color);
     return;
   }
   if (stroke.extra?.fill) {

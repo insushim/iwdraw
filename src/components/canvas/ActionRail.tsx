@@ -55,6 +55,7 @@ export function ActionRail() {
   const toggleSketchSuggest = useEditor((s) => s.toggleSketchSuggest);
   const suggestSuppressed = useEditor((s) => s.suggestSuppressed);
   const setStampPaletteOpen = useEditor((s) => s.setStampPaletteOpen);
+  const setTextPaletteOpen = useEditor((s) => s.setTextPaletteOpen);
   const [confirmClear, setConfirmClear] = useState(false);
 
   return (
@@ -98,6 +99,19 @@ export function ActionRail() {
         그림 도장
         <span className="ml-auto rounded-full bg-cream-deep px-2 py-0.5 text-[11px] font-bold text-ink-faint">
           고르기
+        </span>
+      </button>
+
+      {/* 글씨 넣기 — 글을 치고 글꼴을 고르면 캔버스에 떠서 들어온다(위치·크기 조절 후 확인) */}
+      <button
+        onClick={() => setTextPaletteOpen(true)}
+        title="글씨를 써서 그림에 넣어요 (크기·위치 바꿀 수 있어요)"
+        className="pressable mt-2 flex w-full items-center gap-2 rounded-2xl bg-cream px-3 py-2 text-sm font-semibold text-ink-soft hover:bg-cream-deep"
+      >
+        <span className="text-xl leading-none">✏️</span>
+        글씨 넣기
+        <span className="ml-auto rounded-full bg-cream-deep px-2 py-0.5 text-[11px] font-bold text-ink-faint">
+          쓰기
         </span>
       </button>
 

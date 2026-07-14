@@ -7,10 +7,18 @@
 export interface PendingBox {
   cx: number;
   cy: number;
+  /** 세로 크기(px). 가로는 size × aspect — 글씨는 가로로 길다(스탬프는 aspect=1) */
   size: number;
+  aspect?: number;
 }
 
 export type PendingHit = "resize" | "move" | null;
+
+/** 상자의 반너비/반높이 — aspect(가로/세로)가 없으면 정사각(스탬프) */
+export function pendingHalf(b: PendingBox): { hw: number; hh: number } {
+  const a = b.aspect && b.aspect > 0 ? b.aspect : 1;
+  return { hw: (b.size * a) / 2, hh: b.size / 2 };
+}
 
 /** 포인터가 모서리 핸들 위(→resize)·몸통 안(→move)·바깥(null) 중 어디인지.
  *  handleHitPx = 화면상 히트 반경(px), scale로 나눠 캔버스 좌표 반경으로 변환. */
@@ -21,16 +29,16 @@ export function hitPending(
   scale: number,
   handleHitPx: number,
 ): PendingHit {
-  const half = b.size / 2;
+  const { hw, hh } = pendingHalf(b);
   const hit = handleHitPx / Math.max(scale, 1e-6);
   const corners: [number, number][] = [
-    [b.cx - half, b.cy - half],
-    [b.cx + half, b.cy - half],
-    [b.cx + half, b.cy + half],
-    [b.cx - half, b.cy + half],
+    [b.cx - hw, b.cy - hh],
+    [b.cx + hw, b.cy - hh],
+    [b.cx + hw, b.cy + hh],
+    [b.cx - hw, b.cy + hh],
   ];
   if (corners.some(([hx, hy]) => Math.hypot(px - hx, py - hy) <= hit)) return "resize";
-  if (px >= b.cx - half && px <= b.cx + half && py >= b.cy - half && py <= b.cy + half) return "move";
+  if (px >= b.cx - hw && px <= b.cx + hw && py >= b.cy - hh && py <= b.cy + hh) return "move";
   return null;
 }
 
@@ -50,7 +58,8 @@ export function movePending(
   return { cx, cy };
 }
 
-/** 크기조절 — 중심 고정, 포인터~중심 체비쇼프 거리의 2배가 한 변(min/max 클램프) */
+/** 크기조절 — 중심 고정. 세로 크기(size)를 돌려준다. aspect가 있으면 가로 드래그도
+ *  같은 비율로 환산해 반영한다(글씨: 옆으로 끌어도 커진다). */
 export function resizePending(
   cx: number,
   cy: number,
@@ -58,8 +67,10 @@ export function resizePending(
   py: number,
   min: number,
   max: number,
+  aspect = 1,
 ): number {
-  const half = Math.max(Math.abs(px - cx), Math.abs(py - cy));
+  const a = aspect > 0 ? aspect : 1;
+  const half = Math.max(Math.abs(py - cy), Math.abs(px - cx) / a);
   return Math.min(Math.max(half * 2, min), max);
 }
 
@@ -72,11 +83,13 @@ export function commitRegion(
   width: number,
   height: number,
   margin = 12,
+  aspect = 1,
 ): { x: number; y: number; w: number; h: number } {
   const half = size / 2 + margin;
-  let minX = cx - half,
+  const halfW = (size * (aspect > 0 ? aspect : 1)) / 2 + margin;
+  let minX = cx - halfW,
     minY = cy - half,
-    maxX = cx + half,
+    maxX = cx + halfW,
     maxY = cy + half;
   if (origin) {
     minX = Math.min(minX, origin.minX);

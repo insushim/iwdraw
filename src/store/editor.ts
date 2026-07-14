@@ -48,6 +48,8 @@ export interface EditorState {
   pending: { stampId: string; label: string } | null;
   /** 스탬프 팔레트 열림 여부 */
   stampPaletteOpen: boolean;
+  /** 글씨 넣기 창 열림 여부 */
+  textPaletteOpen: boolean;
   juniorMode: boolean;
 
   canUndo: boolean;
@@ -86,6 +88,9 @@ export interface EditorState {
   /** 팔레트에서 스탬프 선택 → 떠 있는 상태로 삽입 */
   insertStamp: (stampId: string) => void;
   setStampPaletteOpen: (open: boolean) => void;
+  /** 글씨를 캔버스 가운데에 떠 있는 상태로 넣는다(끌어서 옮기고 크기 조절 후 확인) */
+  insertText: (value: string, fontFamily: string) => void;
+  setTextPaletteOpen: (open: boolean) => void;
   toggleJunior: () => void;
   undo: () => void;
   redo: () => void;
@@ -127,6 +132,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   suggestions: [],
   pending: null,
   stampPaletteOpen: false,
+  textPaletteOpen: false,
   juniorMode: false,
   canUndo: false,
   canRedo: false,
@@ -210,7 +216,15 @@ export const useEditor = create<EditorState>((set, get) => ({
   detach: () => {
     unsub.forEach((u) => u());
     unsub = [];
-    set({ engine: null, ready: false, layers: [], suggestions: [], pending: null, stampPaletteOpen: false });
+    set({
+      engine: null,
+      ready: false,
+      layers: [],
+      suggestions: [],
+      pending: null,
+      stampPaletteOpen: false,
+      textPaletteOpen: false,
+    });
   },
 
   setMode: (m) => {
@@ -294,6 +308,11 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ stampPaletteOpen: false });
   },
   setStampPaletteOpen: (open) => set({ stampPaletteOpen: open }),
+  insertText: (value, fontFamily) => {
+    void get().engine?.insertText(value, fontFamily);
+    set({ textPaletteOpen: false });
+  },
+  setTextPaletteOpen: (open) => set({ textPaletteOpen: open }),
   toggleJunior: () => set((s) => ({ juniorMode: !s.juniorMode })),
   undo: () => get().engine?.undo(),
   redo: () => get().engine?.redo(),

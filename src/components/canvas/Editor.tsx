@@ -19,6 +19,7 @@ import { CollabOverlay } from "./CollabOverlay";
 import { SuggestBar } from "./SuggestBar";
 import { PendingStampBar } from "./PendingStampBar";
 import { StampPalette } from "./StampPalette";
+import { TextPalette } from "./TextPalette";
 import { PhotoImport } from "@/components/photo-import";
 import { ArtonLogo } from "@/components/arton-logo";
 import { Icon } from "./icons";
@@ -417,6 +418,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         <Toast tone="ink">🔒 선생님이 캔버스를 잠갔어요</Toast>
       )}
       <StampPalette />
+      <TextPalette />
     </div>
   );
 }

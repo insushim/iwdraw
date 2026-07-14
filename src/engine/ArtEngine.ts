@@ -37,8 +37,15 @@ import {
   isShapeDragTooSmall,
   type ShapeInsertKind,
 } from "./tools/ShapeInsert";
-import { hitPending, movePending, resizePending, commitRegion } from "./tools/pendingStampMath";
+import {
+  hitPending,
+  movePending,
+  resizePending,
+  commitRegion,
+  pendingHalf,
+} from "./tools/pendingStampMath";
 import { drawStampOnCtx, getStamp } from "./tools/StampTool";
+import { drawTextOnCtx, ensureFontReady, textAspect, type TextItem } from "./tools/TextInsert";
 import { recognizeSketch } from "./recognizer/SketchMatch";
 import type { StrokeContext } from "./core/backend";
 import { blendToComposite } from "./core/backend";
@@ -106,7 +113,13 @@ export class ArtEngine {
    * replaceCount = 커밋 시 지울 스케치 획 수(제안 수락=k, 팔레트=0).
    * originBBox = 대체할 스케치 원래 bbox(스탬프를 멀리 옮겨도 원본을 지우도록 tile 영역에 합집합). */
   private pending: {
+    /** 스탬프(그림 도장) 또는 글씨 — 배치·확정 파이프라인은 동일 */
+    kind: "stamp" | "text";
     stampId: string;
+    /** kind==="text"일 때 넣을 글과 글꼴 */
+    text?: TextItem;
+    /** 상자 가로/세로 비율 — 스탬프는 1, 글씨는 글자 폭에서 계산 */
+    aspect: number;
     cx: number;
     cy: number;
     size: number;
@@ -1118,7 +1131,9 @@ export class ArtEngine {
     const active = this.layers.active;
     const layerId = opts?.layerId ?? active.id;
     this.pending = {
+      kind: "stamp",
       stampId,
+      aspect: 1,
       cx: clamp(cx, 0, this.width),
       cy: clamp(cy, 0, this.height),
       size: clamp(size, ArtEngine.PENDING_MIN_SIZE, Math.min(this.width, this.height)),
@@ -1128,6 +1143,39 @@ export class ArtEngine {
     };
     this.pendingDrag = null;
     this.emit("pendingChange", { pending: { stampId, label: def.label } });
+    this.requestComposite();
+  }
+
+  /*
+   * 글씨 넣기 — 스탬프와 같은 "떠 있는 배치"로 띄운다(끌어서 옮기고 모서리로 크기 조절 → ✓).
+   * 색은 현재 팔레트 색, 글꼴은 UI가 준 실제 패밀리명. 글꼴이 로드된 뒤 폭을 재야
+   * 상자 비율이 맞는다(폴백 글꼴로 재면 커밋 때 글자가 상자를 벗어난다).
+   */
+  async insertText(value: string, family: string): Promise<void> {
+    const text = value.trim();
+    if (!text || this.replaying) return;
+    const item: TextItem = { value: text, family };
+    const size = Math.round(this.height * 0.14);
+    await ensureFontReady(item, size);
+    const ctx = this.previewScratchCtx();
+    const aspect = textAspect(ctx, item, size);
+    // 캔버스보다 넓으면(긴 문장) 폭에 맞춰 줄인다
+    const maxSize = Math.min(this.height * 0.6, (this.width * 0.92) / Math.max(aspect, 0.01));
+    const fit = clamp(size, ArtEngine.PENDING_MIN_SIZE, Math.max(ArtEngine.PENDING_MIN_SIZE, maxSize));
+    this.pending = {
+      kind: "text",
+      stampId: "text",
+      text: item,
+      aspect,
+      cx: this.width / 2,
+      cy: this.height / 2,
+      size: fit,
+      replaceCount: 0,
+      layerId: this.layers.active.id,
+      originBBox: null,
+    };
+    this.pendingDrag = null;
+    this.emit("pendingChange", { pending: { stampId: "text", label: "글씨" } });
     this.requestComposite();
   }
 
@@ -1159,13 +1207,19 @@ export class ArtEngine {
       pd.cx = m.cx;
       pd.cy = m.cy;
     } else {
+      // 글씨는 가로로 길다 — 세로 크기(size)를 키우되 가로 드래그도 비율로 환산해 반영
+      const maxSize =
+        pd.kind === "text"
+          ? Math.min(this.height, this.width / Math.max(pd.aspect, 0.01))
+          : Math.min(this.width, this.height);
       pd.size = resizePending(
         pd.cx,
         pd.cy,
         p.x,
         p.y,
         ArtEngine.PENDING_MIN_SIZE,
-        Math.min(this.width, this.height),
+        maxSize,
+        pd.aspect,
       );
     }
     this.requestComposite();
@@ -1175,17 +1229,26 @@ export class ArtEngine {
   commitPendingStamp(): void {
     const pd = this.pending;
     if (!pd) return;
-    const def = getStamp(pd.stampId);
+    const def = pd.kind === "stamp" ? getStamp(pd.stampId) : null;
     const layer =
       this.layers.list.find((l) => l.id === pd.layerId && !l.isLineart && !l.isBase) ??
       (!this.layers.active.isLineart && !this.layers.active.isBase ? this.layers.active : null);
-    if (!def || !layer) {
+    if ((pd.kind === "stamp" && !def) || !layer) {
       this.cancelPendingStamp();
       return;
     }
     const { cx, cy, size } = pd;
-    // tile 영역 = (옮겨진)스탬프 bbox ∪ 원래 스케치 bbox + 외곽선 여유
-    const { x, y, w, h } = commitRegion(cx, cy, size, pd.originBBox, this.width, this.height);
+    // tile 영역 = (옮겨진)스탬프·글씨 bbox ∪ 원래 스케치 bbox + 외곽선 여유
+    const { x, y, w, h } = commitRegion(
+      cx,
+      cy,
+      size,
+      pd.originBBox,
+      this.width,
+      this.height,
+      12,
+      pd.aspect,
+    );
     if (w <= 0 || h <= 0) {
       this.cancelPendingStamp();
       return;
@@ -1200,7 +1263,8 @@ export class ArtEngine {
     for (let i = 0; i < pd.replaceCount; i++) {
       if (!this.history.undo()) break;
     }
-    drawStampOnCtx(layer.ctx, def, cx, cy, size, this.settings.color);
+    if (pd.kind === "text" && pd.text) drawTextOnCtx(layer.ctx, pd.text, cx, cy, size, this.settings.color);
+    else if (def) drawStampOnCtx(layer.ctx, def, cx, cy, size, this.settings.color);
     const after = copyTiles(
       layer.ctx.getImageData(0, 0, this.width, this.height).data,
       this.width,
@@ -1210,12 +1274,15 @@ export class ArtEngine {
     // 무비 재생 정합 — 교체된 스케치 획은 로그에서도 제거
     this.recorder.dropLast(pd.replaceCount);
     this.recorder.record({
-      brush: "stamp",
+      brush: pd.kind === "text" ? "text" : "stamp",
       settings: { ...this.settings },
       layerId: layer.id,
       points: [{ x: cx, y: cy, pressure: 1, t: performance.now() }],
       symmetry: "none",
-      extra: { stamp: { id: pd.stampId, cx, cy, size } },
+      extra:
+        pd.kind === "text" && pd.text
+          ? { text: { value: pd.text.value, family: pd.text.family, cx, cy, size } }
+          : { stamp: { id: pd.stampId, cx, cy, size } },
     });
     this.pending = null;
     this.pendingDrag = null;
@@ -1660,23 +1727,26 @@ export class ArtEngine {
     // 스탬프 자체는 drawStampOnCtx가 커밋과 동일하게 그리므로 프리뷰==최종.
     if (this.pending) {
       const pd = this.pending;
-      const def = getStamp(pd.stampId);
-      if (def) {
-        drawStampOnCtx(ctx, def, pd.cx, pd.cy, pd.size, this.settings.color);
-        const half = pd.size / 2;
+      const def = pd.kind === "stamp" ? getStamp(pd.stampId) : null;
+      const drawable = pd.kind === "text" ? !!pd.text : !!def;
+      if (drawable) {
+        if (pd.kind === "text" && pd.text)
+          drawTextOnCtx(ctx, pd.text, pd.cx, pd.cy, pd.size, this.settings.color);
+        else if (def) drawStampOnCtx(ctx, def, pd.cx, pd.cy, pd.size, this.settings.color);
+        const { hw, hh } = pendingHalf(pd);
         const s = this.view.scale;
         ctx.save();
         ctx.strokeStyle = "rgba(91,184,245,0.95)"; // sky
         ctx.lineWidth = 2 / s;
         ctx.setLineDash([6 / s, 5 / s]);
-        ctx.strokeRect(pd.cx - half, pd.cy - half, pd.size, pd.size);
+        ctx.strokeRect(pd.cx - hw, pd.cy - hh, hw * 2, hh * 2);
         ctx.setLineDash([]);
         const hr = 7 / s; // 화면상 ~7px 핸들
         for (const [hx, hy] of [
-          [pd.cx - half, pd.cy - half],
-          [pd.cx + half, pd.cy - half],
-          [pd.cx + half, pd.cy + half],
-          [pd.cx - half, pd.cy + half],
+          [pd.cx - hw, pd.cy - hh],
+          [pd.cx + hw, pd.cy - hh],
+          [pd.cx + hw, pd.cy + hh],
+          [pd.cx - hw, pd.cy + hh],
         ]) {
           ctx.beginPath();
           ctx.arc(hx, hy, hr, 0, Math.PI * 2);
