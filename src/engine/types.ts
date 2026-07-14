@@ -9,6 +9,7 @@ export type BrushId =
   | "colorpencil"
   | "crayon"
   | "signpen"
+  | "acrylic"
   | "marker"
   | "watercolor"
   | "oil"

@@ -11,6 +11,7 @@ const BRUSH_ICON: Partial<Record<BrushId, IconName>> = {
   colorpencil: "colorpencil",
   crayon: "crayon",
   signpen: "signpen",
+  acrylic: "acrylic",
   marker: "marker",
   watercolor: "watercolor",
   oil: "oil",

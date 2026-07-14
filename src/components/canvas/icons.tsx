@@ -14,6 +14,7 @@ export type IconName =
   | "colorpencil"
   | "crayon"
   | "signpen"
+  | "acrylic"
   | "marker"
   | "watercolor"
   | "oil"
@@ -83,6 +84,16 @@ const ICONS: Record<IconName, ReactNode> = {
       <rect x="13.6" y="7.5" width="4.8" height="12" rx="1.2" fill="#FBF7F0" />
       <path d="M13.6 19.5h4.8l-1.1 3h-2.6z" fill="#A78BEA" />
       <path d="M14.9 22.5h2.2L16 27.5z" fill="#7C5CD6" />
+    </g>
+  ),
+  /* 아크릴펜: 굵은 몸통 + 둥근 물감 촉 + 물감 방울(불투명 물감 마카) */
+  acrylic: (
+    <g transform="rotate(45 16 16)" {...O}>
+      <rect x="11.8" y="3" width="8.4" height="5" rx="1.6" fill="#2FA36B" />
+      <rect x="12.2" y="8" width="7.6" height="11.5" rx="1.6" fill="#FBF7F0" />
+      <rect x="12.2" y="14" width="7.6" height="5.5" rx="1" fill="#8BE0B4" />
+      <path d="M13.4 19.5h5.2l-.8 3.2h-3.6z" fill="#2FA36B" />
+      <circle cx="16" cy="25.6" r="2.6" fill="#2FA36B" />
     </g>
   ),
   marker: (

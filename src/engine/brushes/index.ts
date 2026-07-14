@@ -3,6 +3,7 @@ import { BrushBase, MIN_DAB_PX } from "./BrushBase";
 import { Pencil } from "./Pencil";
 import { ColorPencil } from "./ColorPencil";
 import { SignPen } from "./SignPen";
+import { AcrylicPen } from "./AcrylicPen";
 import { Crayon } from "./Crayon";
 import { Marker } from "./Marker";
 import { WatercolorBrush } from "./WatercolorBrush";
@@ -23,6 +24,8 @@ export function createBrush(id: BrushId, rng?: () => number): BrushBase {
       return new ColorPencil(rng);
     case "signpen":
       return new SignPen(rng);
+    case "acrylic":
+      return new AcrylicPen(rng);
     case "crayon":
       return new Crayon(rng);
     case "marker":
@@ -53,6 +56,7 @@ export const STROKE_BRUSHES: BrushId[] = [
   "colorpencil",
   "crayon",
   "signpen",
+  "acrylic",
   "marker",
   "watercolor",
   "oil",
@@ -76,6 +80,7 @@ export const BRUSH_META: BrushMeta[] = [
   { id: "colorpencil", label: "색연필", junior: true },
   { id: "crayon", label: "크레용", junior: true },
   { id: "signpen", label: "사인펜", junior: true },
+  { id: "acrylic", label: "아크릴펜", junior: false },
   { id: "marker", label: "마커", junior: true },
   { id: "watercolor", label: "수채붓", junior: true },
   { id: "oil", label: "유화붓", junior: false },
