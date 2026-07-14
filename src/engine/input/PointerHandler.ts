@@ -19,8 +19,38 @@ export interface PointerCallbacks {
 
 export type ToLocal = (clientX: number, clientY: number) => { x: number; y: number };
 
+/*
+ * 팜 리젝션(2026-07-14 사용자 요청 — 웨일북에서 아이들이 손을 대고 그린다).
+ * 브라우저는 손바닥 접촉도 그냥 touch 포인터로 준다. 두 가지 규칙으로 거른다:
+ *  ① 펜이 쓰이는 중(펜이 닿아 있거나 마지막 펜 입력 후 PEN_LOCKOUT_MS 이내)이면 touch는 전부 무시
+ *     — 스타일러스로 그릴 때 손바닥·손날이 닿아도 획이 끊기거나 캔버스가 확대되지 않는다.
+ *  ② 접촉 면적이 큰 touch(손가락은 보통 ≤30px, 손바닥·손날은 훨씬 크다)는 무시.
+ *     기기가 접촉 크기를 안 주면(0/1 고정) 이 규칙은 자동으로 비활성 = 손가락 그리기는 그대로.
+ * 손가락으로만 그리는 아이(펜 없음)에는 ①이 발동하지 않으므로 기존 동작이 유지된다.
+ */
+const PEN_LOCKOUT_MS = 1500;
+const PALM_CONTACT_PX = 45;
+
 export class PointerHandler {
   private active = new Map<number, PointerEvent>();
+  /** 마지막 펜 입력 시각(e.timeStamp 기준) */
+  private lastPenTs = -Infinity;
+  private penDown = false;
+  /** 팜으로 판단해 버린 포인터 — move/up도 무시해야 한다 */
+  private rejected = new Set<number>();
+
+  /** 펜이 "쓰이는 중"인가 — 펜이 닿아 있거나 방금까지 썼다 */
+  private penInUse(now: number): boolean {
+    return this.penDown || now - this.lastPenTs < PEN_LOCKOUT_MS;
+  }
+
+  /** 이 포인터를 손바닥으로 보고 버릴까 */
+  private isPalm(e: PointerEvent): boolean {
+    if (e.pointerType !== "touch") return false;
+    if (this.penInUse(e.timeStamp)) return true; // ① 펜 사용 중 = 손은 전부 손바닥 취급
+    // ② 접촉 면적(기기가 안 주면 1 이하 → 판정 안 함)
+    return e.width > PALM_CONTACT_PX || e.height > PALM_CONTACT_PX;
+  }
   private drawing = false;
   private drawingPointerId = -1;
   /** 속도 기반 필압 시뮬 상태(마우스·손가락) */
@@ -76,7 +106,14 @@ export class PointerHandler {
   }
 
   private handleDown = (e: PointerEvent) => {
-    this.el.setPointerCapture?.(e.pointerId);
+    if (e.pointerType === "pen") {
+      this.penDown = true;
+      this.lastPenTs = e.timeStamp;
+    } else if (this.isPalm(e)) {
+      this.rejected.add(e.pointerId); // 손바닥 — 그리기·제스처 어디에도 참여시키지 않는다
+      return;
+    }
+    this.capture(e.pointerId);
     this.active.set(e.pointerId, e);
 
     if (this.active.size >= 2) {
@@ -103,6 +140,13 @@ export class PointerHandler {
   };
 
   private handleMove = (e: PointerEvent) => {
+    if (e.pointerType === "pen") this.lastPenTs = e.timeStamp;
+    if (this.rejected.has(e.pointerId)) return;
+    // 펜을 대는 순간 이미 닿아 있던 손가락(=손바닥)도 즉시 버린다 — 손이 먼저 닿는 게 보통
+    if (e.pointerType === "touch" && this.penInUse(e.timeStamp) && this.active.has(e.pointerId)) {
+      this.dropPointer(e);
+      return;
+    }
     if (this.active.has(e.pointerId)) this.active.set(e.pointerId, e);
 
     if (this.active.size >= 2) {
@@ -121,9 +165,14 @@ export class PointerHandler {
   };
 
   private handleUp = (e: PointerEvent) => {
+    if (e.pointerType === "pen") {
+      this.penDown = false;
+      this.lastPenTs = e.timeStamp;
+    }
+    if (this.rejected.delete(e.pointerId)) return; // 버린 손바닥 — 커밋하지 않는다
     const wasMulti = this.active.size >= 2;
     this.active.delete(e.pointerId);
-    this.el.releasePointerCapture?.(e.pointerId);
+    this.release(e.pointerId);
 
     if (wasMulti) {
       this.cb.onGesture([...this.active.values()], e, this.active.size >= 2 ? "move" : "end");
@@ -136,6 +185,35 @@ export class PointerHandler {
     }
   };
 
+  /* 포인터 캡처는 실패할 수 있다(이미 뗀 포인터, 합성 이벤트 등) — 던지면 그 아래
+   * 그리기 로직이 통째로 실행되지 않는다. 캡처 실패는 무시하고 그리기는 계속한다. */
+  private capture(id: number): void {
+    try {
+      this.el.setPointerCapture?.(id);
+    } catch {
+      /* 캡처 실패 — 그리기에는 영향 없음 */
+    }
+  }
+  private release(id: number): void {
+    try {
+      this.el.releasePointerCapture?.(id);
+    } catch {
+      /* 이미 해제됨 */
+    }
+  }
+
+  /** 진행 중이던 포인터를 팜으로 재분류해 버린다(그리던 획은 폐기 — 점 찍힘 방지) */
+  private dropPointer(e: PointerEvent): void {
+    this.active.delete(e.pointerId);
+    this.rejected.add(e.pointerId);
+    this.release(e.pointerId);
+    if (this.drawing && e.pointerId === this.drawingPointerId) {
+      this.drawing = false;
+      this.drawingPointerId = -1;
+      this.cb.onCancel();
+    }
+  }
+
   destroy(): void {
     this.el.removeEventListener("pointerdown", this.handleDown);
     this.el.removeEventListener("pointermove", this.handleMove);
@@ -143,5 +221,6 @@ export class PointerHandler {
     this.el.removeEventListener("pointercancel", this.handleUp);
     this.el.removeEventListener("pointerleave", this.handleUp);
     this.active.clear();
+    this.rejected.clear();
   }
 }

@@ -25,7 +25,7 @@ export function ModeTabs({ hasLineart = false }: { hasLineart?: boolean }) {
     <div
       role="tablist"
       aria-label="그리기 모드"
-      className="flex gap-1 rounded-full bg-paper p-1 shadow-soft"
+      className="flex shrink-0 gap-1 rounded-full bg-paper p-1 shadow-soft"
     >
       {MODES.map((m) => {
         const active = mode === m.id;
@@ -43,7 +43,7 @@ export function ModeTabs({ hasLineart = false }: { hasLineart?: boolean }) {
               setMode(m.id);
             }}
             title={m.id === "coloring" && !hasLineart ? "도안을 골라 색칠해요" : m.label}
-            className={`pressable flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-base transition-colors ${
+            className={`pressable flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 font-display text-base transition-colors ${
               active ? `${m.tone} text-ink shadow-soft ring-2 ${m.ring}` : "text-ink-soft hover:bg-cream"
             }`}
           >

@@ -61,6 +61,16 @@ body {
   min-height: 48px;
 }
 
+/* 버튼 라벨은 절대 접히지 않는다 — 화면이 좁은 기기(웨일북)에서 한글 라벨이 글자 단위로
+ * 접혀 버튼이 세로로 길쭉해졌다(2026-07-14 사용자 실측, 맥북에선 정상).
+ * 터치 드래그로 라벨이 선택돼 파랗게 반전되는 것도 함께 막는다. */
+button,
+.pressable {
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* 눌리는 마이크로 인터랙션 */
 .pressable {
   transition:

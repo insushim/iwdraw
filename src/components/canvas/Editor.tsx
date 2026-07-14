@@ -152,8 +152,9 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     [onSave, saving, downloading],
   );
 
+  // shrink-0: 헤더가 좁아지면 flex가 버튼을 눌러 라벨이 접힌다(웨일북에서 버튼이 세로로 길쭉)
   const iconBtn =
-    "pressable touch-target flex items-center justify-center gap-1 rounded-full bg-paper px-3 py-2 text-sm font-semibold text-ink-soft shadow-soft";
+    "pressable touch-target flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full bg-paper px-3 py-2 text-sm font-semibold text-ink-soft shadow-soft";
 
   return (
     // editor-no-pinch: 데스크톱 크로뮴(웨일북)은 뷰포트 메타 줌 잠금을 무시 — 툴바·여백에서
@@ -187,7 +188,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           </span>
         )}
 
-        <div className="flex flex-1 justify-center">
+        <div className="flex min-w-0 flex-1 justify-center">
           <ModeTabs hasLineart={!!lineartSrc} />
         </div>
 
@@ -272,7 +273,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         <button
           onClick={() => handleExport(submits ? "submit" : "download")}
           disabled={saving || (!submits && downloading)}
-          className="pressable touch-target flex items-center gap-1.5 rounded-full bg-coral px-5 py-2.5 font-display text-white shadow-soft disabled:opacity-60"
+          className="pressable touch-target flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-coral px-5 py-2.5 font-display text-white shadow-soft disabled:opacity-60"
           aria-label={submits ? "우리 반 갤러리에 보내기" : "저장하기"}
           title={
             submits ? "우리 반 갤러리에 바로 전시돼요" : "그림을 그림 파일(PNG)로 저장해요"
