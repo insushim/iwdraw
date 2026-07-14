@@ -89,7 +89,7 @@ export interface EditorState {
   insertStamp: (stampId: string) => void;
   setStampPaletteOpen: (open: boolean) => void;
   /** 글씨를 캔버스 가운데에 떠 있는 상태로 넣는다(끌어서 옮기고 크기 조절 후 확인) */
-  insertText: (value: string, fontFamily: string) => void;
+  insertText: (value: string, fontFamily: string, outline?: { color: RGB; ratio: number } | null) => void;
   setTextPaletteOpen: (open: boolean) => void;
   toggleJunior: () => void;
   undo: () => void;
@@ -308,8 +308,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ stampPaletteOpen: false });
   },
   setStampPaletteOpen: (open) => set({ stampPaletteOpen: open }),
-  insertText: (value, fontFamily) => {
-    void get().engine?.insertText(value, fontFamily);
+  insertText: (value, fontFamily, outline) => {
+    void get().engine?.insertText(value, fontFamily, outline ?? null);
     set({ textPaletteOpen: false });
   },
   setTextPaletteOpen: (open) => set({ textPaletteOpen: open }),

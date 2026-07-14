@@ -3,6 +3,28 @@
 import { useEffect, useRef, useState } from "react";
 import { useEditor } from "@/store/editor";
 import { TEXT_FONTS } from "@/lib/fonts";
+import type { RGB } from "@/engine/types";
+
+/** 테두리 두께(글자 높이 대비) — 저학년도 고르기 쉽게 3단계만 */
+const OUTLINE_STEPS = [
+  { id: "thin", label: "얇게", ratio: 0.035 },
+  { id: "mid", label: "보통", ratio: 0.07 },
+  { id: "thick", label: "굵게", ratio: 0.12 },
+];
+
+/** 테두리 색 — 글자와 대비가 확실한 또렷한 색만(회갈·회색처럼 흐린 색은 테두리로 안 보인다) */
+const OUTLINE_COLORS: RGB[] = [
+  { r: 255, g: 255, b: 255 }, // 흰색
+  { r: 45, g: 42, b: 38 }, // 검정(잉크)
+  { r: 255, g: 80, b: 86 }, // 빨강
+  { r: 255, g: 160, b: 60 }, // 주황
+  { r: 255, g: 214, b: 82 }, // 노랑
+  { r: 90, g: 200, b: 120 }, // 초록
+  { r: 91, g: 184, b: 245 }, // 하늘
+  { r: 70, g: 100, b: 220 }, // 파랑
+  { r: 175, g: 110, b: 230 }, // 보라
+  { r: 255, g: 140, b: 190 }, // 분홍
+];
 
 /*
  * 글씨 넣기 창 — 글을 치고 글꼴을 고르면 캔버스 가운데에 "떠 있는" 상태로 들어간다.
@@ -17,6 +39,9 @@ export function TextPalette() {
   const color = useEditor((s) => s.color);
   const [value, setValue] = useState("");
   const [fontId, setFontId] = useState(TEXT_FONTS[0].id);
+  const [outlineOn, setOutlineOn] = useState(false);
+  const [outlineColor, setOutlineColor] = useState<RGB>({ r: 255, g: 255, b: 255 });
+  const [outlineStep, setOutlineStep] = useState(OUTLINE_STEPS[1]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -27,10 +52,11 @@ export function TextPalette() {
   const ink = `rgb(${color.r},${color.g},${color.b})`;
   const font = TEXT_FONTS.find((f) => f.id === fontId) ?? TEXT_FONTS[0];
 
+  const outlineCss = `rgb(${outlineColor.r},${outlineColor.g},${outlineColor.b})`;
   const submit = () => {
     const v = value.trim();
     if (!v) return;
-    insertText(v, font.family);
+    insertText(v, font.family, outlineOn ? { color: outlineColor, ratio: outlineStep.ratio } : null);
     setValue("");
   };
 
@@ -61,14 +87,8 @@ export function TextPalette() {
           ref={inputRef}
           value={value}
           onChange={(e) => setValue(e.target.value.slice(0, 60))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          rows={2}
-          placeholder="여기에 글씨를 써요 (한글·영어 모두 돼요)"
+          rows={3}
+          placeholder="여기에 글씨를 써요 (엔터를 누르면 줄이 바뀌어요)"
           aria-label="넣을 글"
           className="w-full resize-none rounded-2xl border-2 border-cream-deep bg-cream px-3 py-2 text-lg text-ink outline-none focus:border-sky"
         />
@@ -98,11 +118,74 @@ export function TextPalette() {
           </div>
         </div>
 
-        {/* 미리보기 — 실제 캔버스에 들어갈 모습(색·글꼴 그대로) */}
+        {/* 테두리 — 글자 둘레에 다른 색 선을 두른다(밝은 배경 위 흰 글씨도 잘 보이게) */}
+        <div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-ink-faint">테두리</span>
+            <button
+              onClick={() => setOutlineOn((v) => !v)}
+              aria-pressed={outlineOn}
+              aria-label="테두리 켜기"
+              className={`pressable rounded-full px-3 py-1 text-[11px] font-bold ${
+                outlineOn ? "bg-leaf text-white" : "bg-cream-deep text-ink-faint"
+              }`}
+            >
+              {outlineOn ? "켬" : "끔"}
+            </button>
+          </div>
+          {outlineOn && (
+            <div className="mt-1 space-y-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                {OUTLINE_COLORS.map((c, i) => {
+                  const css = `rgb(${c.r},${c.g},${c.b})`;
+                  const active =
+                    c.r === outlineColor.r && c.g === outlineColor.g && c.b === outlineColor.b;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setOutlineColor(c)}
+                      aria-pressed={active}
+                      aria-label={`테두리 색 ${i + 1}`}
+                      className={`pressable h-8 w-8 rounded-full border-2 ${
+                        active ? "border-sky ring-2 ring-sky" : "border-cream-deep"
+                      }`}
+                      style={{ background: css }}
+                    />
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {OUTLINE_STEPS.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setOutlineStep(s)}
+                    aria-pressed={outlineStep.id === s.id}
+                    aria-label={`테두리 ${s.label}`}
+                    className={`pressable rounded-xl py-1.5 text-[11px] font-semibold ${
+                      outlineStep.id === s.id
+                        ? "bg-sky-soft text-sky-deep ring-2 ring-sky"
+                        : "bg-cream text-ink-soft hover:bg-cream-deep"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 미리보기 — 실제 캔버스에 들어갈 모습(색·글꼴·테두리 그대로) */}
         <div className="grid min-h-[64px] place-items-center rounded-2xl bg-cream px-3 py-2">
           <span
             className={`${font.className} whitespace-pre-wrap text-center text-3xl leading-tight`}
-            style={{ color: ink }}
+            style={{
+              color: ink,
+              // paint-order로 테두리를 글자 뒤에 깔아야 캔버스 결과와 같아진다
+              WebkitTextStrokeWidth: outlineOn ? `${outlineStep.ratio * 2 * 30}px` : undefined,
+              WebkitTextStrokeColor: outlineOn ? outlineCss : undefined,
+              paintOrder: "stroke fill",
+            }}
           >
             {value || "미리보기"}
           </span>

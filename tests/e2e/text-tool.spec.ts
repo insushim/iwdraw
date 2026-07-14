@@ -86,6 +86,83 @@ test("글꼴을 바꾸면 그려지는 모양이 달라진다", async ({ page })
   expect(Math.abs(b.n - a.n), "글꼴이 다르면 칠해진 픽셀 수가 달라야 한다").toBeGreaterThan(200);
 });
 
+test("엔터로 줄을 바꾸면 두 줄로 들어간다", async ({ page }) => {
+  await setup(page);
+
+  /** 잉크의 세로 높이(캔버스 대비 비율) */
+  const inkHeight = async () =>
+    page.evaluate(() => {
+      const el = document.querySelector('canvas[aria-label="그림 캔버스"]') as HTMLCanvasElement;
+      const d = el.getContext("2d")!.getImageData(0, 0, el.width, el.height).data;
+      let minY = 1e9;
+      let maxY = -1;
+      for (let y = 0; y < el.height; y++)
+        for (let x = 0; x < el.width; x += 2) {
+          if (d[(y * el.width + x) * 4] < 200) {
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+            break;
+          }
+        }
+      return maxY < 0 ? 0 : (maxY - minY) / el.height;
+    });
+
+  await insert(page, "가나다");
+  await page.getByRole("button", { name: /놓기 확인|여기 놓기/ }).click();
+  await page.waitForTimeout(400);
+  const one = await inkHeight();
+  await page.getByRole("button", { name: "되돌리기" }).click();
+  await page.waitForTimeout(300);
+
+  // 엔터 = 줄바꿈(넣기가 아니라)
+  await page.getByRole("button", { name: "글씨 넣기" }).click();
+  const box = page.getByLabel("넣을 글");
+  await box.click();
+  await box.type("가나다");
+  await page.keyboard.press("Enter");
+  await box.type("라마바");
+  await expect(box).toHaveValue("가나다\n라마바"); // 엔터로 창이 닫히지 않았다
+  await page.getByRole("button", { name: "캔버스에 넣기" }).click();
+  await page.waitForTimeout(700);
+  await page.getByRole("button", { name: /놓기 확인|여기 놓기/ }).click();
+  await page.waitForTimeout(400);
+  const two = await inkHeight();
+
+  console.log("LINES", JSON.stringify({ one, two }));
+  expect(two, "두 줄은 한 줄보다 훨씬 높아야 한다").toBeGreaterThan(one * 1.6);
+});
+
+test("테두리를 켜면 고른 색으로 글자 둘레가 둘러진다", async ({ page }) => {
+  await setup(page);
+  // 흰 글씨 + 빨간 테두리: 테두리를 안 켜면 흰 캔버스에 흰 글씨라 아무것도 안 보인다
+  await page.getByRole("button", { name: "색 4", exact: true }).click(); // 흰색
+  await page.getByRole("button", { name: "글씨 넣기" }).click();
+  await page.getByLabel("넣을 글").fill("테두리");
+  await page.getByRole("button", { name: "테두리 켜기" }).click();
+  await page.getByRole("button", { name: "테두리 굵게" }).click();
+  // 테두리 색 = 팔레트 두 번째(잉크)가 아니라 눈에 띄는 색으로: 3번째 버튼
+  await page.getByRole("button", { name: "테두리 색 3", exact: true }).click();
+  await page.getByRole("button", { name: "캔버스에 넣기" }).click();
+  await page.waitForTimeout(800);
+  await page.getByRole("button", { name: /놓기 확인|여기 놓기/ }).click();
+  await page.waitForTimeout(500);
+
+  const m = await page.evaluate(() => {
+    const el = document.querySelector('canvas[aria-label="그림 캔버스"]') as HTMLCanvasElement;
+    const d = el.getContext("2d")!.getImageData(0, 0, el.width, el.height).data;
+    let colored = 0; // 흰색도 배경도 아닌 픽셀 = 테두리
+    for (let i = 0; i < d.length; i += 16) {
+      const r = d[i];
+      const g = d[i + 1];
+      const b = d[i + 2];
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 40) colored++;
+    }
+    return colored;
+  });
+  console.log("OUTLINE", m);
+  expect(m, "테두리 색 픽셀이 있어야 한다(흰 글씨는 테두리 없이는 안 보인다)").toBeGreaterThan(200);
+});
+
 test("넣은 글씨를 끌어서 옮길 수 있다", async ({ page }) => {
   await setup(page);
   await insert(page, "위치");

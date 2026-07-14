@@ -9,12 +9,18 @@ export interface TextItem {
   value: string;
   /** CSS font-family 문자열(next/font가 준 실제 패밀리명) */
   family: string;
+  /** 테두리(외곽선) — 없으면 글자만. 두께는 글자 높이에 비례해 크기를 바꿔도 비율이 유지된다 */
+  outline?: { color: RGB; /** 글자 높이 대비 두께(0~0.2) */ ratio: number } | null;
 }
 
 const LINE_H = 1.28;
 
+/** 줄 나누기 — 앞뒤의 빈 줄만 버리고 가운데 빈 줄(일부러 띄운 간격)은 살린다 */
 function lines(value: string): string[] {
-  return value.split("\n").filter((l, i, a) => l.length > 0 || a.length === 1);
+  const ls = value.split("\n");
+  while (ls.length > 1 && ls[0].trim() === "") ls.shift();
+  while (ls.length > 1 && ls[ls.length - 1].trim() === "") ls.pop();
+  return ls;
 }
 
 function setFont(ctx: CanvasRenderingContext2D, item: TextItem, size: number): void {
@@ -49,9 +55,18 @@ export function drawTextOnCtx(
   if (ls.length === 0) return;
   ctx.save();
   setFont(ctx, item, size);
-  ctx.fillStyle = rgbToCss(ink);
   const step = size * LINE_H;
   const top = cy - ((ls.length - 1) * step) / 2;
+  // 테두리 먼저(글자 뒤로 깔리게) — 획을 굵게 그리면 글자 바깥으로 반만 삐져나온다
+  const ol = item.outline;
+  if (ol && ol.ratio > 0) {
+    ctx.strokeStyle = rgbToCss(ol.color);
+    ctx.lineWidth = Math.max(1, size * ol.ratio * 2); // 절반이 바깥 = 실제 테두리 두께
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    for (let i = 0; i < ls.length; i++) ctx.strokeText(ls[i], cx, top + i * step);
+  }
+  ctx.fillStyle = rgbToCss(ink);
   for (let i = 0; i < ls.length; i++) ctx.fillText(ls[i], cx, top + i * step);
   ctx.restore();
 }

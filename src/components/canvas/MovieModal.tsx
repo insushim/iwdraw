@@ -153,11 +153,19 @@ function replayOne(
     const tx = stroke.extra.text as {
       value: string;
       family: string;
+      outline?: { color: { r: number; g: number; b: number }; ratio: number } | null;
       cx: number;
       cy: number;
       size: number;
     };
-    drawTextOnCtx(ctx, { value: tx.value, family: tx.family }, tx.cx, tx.cy, tx.size, stroke.settings.color);
+    drawTextOnCtx(
+      ctx,
+      { value: tx.value, family: tx.family, outline: tx.outline ?? null },
+      tx.cx,
+      tx.cy,
+      tx.size,
+      stroke.settings.color,
+    );
     return;
   }
   if (stroke.extra?.fill) {

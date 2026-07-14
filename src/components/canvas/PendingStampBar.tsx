@@ -18,14 +18,14 @@ export function PendingStampBar() {
     <div
       className="absolute left-1/2 top-3 z-20 flex max-w-[94%] -translate-x-1/2 items-center gap-2 rounded-full bg-paper px-3 py-1.5 shadow-lift"
       role="dialog"
-      aria-label="스탬프 놓기"
+      aria-label="놓기"
     >
       <span className="whitespace-nowrap text-sm font-semibold text-ink-soft">
         ✋ 끌어서 옮기고, 모서리로 크기 조절
       </span>
       <button
         onClick={cancel}
-        aria-label="스탬프 취소"
+        aria-label="놓기 취소"
         title="아니에요, 내 그림 그대로 둘래요"
         className="pressable touch-target grid h-10 w-10 shrink-0 place-items-center rounded-full bg-cream text-ink-soft hover:bg-cream-deep"
       >
@@ -33,7 +33,7 @@ export function PendingStampBar() {
       </button>
       <button
         onClick={commit}
-        aria-label="스탬프 놓기 확인"
+        aria-label="놓기 확인"
         title="여기에 놓기"
         className="pressable touch-target flex h-10 shrink-0 items-center gap-1 rounded-full bg-leaf px-4 font-display text-sm font-bold text-white"
       >

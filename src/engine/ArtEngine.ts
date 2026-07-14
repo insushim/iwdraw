@@ -1160,10 +1160,10 @@ export class ArtEngine {
    * 색은 현재 팔레트 색, 글꼴은 UI가 준 실제 패밀리명. 글꼴이 로드된 뒤 폭을 재야
    * 상자 비율이 맞는다(폴백 글꼴로 재면 커밋 때 글자가 상자를 벗어난다).
    */
-  async insertText(value: string, family: string): Promise<void> {
+  async insertText(value: string, family: string, outline?: TextItem["outline"]): Promise<void> {
     const text = value.trim();
     if (!text || this.replaying) return;
-    const item: TextItem = { value: text, family };
+    const item: TextItem = { value: text, family, outline: outline ?? null };
     const size = Math.round(this.height * 0.14);
     await ensureFontReady(item, size);
     const ctx = this.previewScratchCtx();
@@ -1290,7 +1290,16 @@ export class ArtEngine {
       symmetry: "none",
       extra:
         pd.kind === "text" && pd.text
-          ? { text: { value: pd.text.value, family: pd.text.family, cx, cy, size } }
+          ? {
+              text: {
+                value: pd.text.value,
+                family: pd.text.family,
+                outline: pd.text.outline ?? null,
+                cx,
+                cy,
+                size,
+              },
+            }
           : { stamp: { id: pd.stampId, cx, cy, size } },
     });
     this.pending = null;
