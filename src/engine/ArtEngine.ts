@@ -171,6 +171,12 @@ export class ArtEngine {
     loadTipOverrides(); // AI 팁 알파맵 비동기 로드(실패 시 프로시저럴 폴백)
 
     this.cm.onDowngradeToCanvas2D(() => this.requestComposite());
+    /* 레이어 캔버스의 2D 컨텍스트가 복구되면 내용은 비어 있다 — 마지막 자동저장으로 되살린다.
+     * 안 그러면 그림이 사라지고 새 획도 안 보이는 상태가 된다(저사양 기기 메모리 압박). */
+    this.layers.onContextRestored(() => {
+      console.warn("[ArtEngine] 캔버스 컨텍스트 복구 — 마지막 저장본으로 되살립니다");
+      void this.restore();
+    });
 
     this.gestures = new Gestures({
       onTransform: ({ scale, dx, dy, cx, cy }) => this.applyTransform(scale, dx, dy, cx, cy),
@@ -182,10 +188,13 @@ export class ArtEngine {
       opts.display,
       (clientX, clientY) => this.toCanvas(clientX, clientY, opts.display),
       {
-        onDown: (p) => this.strokeBegin(p),
-        onMove: (pts) => this.strokeMove(pts),
-        onUp: (p) => this.strokeEnd(p),
-        onCancel: () => this.strokeCancel(),
+        /* 입력 처리 중 예외가 새어나가면 그 획이 통째로 죽고(브러시 상태가 반쯤 열린 채로 남아)
+         * 그 뒤로 아무것도 안 그려진다 — "어느 순간부터 선이 안 나옴"(웨일북 실사용 2026-07-14).
+         * 예외는 여기서 삼키고 획 상태를 정리해 다음 획은 정상 동작하게 한다. */
+        onDown: (p) => this.guard("strokeBegin", () => this.strokeBegin(p)),
+        onMove: (pts) => this.guard("strokeMove", () => this.strokeMove(pts)),
+        onUp: (p) => this.guard("strokeEnd", () => this.strokeEnd(p)),
+        onCancel: () => this.guard("strokeCancel", () => this.strokeCancel()),
         onGesture: (active, _e, phase) =>
           this.gestures.update(
             active.map((a) => ({ clientX: a.clientX, clientY: a.clientY })),
@@ -1577,23 +1586,54 @@ export class ArtEngine {
   private requestComposite(): void {
     this.needsComposite = true;
   }
+  /* 그리기 경로의 예외 방화벽 — 한 번의 실패가 엔진을 영구히 죽이지 않게 한다.
+   * 실패하면 진행 중이던 획만 버리고(반쯤 열린 브러시 상태 정리) 계속 살아 있는다. */
+  private guard(where: string, fn: () => void): void {
+    try {
+      fn();
+    } catch (err) {
+      console.error(`[ArtEngine] ${where} 실패 — 획을 버리고 계속합니다`, err);
+      try {
+        this.brush = null;
+        this.smudging = false;
+        this.curPoints = [];
+        this.cow = null;
+        this.beforeTiles = null;
+        this.cm.backend.endStroke();
+      } catch {
+        /* 정리 중 오류는 무시 */
+      }
+      this.requestComposite();
+    }
+  }
+
   private startLoop(): void {
     const loop = (ts: number) => {
-      const dt = this.lastTick ? ts - this.lastTick : 16;
-      this.lastTick = ts;
-      // 수채/유화 시간 진행 시뮬
-      const changed = this.cm.backend.tick(dt);
-      if (changed) this.needsComposite = true;
-      if (this.needsComposite) {
-        const t0 = performance.now();
-        this.compositeNow();
-        this.needsComposite = false;
-        this.trackCompositeCost(performance.now() - t0);
+      /* ⚠️ rAF 재예약은 무슨 일이 있어도 실행돼야 한다. 예전엔 합성 중 예외가 나면 이 줄에
+       * 도달하지 못해 렌더 루프가 영영 멈췄다 = 화면이 굳고 선이 안 나온다(브라우저를 껐다
+       * 켜야 회복 — 웨일북 실사용 증상과 일치). 이제 예외를 삼키고 다음 프레임을 예약한다. */
+      try {
+        const dt = this.lastTick ? ts - this.lastTick : 16;
+        this.lastTick = ts;
+        // 수채/유화 시간 진행 시뮬
+        const changed = this.cm.backend.tick(dt);
+        if (changed) this.needsComposite = true;
+        if (this.needsComposite) {
+          const t0 = performance.now();
+          this.compositeNow();
+          this.needsComposite = false;
+          this.trackCompositeCost(performance.now() - t0);
+        }
+      } catch (err) {
+        this.loopErrors++;
+        if (this.loopErrors <= 3) console.error("[ArtEngine] 렌더 루프 오류(계속 진행)", err);
+        this.needsComposite = false; // 같은 프레임을 무한 재시도하지 않는다
       }
       this.rafId = requestAnimationFrame(loop);
     };
     this.rafId = requestAnimationFrame(loop);
   }
+  private loopErrors = 0;
 
   /* 합성 비용 감시 — 느린 기기(웨일북)에서 표시 백킹을 자동으로 낮춰 렉을 끊는다.
    * 기기 사양 감지(deviceMemory·코어)가 빗나가도(예: 8GB인데 GPU가 약함) 여기서 잡힌다. */

@@ -24,10 +24,22 @@ export class LayerStack {
     this.addLayer("레이어 1");
   }
 
+  /** 레이어 2D 컨텍스트를 잃었다가 되찾았을 때(저사양 기기 메모리 압박) 알림 —
+   * 되찾은 캔버스는 비어 있으므로 엔진이 마지막 저장본으로 다시 채워야 한다. */
+  private restoredCb: (() => void) | null = null;
+  onContextRestored(cb: () => void): void {
+    this.restoredCb = cb;
+  }
+
   private newCanvas(): HTMLCanvasElement {
     const c = document.createElement("canvas");
     c.width = this.width;
     c.height = this.height;
+    /* 크롬은 메모리가 부족하면 2D 캔버스의 컨텍스트도 뺏는다. 기본 동작대로 두면 컨텍스트가
+     * 영영 안 돌아와 "그려도 아무것도 안 나오는" 상태가 된다(웨일북 실사용 2026-07-14).
+     * preventDefault()로 복구를 요청하고, 복구되면 마지막 저장본으로 다시 채운다. */
+    c.addEventListener("contextlost", (e) => e.preventDefault());
+    c.addEventListener("contextrestored", () => this.restoredCb?.());
     return c;
   }
 

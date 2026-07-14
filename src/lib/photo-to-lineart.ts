@@ -96,38 +96,103 @@ export async function photoToLineart(
   const coarse = boxBlur(gray, w, h, 3); // 굵은 윤곽용(2스케일)
   const satBlur = boxBlur(satArr, w, h, 1); // 채도 채널 — 노랑/금색은 luma 대비가 거의 없다
 
-  // 2) Sobel 엣지 강도 — 미세(r1) + 굵은 윤곽(r3) + 채도 3채널 결합(선따기 강화).
-  // 흰 배경 위 노랑(luma Δ≈0.11)은 밝기 엣지가 안 잡혀 점선이 되던 것을 채도 엣지로 보완.
+  /* 2) Sobel 엣지 — 미세(r1) + 굵은 윤곽(r3) + 채도 3채널 결합(선따기 강화).
+   * 흰 배경 위 노랑(luma Δ≈0.11)은 밝기 엣지가 안 잡혀 점선이 되던 것을 채도 엣지로 보완.
+   * 강도뿐 아니라 방향(gx,gy)도 남긴다 — 다음 단계의 비최대 억제(선 가늘게)에 필요. */
   const edge = new Float32Array(w * h);
-  const sobel = (f: Float32Array, i: number) => {
-    const gx =
-      -f[i - w - 1] - 2 * f[i - 1] - f[i + w - 1] + f[i - w + 1] + 2 * f[i + 1] + f[i + w + 1];
-    const gy =
-      -f[i - w - 1] - 2 * f[i - w] - f[i - w + 1] + f[i + w - 1] + 2 * f[i + w] + f[i + w + 1];
-    return Math.sqrt(gx * gx + gy * gy);
-  };
+  const dirX = new Float32Array(w * h);
+  const dirY = new Float32Array(w * h);
+  const sobelXY = (f: Float32Array, i: number): [number, number] => [
+    -f[i - w - 1] - 2 * f[i - 1] - f[i + w - 1] + f[i - w + 1] + 2 * f[i + 1] + f[i + w + 1],
+    -f[i - w - 1] - 2 * f[i - w] - f[i - w + 1] + f[i + w - 1] + 2 * f[i + w] + f[i + w + 1],
+  ];
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x;
-      edge[i] = Math.max(sobel(blurred, i), sobel(coarse, i) * 1.15, sobel(satBlur, i) * 0.9);
+      const chans: [number, number, number][] = [];
+      for (const [f, k] of [
+        [blurred, 1],
+        [coarse, 1.15],
+        [satBlur, 0.9],
+      ] as [Float32Array, number][]) {
+        const [gx, gy] = sobelXY(f, i);
+        chans.push([Math.hypot(gx, gy) * k, gx, gy]);
+      }
+      let best = chans[0];
+      for (const c of chans) if (c[0] > best[0]) best = c;
+      edge[i] = best[0];
+      dirX[i] = best[1];
+      dirY[i] = best[2];
     }
   }
 
-  // 3) 적응형 임계값(전역 평균+표준편차 기반) — 0.5→0.35: 약한 윤곽까지 살림(선따기 강화)
+  /* 3) 비최대 억제(NMS) — 엣지 강도의 "산등성이"만 남긴다.
+   * 블러(r3) Sobel은 폭 10px가 넘는 그라데이션 띠를 만든다: 그대로 임계값을 씌우면
+   * 선이 통째로 굵어진다(2026-07-14 실측: 선 폭 중앙값 16px). 기울기 방향으로 이웃 두
+   * 픽셀보다 강한 픽셀만 남기면 선이 1px 능선으로 가늘어진다. */
+  const thin = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const m = edge[i];
+      if (m <= 0) continue;
+      const ax = Math.abs(dirX[i]);
+      const ay = Math.abs(dirY[i]);
+      let a: number, b: number;
+      if (ax >= ay * 2.414) {
+        a = edge[i - 1];
+        b = edge[i + 1]; // 수평 기울기 → 세로선
+      } else if (ay >= ax * 2.414) {
+        a = edge[i - w];
+        b = edge[i + w]; // 수직 기울기 → 가로선
+      } else if (dirX[i] * dirY[i] > 0) {
+        a = edge[i - w - 1];
+        b = edge[i + w + 1];
+      } else {
+        a = edge[i - w + 1];
+        b = edge[i + w - 1];
+      }
+      if (m >= a && m >= b) thin[i] = m;
+    }
+  }
+
+  /* 4) 이력(히스테리시스) 임계값 — 강한 선은 무조건 살리고, 약한 선은 강한 선에 이어져
+   * 있을 때만 살린다. 단일 임계값이면 얇게 만들수록 선이 끊긴다("끊기면 안 돼" 요청). */
   let mean = 0;
   for (let i = 0; i < edge.length; i++) mean += edge[i];
   mean /= edge.length;
   let variance = 0;
   for (let i = 0; i < edge.length; i++) variance += (edge[i] - mean) ** 2;
   const std = Math.sqrt(variance / edge.length);
-  const threshold = mean + std * 0.35;
+  const hi = mean + std * 0.9;
+  const lo = mean + std * 0.2;
 
-  // 4) 검은 선/흰 배경 (임계 부근 부드럽게) + 3×3 반강도 팽창으로 선을 또렷하게
-  const soft = Math.max(0.02, std * 0.4);
-  const ink = new Float32Array(w * h);
-  for (let i = 0; i < edge.length; i++) {
-    ink[i] = Math.max(0, Math.min(1, (edge[i] - threshold) / soft));
+  const keep = new Uint8Array(w * h);
+  const stack: number[] = [];
+  for (let i = 0; i < thin.length; i++) {
+    if (thin[i] >= hi) {
+      keep[i] = 1;
+      stack.push(i);
+    }
   }
+  while (stack.length) {
+    const i = stack.pop()!;
+    const x = i % w;
+    const y = (i / w) | 0;
+    if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1) continue;
+    for (const d of [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1]) {
+      const j = i + d;
+      if (!keep[j] && thin[j] >= lo) {
+        keep[j] = 1;
+        stack.push(j);
+      }
+    }
+  }
+
+  /* 5) 잉크로 굽기 — 능선은 1px라 그대로 두면 화면에서 흐릿하다.
+   * 이웃 한 겹만 옅게(0.45) 덧대 "얇지만 또렷한" 선(≈2px)으로 만든다. */
+  const ink = new Float32Array(w * h);
+  for (let i = 0; i < keep.length; i++) if (keep[i]) ink[i] = 1;
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x;
@@ -135,7 +200,7 @@ export async function photoToLineart(
       for (const d of [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1]) {
         if (ink[i + d] > mx) mx = ink[i + d];
       }
-      const v = Math.round(255 * (1 - Math.max(ink[i], mx * 0.55)));
+      const v = Math.round(255 * (1 - Math.max(ink[i], mx * 0.45)));
       const p = i * 4;
       o[p] = v;
       o[p + 1] = v;
