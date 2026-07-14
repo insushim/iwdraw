@@ -1536,6 +1536,13 @@ export class ArtEngine {
       this.requestComposite();
     }
   }
+  /** 레이어 순서 바꾸기 — toIndex는 아래(0)부터 센 위치. 잠금 레이어(도안·원본)는 못 움직인다 */
+  reorderLayer(id: string, toIndex: number): void {
+    this.layers.reorder(id, toIndex);
+    this.emitLayers();
+    this.requestComposite();
+    this.scheduleAutoSave();
+  }
   setActiveLayer(id: string): void {
     this.resetSuggest(); // 그룹은 단일 레이어 전제
     this.layers.setActive(id);

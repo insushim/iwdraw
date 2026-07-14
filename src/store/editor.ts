@@ -98,6 +98,8 @@ export interface EditorState {
   newDrawing: () => void;
   addLayer: () => void;
   removeLayer: (id: string) => void;
+  /** 레이어 순서 바꾸기(아래=0) */
+  reorderLayer: (id: string, toIndex: number) => void;
   setActiveLayer: (id: string) => void;
   setLayerVisible: (id: string, v: boolean) => void;
   setLayerOpacity: (id: string, o: number) => void;
@@ -320,6 +322,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   newDrawing: () => get().engine?.newDrawing(),
   addLayer: () => get().engine?.addLayer(),
   removeLayer: (id) => get().engine?.removeLayer(id),
+  reorderLayer: (id, toIndex) => get().engine?.reorderLayer(id, toIndex),
   setActiveLayer: (id) => get().engine?.setActiveLayer(id),
   setLayerVisible: (id, v) => get().engine?.setLayerVisible(id, v),
   setLayerOpacity: (id, o) => get().engine?.setLayerOpacity(id, o),

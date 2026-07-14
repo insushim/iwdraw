@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useEditor } from "@/store/editor";
 import type { BlendMode } from "@/engine/types";
 import { Icon } from "./icons";
@@ -12,19 +12,70 @@ const BLENDS: { id: BlendMode; label: string }[] = [
   { id: "overlay", label: "오버레이" },
 ];
 
-/* 우측 접이식 레이어 패널 */
+/* 우측 접이식 레이어 패널 — 손잡이(⠿)를 잡고 위아래로 끌면 순서가 바뀐다(마우스·터치 공통) */
 export function LayerPanel() {
   const layers = useEditor((s) => s.layers);
   const activeId = useEditor((s) => s.activeLayerId);
   const addLayer = useEditor((s) => s.addLayer);
   const removeLayer = useEditor((s) => s.removeLayer);
+  const reorderLayer = useEditor((s) => s.reorderLayer);
   const setActive = useEditor((s) => s.setActiveLayer);
   const setVisible = useEditor((s) => s.setLayerVisible);
   const setOpacity = useEditor((s) => s.setLayerOpacity);
   const setBlend = useEditor((s) => s.setLayerBlend);
   const [open, setOpen] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  /* ⚠️ 드래그 중인 id를 state로만 들고 있으면, 포인터가 빠르게 움직일 때 리렌더 전에 도착한
+   * pointermove가 옛 클로저(dragId=null)를 보고 무시한다(실측: 천천히 끌면 되고 빨리 끌면 안 됨).
+   * 판정은 ref로, 화면 표시(반투명)는 state로 나눈다. */
+  const dragRef = useRef<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const overRef = useRef<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const startDrag = (id: string) => {
+    dragRef.current = id;
+    setDragId(id);
+  };
+  const endDrag = () => {
+    dragRef.current = null;
+    overRef.current = null;
+    setDragId(null);
+    setOverId(null);
+  };
 
   const drawable = layers.filter((l) => !l.isLineart && !l.isBase);
+
+  /*
+   * 드래그 중에는 "어느 줄 위에 있는지"만 표시하고, 놓는 순간 한 번만 옮긴다.
+   * 움직일 때마다 즉시 옮기면(라이브 재정렬) 줄이 서로 자리를 바꾸면서 포인터가 경계에서
+   * 왔다 갔다 → 짝수 번 스왑되어 제자리로 돌아온다(실측 2026-07-14).
+   * HTML5 드래그앤드롭은 터치에서 안 먹어 Pointer 이벤트로 직접 처리한다(웨일북·태블릿).
+   */
+  const rowUnder = (clientY: number): string | null => {
+    const list = listRef.current;
+    if (!list) return null;
+    for (const r of list.querySelectorAll<HTMLElement>("[data-layer-id]")) {
+      const b = r.getBoundingClientRect();
+      if (clientY >= b.top && clientY <= b.bottom) return r.dataset.layerId ?? null;
+    }
+    return null;
+  };
+  const dragOver = (clientY: number) => {
+    if (!dragRef.current) return;
+    const id = rowUnder(clientY);
+    overRef.current = id;
+    setOverId(id);
+  };
+  const drop = () => {
+    const id = dragRef.current;
+    const targetId = overRef.current;
+    endDrag();
+    if (!id || !targetId || targetId === id) return;
+    const t = layers.find((l) => l.id === targetId);
+    if (!t || t.isLineart || t.isBase) return; // 잠금 레이어(도안·원본) 자리로는 못 간다
+    const toIndex = layers.findIndex((l) => l.id === targetId);
+    if (toIndex >= 0) reorderLayer(id, toIndex);
+  };
 
   return (
     <div className="rounded-card bg-paper shadow-soft">
@@ -44,18 +95,47 @@ export function LayerPanel() {
       </button>
 
       {open && (
-        <div className="space-y-2 border-t border-cream-deep p-3">
+        <div
+          ref={listRef}
+          className="space-y-2 border-t border-cream-deep p-3"
+          onPointerMove={(e) => dragOver(e.clientY)}
+          onPointerUp={drop}
+          onPointerCancel={endDrag}
+        >
           {[...layers].reverse().map((l) => {
             const active = l.id === activeId;
             const locked = l.isLineart || l.isBase;
+            const dragging = dragId === l.id;
             return (
               <div
                 key={l.id}
+                data-layer-id={l.id}
                 className={`rounded-2xl border p-2 ${
                   active ? "border-coral bg-coral-soft" : "border-cream-deep bg-cream"
-                } ${locked ? "opacity-90" : ""}`}
+                } ${locked ? "opacity-90" : ""} ${dragging ? "opacity-60" : ""} ${
+                  dragId && overId === l.id && overId !== dragId && !locked
+                    ? "ring-2 ring-sky"
+                    : ""
+                }`}
               >
                 <div className="flex items-center gap-1.5">
+                  {!locked && drawable.length > 1 && (
+                    <button
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+                        startDrag(l.id);
+                      }}
+                      onPointerMove={(e) => dragOver(e.clientY)}
+                      onPointerUp={drop}
+                      onPointerCancel={endDrag}
+                      aria-label={`${l.name} 순서 바꾸기`}
+                      title="끌어서 순서를 바꿔요"
+                      className="pressable cursor-grab touch-none rounded-lg px-1 py-1 text-ink-faint"
+                    >
+                      ⠿
+                    </button>
+                  )}
                   <button
                     onClick={() => setVisible(l.id, !l.visible)}
                     aria-label={l.visible ? "숨기기" : "보이기"}
@@ -110,6 +190,9 @@ export function LayerPanel() {
               </div>
             );
           })}
+          {drawable.length > 1 && (
+            <p className="text-center text-[11px] text-ink-faint">⠿ 를 끌어서 순서를 바꿔요</p>
+          )}
           <button
             onClick={addLayer}
             disabled={drawable.length >= 8}
