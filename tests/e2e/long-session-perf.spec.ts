@@ -16,7 +16,7 @@ test("긴 세션에서 힙·멈춤이 계속 증가하지 않는다", async ({ p
   const client = await page.context().newCDPSession(page);
   await client.send("Emulation.setCPUThrottlingRate", { rate: 4 }); // 웨일북급 저사양
 
-  await page.goto("/draw?mode=sketch&backend=gl");
+  await page.goto(`/draw?mode=sketch&backend=${process.env.PERF_BACKEND ?? "gl"}`);
   const canvas = page.getByLabel("그림 캔버스");
   await canvas.waitFor();
   const fresh = page.getByRole("button", { name: /새로 시작/ });

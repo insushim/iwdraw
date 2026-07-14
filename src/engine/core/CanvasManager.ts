@@ -21,8 +21,10 @@ export class CanvasManager {
     forceCanvas2D = false,
     allowSoftwareGL = false,
     /** 표시 캔버스 백킹 배율(레티나 선명도) — 레이어·백엔드는 논리 해상도 유지.
-     * 확대(줌) 시 1536px 논리 캔버스가 CSS로 재확대되며 생기던 계단 완화(2026-07-10). */
-    readonly dpr = 1,
+     * 확대(줌) 시 1536px 논리 캔버스가 CSS로 재확대되며 생기던 계단 완화(2026-07-10).
+     * ⚠️ 합성 비용은 dpr²에 비례한다(전면 fill·종이결 multiply까지) — 저사양 기기에서는
+     * 엔진이 런타임에 1로 강등한다(setDpr). */
+    public dpr = 1,
   ) {
     this.display = display ?? document.createElement("canvas");
     this.display.width = Math.round(width * dpr);
@@ -37,6 +39,16 @@ export class CanvasManager {
 
   get usingWebGL2(): boolean {
     return this.backend.caps.webgl2;
+  }
+
+  /** 표시 백킹 배율 변경 — 저사양 기기에서 합성이 느리면 엔진이 1로 낮춘다.
+   * 그림 데이터는 레이어(논리 해상도)에 있어 손실 없음. 호출측이 재합성한다. */
+  setDpr(dpr: number): boolean {
+    if (Math.abs(dpr - this.dpr) < 0.01) return false;
+    this.dpr = dpr;
+    this.display.width = Math.round(this.width * dpr);
+    this.display.height = Math.round(this.height * dpr);
+    return true;
   }
 
   /** 백엔드 핫스왑(로스 복구/다운그레이드) 후 알림 — 엔진이 재합성한다 */

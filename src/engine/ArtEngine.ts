@@ -148,8 +148,7 @@ export class ArtEngine {
       opts.display,
       opts.forceCanvas2D || opts.backendOverride === "2d",
       opts.backendOverride === "gl",
-      // 표시 선명도(레티나·줌 계단 완화) — 캡 2: 백킹 픽셀 4배 상한(합성 비용 가드)
-      Math.min(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1, 2),
+      initialDpr(),
     );
     this.layers = new LayerStack(opts.width, opts.height);
     this.history = new History(50);
@@ -1519,12 +1518,30 @@ export class ArtEngine {
       const changed = this.cm.backend.tick(dt);
       if (changed) this.needsComposite = true;
       if (this.needsComposite) {
+        const t0 = performance.now();
         this.compositeNow();
         this.needsComposite = false;
+        this.trackCompositeCost(performance.now() - t0);
       }
       this.rafId = requestAnimationFrame(loop);
     };
     this.rafId = requestAnimationFrame(loop);
+  }
+
+  /* 합성 비용 감시 — 느린 기기(웨일북)에서 표시 백킹을 자동으로 낮춰 렉을 끊는다.
+   * 기기 사양 감지(deviceMemory·코어)가 빗나가도(예: 8GB인데 GPU가 약함) 여기서 잡힌다. */
+  private compositeEma = 0;
+  private compositeSamples = 0;
+  private trackCompositeCost(ms: number): void {
+    this.compositeEma += (ms - this.compositeEma) * 0.15;
+    if (++this.compositeSamples < 20) return; // 워밍업(첫 합성·셰이더·폰트) 제외
+    if (this.compositeEma > 10 && this.cm.dpr > 1) {
+      if (this.cm.setDpr(1)) {
+        this.compositeEma = 0;
+        this.compositeSamples = 0;
+        this.requestComposite();
+      }
+    }
   }
 
   private compositeNow(): void {
@@ -1792,6 +1809,22 @@ export class ArtEngine {
 }
 
 /* ── 헬퍼 ── */
+
+/*
+ * 표시 캔버스 백킹 배율. 선명하지만 합성 비용은 dpr²에 비례한다 —
+ * 매 프레임 백킹 해상도에서 clear + 레이어 blit + 흰 배경 fill + 종이결 multiply를 한다.
+ * 저사양 기기(웨일북: 4GB RAM·4코어급)에서 DPR2면 프레임당 수백 ms까지 치솟아
+ * "그리는 중 엄청난 렉"이 된다(2026-07-14 실측: 중앙값 471ms → dpr 1로 회복).
+ * → 저사양은 처음부터 1, 나머지는 2를 상한으로 쓰되 느리면 런타임에 강등한다.
+ */
+function initialDpr(): number {
+  if (typeof window === "undefined") return 1;
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const lowEnd = (nav.deviceMemory ?? 8) <= 4 || (navigator.hardwareConcurrency ?? 8) <= 4;
+  if (lowEnd) return 1;
+  return Math.min(window.devicePixelRatio || 1, 2);
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
