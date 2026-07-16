@@ -56,7 +56,13 @@ export class CollabSession {
     const asTeacher =
       typeof window !== "undefined" &&
       new URLSearchParams(window.location.search).get("as") === "teacher";
-    this.userId = session?.studentId ?? (asTeacher ? `teacher-${Math.floor(performance.now())}` : `guest-${Math.floor(performance.now())}`);
+    // userId는 재입장에도 안정적이어야 인원수가 누적되지 않는다(서버가 userId로 dedup).
+    //  · 학생: studentId(로그인 신원, 항상 고정)
+    //  · 교사: 방마다 고정(teacher-<room>) — 같은 학급 방을 다시 열어도 같은 신원
+    //  · 게스트: 브라우저에 1회 발급해 보관(stableGuestId) — 나갔다 들어와도 동일
+    this.userId =
+      session?.studentId ??
+      (asTeacher ? `teacher-${room}` : stableGuestId());
     this.nickname = session?.nickname ?? (asTeacher ? "선생님" : "손님");
     this.color = pickColor(this.userId);
   }
@@ -192,6 +198,23 @@ export class CollabSession {
       this.ws = null;
     }
     this.active = false;
+  }
+}
+
+// 게스트(로그인 없는 참가자)용 안정적 userId — 한 번 발급해 브라우저에 보관.
+// 나갔다 다시 들어와도 같은 신원이라 서버 presence가 중복 카운트하지 않는다.
+function stableGuestId(): string {
+  if (typeof window === "undefined") return "guest";
+  try {
+    const KEY = "arton.collabGuestId";
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = `guest-${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch {
+    return `guest-${Math.floor(performance.now())}`;
   }
 }
 

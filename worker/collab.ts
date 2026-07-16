@@ -41,14 +41,34 @@ export class CollabRoom {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  // presence = userId 단위(소켓 단위 X). 같은 사람이 재접속해 유령 소켓이 잠깐 겹쳐도,
+  // 또는 한 사람이 여러 탭을 열어도 1명으로 센다 — 재입장 시 숫자가 누적되지 않도록.
   private peers(exclude?: WebSocket): PeerInfo[] {
-    const out: PeerInfo[] = [];
+    const byId = new Map<string, PeerInfo>();
     for (const ws of this.state.getWebSockets()) {
       if (ws === exclude) continue;
       const a = ws.deserializeAttachment() as Attachment | null;
-      if (a && a.userId) out.push({ id: a.userId, nickname: a.nickname, color: a.color });
+      if (a && a.userId) byId.set(a.userId, { id: a.userId, nickname: a.nickname, color: a.color });
     }
-    return out;
+    return [...byId.values()];
+  }
+
+  // 같은 userId의 옛 소켓을 능동적으로 닫는다(keep = 방금 hello 보낸 새 소켓).
+  // hibernation·비정상 종료로 close 이벤트가 지연돼 남는 유령 소켓을 즉시 제거.
+  private evictStale(userId: string, keep: WebSocket): void {
+    if (!userId) return;
+    for (const ws of this.state.getWebSockets()) {
+      if (ws === keep) continue;
+      const a = ws.deserializeAttachment() as Attachment | null;
+      if (a?.userId === userId) {
+        this.recvWindows.delete(ws);
+        try {
+          ws.close(1000, "replaced");
+        } catch {
+          /* 이미 닫힌 소켓 무시 */
+        }
+      }
+    }
   }
 
   private broadcast(obj: unknown, except?: WebSocket): void {
@@ -84,6 +104,8 @@ export class CollabRoom {
         color: String(payload?.color ?? "#000000").slice(0, 16),
       };
       ws.serializeAttachment(att);
+      // 같은 신원의 유령 소켓을 먼저 축출 → 재입장해도 1명으로 유지
+      this.evictStale(att.userId, ws);
       this.broadcast({ event: "peers", payload: this.peers() });
       return;
     }

@@ -95,6 +95,14 @@ export function CollabStartModal({ onClose }: { onClose: () => void }) {
             </button>
             <p className="pt-1 text-center text-[12px] leading-snug text-ink-faint">
               방을 만들면 짧은 코드가 나와요. 친구에게 불러주면 같이 그릴 수 있어요.
+              {!classCode && (
+                <>
+                  <br />
+                  <span className="text-ink-soft">
+                    ‘우리 반 다 같이 그리기’는 학급 코드로 입장한 뒤에 쓸 수 있어요.
+                  </span>
+                </>
+              )}
             </p>
           </div>
         ) : (
