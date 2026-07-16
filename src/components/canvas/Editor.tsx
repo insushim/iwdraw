@@ -14,6 +14,8 @@ import { LayerPanel } from "./LayerPanel";
 import { ActionRail } from "./ActionRail";
 import { useKeyboard } from "./useKeyboard";
 import { MovieModal } from "./MovieModal";
+import { CollabStartModal } from "./CollabStartModal";
+import { shortCodeFromRoom } from "@/lib/collab-room";
 import { useCollab } from "./useCollab";
 import { CollabOverlay } from "./CollabOverlay";
 import { SuggestBar } from "./SuggestBar";
@@ -52,6 +54,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
   const engineRef = useRef<ArtEngine | null>(null);
   const [engine, setEngine] = useState<ArtEngine | null>(null);
   const collab = useCollab(engine, room);
+  const mode = useEditor((s) => s.mode);
   const juniorMode = useEditor((s) => s.juniorMode);
   const toggleJunior = useEditor((s) => s.toggleJunior);
   const restoreAt = useEditor((s) => s.restoreAvailable);
@@ -109,6 +112,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
   }, [submits]);
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
   const [showMovie, setShowMovie] = useState(false);
+  const [showCollab, setShowCollab] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
 
   /* 저장은 두 갈래 — 학급으로 입장했어도 "내 컴퓨터에 저장"은 늘 쓸 수 있어야 한다
@@ -183,10 +187,33 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             🖼️ <span className="hidden lg:inline">우리 반 갤러리</span>
           </Link>
         )}
-        {room && (
-          <span className="flex items-center gap-1 rounded-full bg-berry-soft px-3 py-1 text-sm font-semibold text-berry" title="함께 그리는 친구">
+        {room ? (
+          <span
+            className="flex items-center gap-1.5 rounded-full bg-berry-soft px-3 py-1 text-sm font-semibold text-berry"
+            title="이 코드를 친구에게 알려주면 같이 그릴 수 있어요"
+          >
             👥 {collab.connected ? `${collab.peers.length + 1}명` : "연결 중…"}
+            <span className="rounded-full bg-white/70 px-2 py-0.5 font-display tracking-widest text-berry">
+              {shortCodeFromRoom(room)}
+            </span>
+            <Link
+              href={`/draw?mode=${mode}`}
+              title="모둠에서 나가 혼자 그리기"
+              aria-label="모둠 나가기"
+              className="pressable ml-0.5 rounded-full bg-white/70 px-2 py-0.5 text-xs font-bold text-berry hover:bg-white"
+            >
+              나가기
+            </Link>
           </span>
+        ) : (
+          <button
+            onClick={() => setShowCollab(true)}
+            className="pressable flex items-center gap-1 rounded-full bg-berry-soft px-3 py-1 text-sm font-semibold text-berry hover:bg-berry-soft/80"
+            aria-label="함께 그리기"
+            title="친구들과 한 캔버스에 같이 그려요"
+          >
+            👥 <span className="hidden lg:inline">함께 그리기</span>
+          </button>
         )}
 
         <div className="flex min-w-0 flex-1 justify-center">
@@ -403,6 +430,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       {showMovie && engineRef.current && (
         <MovieModal engine={engineRef.current} onClose={() => setShowMovie(false)} />
       )}
+      {showCollab && <CollabStartModal onClose={() => setShowCollab(false)} />}
       {room && collab.kicked && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-ink/80 p-6">
           <div className="rounded-bubble bg-paper p-8 text-center shadow-lift">
