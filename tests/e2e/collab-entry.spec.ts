@@ -33,6 +33,38 @@ test("함께 그리기: 새 방을 만들면 방 코드가 뜨고, 나가면 혼
   await expect(page.getByRole("button", { name: "함께 그리기" })).toBeVisible();
 });
 
+test("학급 학생: '우리 반 다 같이 그리기'로 한 번에 학급 방에 들어간다", async ({ page }) => {
+  // 학생 세션(로그인 없음)을 심어 학급 코드가 있는 상태를 만든다
+  await page.addInitScript(() => {
+    sessionStorage.setItem(
+      "arton.student",
+      JSON.stringify({
+        token: "t",
+        studentId: "s1",
+        classId: "c1",
+        className: "우리 반",
+        nickname: "별명이",
+        classCode: "H3EXN2",
+      }),
+    );
+  });
+  await page.setViewportSize({ width: 1440, height: 900 }); // 학생 세션이면 헤더 버튼이 많다
+  await page.goto("/draw?mode=sketch");
+  await page.getByLabel("그림 캔버스").waitFor();
+  // 학생 세션의 과제 조회가 헤더를 미세하게 흔들어 stable 대기가 길어질 수 있어 DOM 클릭으로 연다
+  await page.getByRole("button", { name: "함께 그리기" }).waitFor();
+  await page.evaluate(() =>
+    (document.querySelector('[aria-label="함께 그리기"]') as HTMLButtonElement)?.click(),
+  );
+
+  // 학급 코드가 있으면 '우리 반 다 같이 그리기' 원탭 버튼이 뜬다
+  await page.getByRole("button", { name: /우리 반 다 같이 그리기/ }).click();
+  await page.waitForURL(/room=/);
+  const room = new URL(page.url()).searchParams.get("room")!;
+  // 학급코드 접두어 + 학급코드 앞 4자리로 결정론적 방(교사와 동일 규칙)
+  expect(room).toBe("H3EXN2~H3EX");
+});
+
 test("함께 그리기: 친구 방 코드를 입력해 들어간다", async ({ page }) => {
   await page.goto("/draw?mode=sketch");
   await page.getByLabel("그림 캔버스").waitFor();

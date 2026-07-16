@@ -10,6 +10,7 @@ import {
   normalizeRoomCode,
   isValidRoomCode,
   roomNameFor,
+  classRoomName,
 } from "@/lib/collab-room";
 
 /*
@@ -27,12 +28,13 @@ export function CollabStartModal({ onClose }: { onClose: () => void }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const go = (shortCode: string) => {
-    const room = roomNameFor(classCode, shortCode);
+  const goRoom = (room: string, token: string) => {
     // 새로 마운트되도록 v(진입 토큰)도 넘긴다 — 같은 화면에서 방으로 갈아탈 때 확실히 재연결
-    router.push(`/draw?room=${encodeURIComponent(room)}&mode=${mode}&v=collab-${shortCode}`);
+    router.push(`/draw?room=${encodeURIComponent(room)}&mode=${mode}&v=collab-${token}`);
     onClose();
   };
+  const go = (shortCode: string) => goRoom(roomNameFor(classCode, shortCode), shortCode);
+  const joinClassRoom = () => classCode && goRoom(classRoomName(classCode), `class-${classCode}`);
 
   const create = () => go(randomRoomCode());
   const enter = () => {
@@ -68,6 +70,14 @@ export function CollabStartModal({ onClose }: { onClose: () => void }) {
 
         {!join ? (
           <div className="space-y-2.5">
+            {classCode && (
+              <button
+                onClick={joinClassRoom}
+                className="pressable touch-target w-full rounded-2xl bg-berry py-3 font-display text-base font-bold text-white"
+              >
+                🏫 우리 반 다 같이 그리기
+              </button>
+            )}
             <button
               onClick={create}
               className="pressable touch-target w-full rounded-2xl bg-leaf py-3 font-display text-base font-bold text-white"

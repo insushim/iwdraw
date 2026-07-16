@@ -52,8 +52,12 @@ export class CollabSession {
     private readonly canvasH: number,
   ) {
     const session = getStudentSession();
-    this.userId = session?.studentId ?? `guest-${Math.floor(performance.now())}`;
-    this.nickname = session?.nickname ?? "손님";
+    // 교사가 대시보드에서 연 방(?as=teacher)이면 참가자 이름을 '선생님'으로 — 학생 세션이 없다
+    const asTeacher =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("as") === "teacher";
+    this.userId = session?.studentId ?? (asTeacher ? `teacher-${Math.floor(performance.now())}` : `guest-${Math.floor(performance.now())}`);
+    this.nickname = session?.nickname ?? (asTeacher ? "선생님" : "손님");
     this.color = pickColor(this.userId);
   }
 

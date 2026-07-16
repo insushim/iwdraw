@@ -53,3 +53,15 @@ export function shortCodeFromRoom(room: string): string {
   const i = room.indexOf(SEP);
   return i >= 0 ? room.slice(i + 1) : room;
 }
+
+/*
+ * 학급 "다 같이 그리기" 방 — 학급 코드에서 결정론적으로 정한 고정 방(저장 불필요).
+ * 교사(대시보드 버튼)와 그 반 학생(우리 반 다 같이)이 아무 코드도 입력하지 않고 같은 방에 모인다.
+ * 짧은 코드 = 학급 코드 앞 ROOM_CODE_LEN글자(그 반만의 값이라 다른 반과 안 겹친다).
+ */
+export function classRoomCode(classCode: string): string {
+  return normalizeRoomCode(classCode.slice(0, ROOM_CODE_LEN));
+}
+export function classRoomName(classCode: string): string {
+  return roomNameFor(classCode, classRoomCode(classCode));
+}
