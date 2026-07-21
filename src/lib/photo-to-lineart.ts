@@ -229,24 +229,28 @@ export async function photoToLineart(
    * 커버리지를 살짝 블러→smoothstep으로 다시 세워 계단(경계 톱니)만 매끄럽게 편다
    * (2026-07-21 정교화: 곡선이 폴리곤처럼 각지고 직선에 잔물결이 남던 것 완화 —
    *  블러로 톱니를 녹이고 리샤프로 굵기는 거의 유지). */
-  const cov = new Float32Array(w * h);
-  for (let i = 0; i < keep.length; i++) if (keep[i]) cov[i] = 1;
+  // 능선(1px)을 8이웃으로 한 겹 채워 ~3px 실선 영역을 만든다(블러에 견딜 두께 확보).
+  const region = new Float32Array(w * h);
+  for (let i = 0; i < keep.length; i++) if (keep[i]) region[i] = 1;
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x;
-      if (cov[i] >= 1) continue;
+      if (region[i] >= 1) continue;
       for (const d of [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1]) {
         if (keep[i + d]) {
-          cov[i] = 0.6; // AA 기반이 될 한 겹(리샤프 임계 위)
+          region[i] = 1;
           break;
         }
       }
     }
   }
-  // 안티에일리어싱: 커버리지 3×3 블러로 톱니를 녹이고, smoothstep(0.28~0.72)로 다시
-  // 세워 경계만 부드럽게(굵기 보존). 블러만 하면 흐려지고, 리샤프만 하면 톱니가 남는다.
-  const sm = boxBlur(cov, w, h, 1);
-  const e0 = 0.28,
+  // 강한 안티에일리어싱: 실선 영역을 두 번 블러(≈가우시안 σ1.6)해 능선의 좌우 흔들림과
+  // 경계 톱니를 함께 녹인 뒤, smoothstep(0.42~0.58)으로 다시 세운다 — 곡선이 매끄럽게
+  // 둥글고 직선이 곧아진다(2026-07-21 3차: "아직 자글자글" 실측 대응). 굵기 ≈3px로 유지.
+  const sm = boxBlur(boxBlur(region, w, h, 1), w, h, 1);
+  // 임계를 높여(0.55~0.72) 블러로 부푼 선을 다시 얇게 침식 — 매끄러움(블러)은 유지하되
+  // 굵기는 ~5px로 되돌린다(굵기 하네스 ≤6px 준수).
+  const e0 = 0.55,
     e1 = 0.72;
   for (let i = 0; i < w * h; i++) {
     let t = (sm[i] - e0) / (e1 - e0);
