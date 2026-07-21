@@ -224,6 +224,11 @@ export async function photoToLineart(
     if (size < MIN_KEEP) for (const m of small) keep[m] = 0;
   }
 
+  /* 5.5) 골격화(Zhang-Suen 세선화, 2026-07-21) — keep를 1px 중심선으로 얇게 깎는다.
+   * NMS+이력 임계 뒤에도 접합부·병합된 이중 엣지가 2~4px로 두꺼워 선 폭이 들쭉날쭉했다
+   * (사용자 "선 두께 균일함이 어렵나"). 1px 골격 → 이후 고정 폭 확장 = 균일한 선. */
+  thinZhangSuen(keep, w, h);
+
   /* 6) 잉크로 굽기 — 능선은 1px라 그대로 두면 화면에서 흐릿하다.
    * 이웃 한 겹만 옅게 덧대 "얇지만 또렷한" 선(≈2px 코어)을 만든 뒤,
    * 커버리지를 살짝 블러→smoothstep으로 다시 세워 계단(경계 톱니)만 매끄럽게 편다
@@ -274,6 +279,44 @@ function canvasToBlob(c: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     c.toBlob((b) => (b ? resolve(b) : reject(new Error("변환 실패"))), "image/webp", 0.9);
   });
+}
+
+/* Zhang-Suen 세선화 — 이진 선 마스크(1=선)를 8연결 1px 중심선으로 깎는다(in-place).
+ * 이후 고정 폭 확장이 균일한 선을 만든다. 반복은 변화 없을 때까지(가드 60회). */
+function thinZhangSuen(m: Uint8Array, w: number, h: number): void {
+  let changed = true;
+  let guard = 0;
+  const rm: number[] = [];
+  while (changed && guard++ < 60) {
+    changed = false;
+    for (let step = 0; step < 2; step++) {
+      rm.length = 0;
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const i = y * w + x;
+          if (!m[i]) continue;
+          const p2 = m[i - w], p3 = m[i - w + 1], p4 = m[i + 1], p5 = m[i + w + 1];
+          const p6 = m[i + w], p7 = m[i + w - 1], p8 = m[i - 1], p9 = m[i - w - 1];
+          const b = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+          if (b < 2 || b > 6) continue;
+          const seq = [p2, p3, p4, p5, p6, p7, p8, p9, p2];
+          let a = 0;
+          for (let k = 0; k < 8; k++) if (seq[k] === 0 && seq[k + 1] === 1) a++;
+          if (a !== 1) continue;
+          if (step === 0) {
+            if (p2 * p4 * p6 !== 0 || p4 * p6 * p8 !== 0) continue;
+          } else {
+            if (p2 * p4 * p8 !== 0 || p2 * p6 * p8 !== 0) continue;
+          }
+          rm.push(i);
+        }
+      }
+      if (rm.length) {
+        changed = true;
+        for (const i of rm) m[i] = 0;
+      }
+    }
+  }
 }
 
 function boxBlur(src: Float32Array, w: number, h: number, r: number): Float32Array {
