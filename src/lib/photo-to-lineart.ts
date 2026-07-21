@@ -8,11 +8,14 @@ export async function photoToLineart(
   maxSize = 1536, // 표시 캔버스(1536)와 1:1 — 1200이면 업스케일되며 선이 지글거렸다(2026-07-21)
 ): Promise<Blob> {
   const img = await blobToImage(file);
-  /* 검출은 네이티브 해상도에서(업스케일 금지) — 업스케일 캔버스에서 검출하면 JPEG 노이즈
-   * 블록도 같이 커져 잔점이 폭증한다(2026-07-21 실측: 노이즈 사진 성분 5→129). 작은 입력의
-   * 화질은 아래 벡터 재획화가 해결: 골격 좌표를 K배 키워 출력 캔버스(≈maxSize)에 다시
-   * 긋기 때문에 검출이 작아도 최종 선은 또렷하고 균일하다. */
-  const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+  /* 검출 해상도 — 작은 입력은 업스케일(캡 3배)해서 검출한다. 네이티브 검출은 작은 글씨의
+   * 획 간격(2~3px)이 이중 능선 병합(dilate1, 3px)에 통째로 합쳐져 글자가 뭉개졌다
+   * (2026-07-21 사용자 실측: '쁨'의 ㅃ이 한 덩어리). 업스케일하면 간격이 벌어져 획이
+   * 분리된다. 부작용(JPEG 노이즈 블록도 같이 커져 잔점 폭증 — 업스케일 무보정 시 성분
+   * 5→129 실측)은 아래 노이즈 임계값들을 up(배율)에 비례 스케일해 상쇄한다(노이즈 면적은
+   * up²로 커지므로 MIN_KEEP은 up², 거리·길이류는 up 비례). */
+  const scale = Math.min(3, maxSize / Math.max(img.width, img.height));
+  const up = Math.max(1, scale); // 검출 업스케일 배율(임계값 스케일링용)
   const w = Math.max(1, Math.round(img.width * scale));
   const h = Math.max(1, Math.round(img.height * scale));
 
@@ -87,9 +90,9 @@ export async function photoToLineart(
     const uctx = uc.getContext("2d", { willReadFrequently: true })!;
     uctx.drawImage(img, 0, 0, uw, uh);
     const uData = uctx.getImageData(0, 0, uw, uh);
-    const up = uData.data;
+    const ud = uData.data; // (외부 스코프의 검출 배율 up과 혼동 금지)
     for (let i = 0, p = 0; i < uw * uh; i++, p += 4) {
-      const r = up[p], g = up[p + 1], b = up[p + 2];
+      const r = ud[p], g = ud[p + 1], b = ud[p + 2];
       const luma = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
       const mx = Math.max(r, g, b);
       const sat = mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx;
@@ -97,13 +100,50 @@ export async function photoToLineart(
       const t = (0.62 - luma) / 0.14;
       const ink = sat < 0.3 ? Math.max(0, Math.min(1, t)) : 0;
       const v = Math.round(255 * (1 - ink));
-      up[p] = v;
-      up[p + 1] = v;
-      up[p + 2] = v;
-      up[p + 3] = 255;
+      ud[p] = v;
+      ud[p + 1] = v;
+      ud[p + 2] = v;
+      ud[p + 3] = 255;
     }
     uctx.putImageData(uData, 0, 0);
     return canvasToBlob(uc);
+  }
+
+  /* 0.5) 그래픽(플랫 컬러) 경로 — 카드·로고·굵은 글씨(2026-07-21 사용자 "글씨는 글씨대로
+   * 따주면 안되나"). 색이 몇 가지 평면으로 이뤄진 이미지는 엣지 검출(Sobel→골격) 대신
+   * 색 영역의 경계(실제 색이 바뀌는 금)를 그대로 따라 긋는다 — 글자·로고가 원형 그대로
+   * 보존된다(엣지+골격 경로는 작은 글씨의 획을 뭉갬: '쁨'의 ㅃ 실측). 사진(그라데이션·
+   * 질감)은 게이트를 통과하지 못해 아래 Sobel 경로로 간다. */
+  // 그래픽 판정·추적도 업스케일(캡3) 캔버스에서 — 보간 AA 램프(업스케일 시 6~9px)는
+  // tryGraphicContours의 팔레트 전이색 제거가 흡수한다(램프 픽셀이 인접 순색으로 갈라져
+  // 경계가 램프 중앙에 매끈하게 선다). 네이티브 검출은 격자가 거칠어 DP·스무딩(×K)에서
+  // 글자가 뒤틀렸다(2026-07-21 실측).
+  const graphicPolys = tryGraphicContours(px, w, h);
+  if (graphicPolys) {
+    const K = maxSize / Math.max(img.width, img.height) / scale;
+    const outW = Math.max(1, Math.round(w * K));
+    const outH = Math.max(1, Math.round(h * K));
+    const dst = document.createElement("canvas");
+    dst.width = outW;
+    dst.height = outH;
+    const dctx = dst.getContext("2d")!;
+    dctx.fillStyle = "#ffffff";
+    dctx.fillRect(0, 0, outW, outH);
+    dctx.strokeStyle = "#1a1a1a";
+    dctx.lineWidth = 4.5;
+    dctx.lineCap = "round";
+    dctx.lineJoin = "round";
+    for (const poly of graphicPolys) {
+      // 잔부스러기 필터 — 단 양끝이 교차점에 붙은 이음새 체인은 짧아도 지우면 구멍이 난다
+      if (poly.endJunctions < 2 && polyLength(poly.pts) < 8 * up) continue;
+      // 격자 계단 → 이동평균 2패스로 녹인 뒤 DP·2차 곡선 스무딩(공유 인프라)
+      const pre = smoothPts(smoothPts(poly.pts, poly.closed), poly.closed);
+      const simp = simplifyDP(pre, 1.1 * Math.max(1, Math.min(2, K * 0.6)));
+      dctx.beginPath();
+      drawSmoothPath(dctx, simp, poly.closed, K);
+      dctx.stroke();
+    }
+    return canvasToBlob(dst);
   }
 
   // 1) 약한 블러(노이즈 억제) — 사진 경로
@@ -210,7 +250,7 @@ export async function photoToLineart(
    * 위성으로 보고 지운다 — 진짜 인접 이중 구조(가는 획의 양쪽 엣지 등)는 강도가 비슷해
    * 살아남는다. */
   {
-    const SAT_R = 12;
+    const SAT_R = Math.round(12 * up); // 링잉 거리도 업스케일에 비례
     const SAT_RATIO = 3;
     const kill: number[] = [];
     for (let y = 1; y < h - 1; y++) {
@@ -240,7 +280,7 @@ export async function photoToLineart(
   /* 5) 미세 노이즈 제거(정교화, 2026-07-21) — 그라데이션·질감에서 새는 고립된 짧은
    * 조각(8이웃 연결 성분 < MIN_KEEP px)을 지운다. 실제 윤곽선은 수백 px 성분이라 안전하고,
    * 잔점·티끌이 사라져 도안이 깔끔해진다. size가 임계에 닿으면 추적 종료(메모리·속도 가드). */
-  const MIN_KEEP = 10;
+  const MIN_KEEP = Math.round(10 * up * up); // 노이즈 블록 면적은 up²로 커진다
   const compSeen = new Uint8Array(w * h);
   const cstack: number[] = [];
   for (let s = 0; s < keep.length; s++) {
@@ -289,10 +329,10 @@ export async function photoToLineart(
    * 벡터 스트로크는 굵기가 정의상 어디서나 동일하고, 캔버스 래스터라이저의 AA가
    * 모든 각도에서 매끈하다. Douglas-Peucker + 2차 곡선 스무딩이 골격의 계단을 편다. */
   const polys = traceSkeleton(keep, w, h);
-  // K = 출력px/검출px. 입력이 maxSize 이상이면 검출=출력(K=1), 미만이면 K = maxSize/입력
-  // 최대변(캡 없음 — 200px 입력이면 K≈7.7). 폴리라인 좌표만 K배 하고 스트로크 굵기는 출력
-  // 기준 고정이라 K가 커도 선은 균일·매끈하다(지터 증폭은 아래 smoothPts+DP eps 확대가 상쇄,
-  // eps 배율은 2배 캡으로 자체 포화).
+  // K = 출력px/검출px. 검출이 3배 캡에 걸린 극소 입력(최대변 <512px)만 K>1
+  // (예: 300px 입력 → 검출 900, K≈1.7), 그 외엔 검출 해상도 = 출력 해상도(K=1).
+  // 폴리라인 좌표만 K배 하고 스트로크 굵기는 출력 기준 고정이라 K가 커도 선은 균일
+  // (지터 증폭은 아래 smoothPts+DP eps 확대가 상쇄, eps 배율은 2배 캡으로 자체 포화).
   const K = maxSize / Math.max(img.width, img.height) / scale;
   const outW = Math.max(1, Math.round(w * K));
   const outH = Math.max(1, Math.round(h * K));
@@ -306,16 +346,16 @@ export async function photoToLineart(
   dctx.lineWidth = 4.5; // 출력(1536) 기준 고정 굵기 — 입력 크기와 무관하게 균일
   dctx.lineCap = "round";
   dctx.lineJoin = "round";
-  const MIN_ISOLATED = 12; // px — 양끝이 자유단인 고립 조각(잔점) 버림
-  const MIN_SPUR = 7; // px — 접합부에서 삐져나온 짧은 수염 버림
+  const MIN_ISOLATED = Math.round(12 * up); // px(검출) — 양끝이 자유단인 고립 조각(잔점) 버림
+  const MIN_SPUR = Math.round(7 * up); // px(검출) — 접합부에서 삐져나온 짧은 수염 버림
 
   /* 유령 조각 필터 — JPEG 링잉·이중 엣지 잔재는 "진짜 선 곁(≤6px)을 따라 붙은 짧은
    * 조각"으로 나타난다(원 재현: 원둘레에 붙은 8~30px 틱들). 긴 선(≥48px)의 점을 격자에
    * 넣고, 짧은 조각의 점 70%+가 긴 선 6px 안이면 버린다 — 외따로 있는 작은 디테일
    * (눈동자·점 등)은 긴 선과 안 붙어 있어 살아남는다. */
-  const GHOST_LEN = 64;
-  const GHOST_DIST = 6;
-  const CELL = 8;
+  const GHOST_LEN = Math.round(64 * up);
+  const GHOST_DIST = 6 * up;
+  const CELL = Math.max(8, Math.ceil(GHOST_DIST) + 2); // 3×3 셀 탐색이 GHOST_DIST 반경을 덮으려면 CELL ≥ GHOST_DIST
   const anchor = new Map<number, number[]>();
   for (const poly of polys) {
     if (polyLength(poly.pts) < GHOST_LEN) continue;
@@ -346,7 +386,7 @@ export async function photoToLineart(
   for (const poly of polys) {
     const len = polyLength(poly.pts);
     if (poly.closed) {
-      if (len < 16) continue; // 노이즈 고리
+      if (len < 16 * up) continue; // 노이즈 고리
     } else if (poly.endJunctions === 0) {
       if (len < MIN_ISOLATED) continue;
     } else if (poly.endJunctions === 1) {
@@ -552,6 +592,229 @@ function traceSkeleton(m: Uint8Array, w: number, h: number): SkeletonPoly[] {
     // (둘 다 못 미치는 3~7점짜리 초소형 조각은 여기서 조용히 버려지는데, 어차피 아래
     //  노이즈 필터 임계(닫힌 고리 <16px·고립 <12px)보다 작아 시각적 손실은 없다 — 의도적 허용.)
     else if (cur < 0 && pts.length >= 8) polys.push({ pts, closed: false, endJunctions: 0 });
+  }
+  return polys;
+}
+
+/* ── 그래픽(플랫 컬러) 경로 ─────────────────────────────────────────────────
+ * ① 게이트: 3비트/채널(512칸) 히스토그램의 상위 ≤8칸이 전체의 92%+를 덮으면 "플랫
+ *    컬러 그래픽"(카드·로고·글씨). 사진·그라데이션은 색이 수백 칸에 흩어져 탈락.
+ * ② 상위 칸 평균색을 팔레트로 병합(RGB 거리 <40) → 픽셀별 최근접 라벨 + 3×3 다수결
+ *    필터 1회(JPEG 잔노이즈 정리).
+ * ③ 라벨이 다른 이웃 픽셀 사이의 "금"(픽셀 경계 격자 세그먼트) 중, 원본 색 대비가
+ *    실제로 큰(RGB 거리 ≥45) 것만 채택 — 양자화 밴딩(완만한 그라데이션이 칸을 넘는
+ *    가짜 경계)은 대비가 작아 자동 배제된다.
+ * ④ 금들을 격자점에서 이어 체인/고리로 연결(교차점=끝) → 스무딩·스트로크는 골격
+ *    경로와 같은 인프라 공유. 글자 모양이 영역 경계 그대로라 뭉개지지 않는다. */
+function tryGraphicContours(
+  px: Uint8ClampedArray,
+  w: number,
+  h: number,
+): SkeletonPoly[] | null {
+  const n = w * h;
+  // ① 히스토그램(3비트/채널)
+  const counts = new Map<number, { c: number; r: number; g: number; b: number }>();
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    const key = ((px[p] >> 5) << 6) | ((px[p + 1] >> 5) << 3) | (px[p + 2] >> 5);
+    let e = counts.get(key);
+    if (!e) counts.set(key, (e = { c: 0, r: 0, g: 0, b: 0 }));
+    e.c++;
+    e.r += px[p];
+    e.g += px[p + 1];
+    e.b += px[p + 2];
+  }
+  const bins = [...counts.values()].sort((a, b) => b.c - a.c).slice(0, 8);
+  let covered = 0;
+  for (const b of bins) covered += b.c;
+  if (covered / n < 0.92) return null; // 사진 → Sobel 경로
+
+  // ② 팔레트(가까운 칸 병합) + 라벨링
+  const pal: { r: number; g: number; b: number; share: number }[] = [];
+  for (const b of bins) {
+    const r = b.r / b.c, g = b.g / b.c, bb = b.b / b.c;
+    let merged = false;
+    for (const q of pal) {
+      if ((q.r - r) ** 2 + (q.g - g) ** 2 + (q.b - bb) ** 2 < 40 * 40) {
+        q.share += b.c / n;
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) pal.push({ r, g, b: bb, share: b.c / n });
+  }
+  // AA 중간색 제거 — 경계 안티앨리어싱이 만든 "두 색의 중간" 팔레트(점유율 낮음)는
+  // 경계 양쪽에 얇은 띠 영역을 만들어 윤곽이 이중선이 된다. 두 팔레트를 잇는 선분에서
+  // 거리 30 미만 + 점유율 8% 미만이면 전이색으로 보고 제거(픽셀은 인접 순색으로 흡수).
+  for (let k = pal.length - 1; k >= 0; k--) {
+    if (pal[k].share >= 0.12) continue; // 업스케일 캔버스는 램프 점유율이 커진다(3배 시 ~6-9%)
+    let transitional = false;
+    for (let a = 0; a < pal.length && !transitional; a++) {
+      if (a === k) continue;
+      for (let b2 = a + 1; b2 < pal.length; b2++) {
+        if (b2 === k) continue;
+        const vx0 = pal[b2].r - pal[a].r, vy0 = pal[b2].g - pal[a].g, vz0 = pal[b2].b - pal[a].b;
+        const L2 = vx0 * vx0 + vy0 * vy0 + vz0 * vz0 || 1;
+        let t = ((pal[k].r - pal[a].r) * vx0 + (pal[k].g - pal[a].g) * vy0 + (pal[k].b - pal[a].b) * vz0) / L2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const dr = pal[k].r - (pal[a].r + vx0 * t);
+        const dg = pal[k].g - (pal[a].g + vy0 * t);
+        const db = pal[k].b - (pal[a].b + vz0 * t);
+        if (dr * dr + dg * dg + db * db < 30 * 30) {
+          transitional = true;
+          break;
+        }
+      }
+    }
+    if (transitional) pal.splice(k, 1);
+  }
+  if (pal.length < 2) return null; // 단색 — 그릴 경계가 없다
+  const label = new Uint8Array(n);
+  for (let i = 0, p = 0; i < n; i++, p += 4) {
+    let bi = 0;
+    let bd = Infinity;
+    for (let k = 0; k < pal.length; k++) {
+      const d =
+        (pal[k].r - px[p]) ** 2 + (pal[k].g - px[p + 1]) ** 2 + (pal[k].b - px[p + 2]) ** 2;
+      if (d < bd) {
+        bd = d;
+        bi = k;
+      }
+    }
+    label[i] = bi;
+  }
+  // 3×3 다수결 필터 1회 — JPEG 링잉 낱알 정리. (5×5는 네이티브 해상도의 가는 획(3px)을
+  // 침식해 글자가 뒤틀렸다 — AA 띠 이중선의 주 방어는 위 팔레트 전이색 제거가 담당.)
+  const lab2 = label.slice();
+  const cnt = new Uint8Array(8);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      cnt.fill(0);
+      let best = label[i];
+      let bc = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const l = label[i + dy * w + dx];
+          if (++cnt[l] > bc) {
+            bc = cnt[l];
+            best = l;
+          }
+        }
+      }
+      lab2[i] = best;
+    }
+  }
+
+  // ③ 라벨 경계의 금 수집 — 격자점 정점 키 = y*(w+1)+x.
+  // ⚠️ 대비 판정은 금 단위가 아니라 "체인 전체 평균"으로 한다(아래 ④). 금 단위로 자르면
+  // 모서리(AA가 두꺼워 국소 대비 약함)마다 체인이 끊겨 도안이 대시 조각이 됐다(실측).
+  // 라벨 경계는 본질적으로 닫힌 고리라, 전부 이은 뒤 저대비 체인(그라데이션 밴딩)만
+  // 통째로 버리면 닫힘이 보존된다.
+  const dist2 = (i: number, j: number): number => {
+    const p = i * 4, q = j * 4;
+    return (px[p] - px[q]) ** 2 + (px[p + 1] - px[q + 1]) ** 2 + (px[p + 2] - px[q + 2]) ** 2;
+  };
+  // 인접 리스트: 정점 → 상대 정점 목록(금 = 무방향 세그먼트) + 세그먼트별 대비
+  const adj = new Map<number, number[]>();
+  const segContrast = new Map<number, number>();
+  const W1 = w + 1;
+  const segKeyOf = (a: number, b: number): number => (a < b ? a * 4194304 + b : b * 4194304 + a);
+  const addEdge = (a: number, b: number, c: number): void => {
+    let la = adj.get(a);
+    if (!la) adj.set(a, (la = []));
+    la.push(b);
+    let lb = adj.get(b);
+    if (!lb) adj.set(b, (lb = []));
+    lb.push(a);
+    segContrast.set(segKeyOf(a, b), c);
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      // 오른쪽 이웃과 다른 라벨 → 세로 금 (x+1,y)-(x+1,y+1)
+      if (x + 1 < w && lab2[i] !== lab2[i + 1]) {
+        const a = x > 0 ? i - 1 : i;
+        const b = x + 2 < w ? i + 2 : i + 1;
+        // 바로 옆(1칸)과 한 칸 바깥(AA 램프 건너뛰기)의 최대 대비
+        const c = Math.sqrt(Math.max(dist2(i, i + 1), dist2(a, b)));
+        addEdge(y * W1 + (x + 1), (y + 1) * W1 + (x + 1), c);
+      }
+      // 아래 이웃과 다른 라벨 → 가로 금 (x,y+1)-(x+1,y+1)
+      if (y + 1 < h && lab2[i] !== lab2[i + w]) {
+        const a = y > 0 ? i - w : i;
+        const b = y + 2 < h ? i + 2 * w : i + w;
+        const c = Math.sqrt(Math.max(dist2(i, i + w), dist2(a, b)));
+        addEdge((y + 1) * W1 + x, (y + 1) * W1 + (x + 1), c);
+      }
+    }
+  }
+  if (adj.size === 0) return null; // 경계 자체가 없음 — Sobel로
+
+  // ④ 금 → 체인/고리 연결(정점 차수 ≠2 = 끝점, 소비는 세그먼트 단위) + 평균 대비 필터
+  const usedSeg = new Set<number>();
+  // (w,h ≤ 1536 → 정점 최대 (1537)² ≈ 2.36e6 < 4194304 — segKey 인코딩 안전)
+  const MIN_MEAN_CONTRAST = 40; // 체인 평균 RGB 거리 — 미만이면 그라데이션 밴딩으로 판정
+  const polys: SkeletonPoly[] = [];
+  const vx = (v: number): number => v % W1;
+  const vy = (v: number): number => (v / W1) | 0;
+  const walk = (start: number, next0: number): { pts: number[]; mean: number } => {
+    const pts = [vx(start), vy(start)];
+    let prev = start;
+    let cur = next0;
+    let sum = segContrast.get(segKeyOf(prev, cur)) ?? 0;
+    let cnt = 1;
+    usedSeg.add(segKeyOf(prev, cur));
+    for (;;) {
+      pts.push(vx(cur), vy(cur));
+      const nbrs = adj.get(cur)!;
+      if (nbrs.length !== 2) break; // 교차점/끝점
+      const nxt = nbrs[0] === prev ? nbrs[1] : nbrs[0];
+      const k = segKeyOf(cur, nxt);
+      if (usedSeg.has(k)) break; // 고리 완주
+      usedSeg.add(k);
+      sum += segContrast.get(k) ?? 0;
+      cnt++;
+      prev = cur;
+      cur = nxt;
+    }
+    return { pts, mean: sum / cnt };
+  };
+  const degOf = (v: number): number => adj.get(v)?.length ?? 0;
+  const pushChain = (r: { pts: number[]; mean: number }, mayClose: boolean): void => {
+    if (r.mean < MIN_MEAN_CONTRAST) return; // 저대비 밴딩 체인 통째 버림
+    const pts = r.pts;
+    const closed =
+      mayClose &&
+      pts.length >= 6 &&
+      pts[0] === pts[pts.length - 2] &&
+      pts[1] === pts[pts.length - 1];
+    if (closed) {
+      pts.length -= 2; // 마지막 중복점 제거
+      polys.push({ pts, closed: true, endJunctions: 0 });
+    } else if (pts.length >= 4) {
+      // 양끝이 교차점(차수≥3)에 붙은 짧은 체인은 코너 이음새 — 길이 필터에서 지키도록
+      // endJunctions를 기록한다(코너의 X-교차 군집이 만든 2~6칸 체인을 지우면 구멍이 뚫렸다).
+      const a = pts[1] * W1 + pts[0];
+      const b = pts[pts.length - 1] * W1 + pts[pts.length - 2];
+      const ej = (degOf(a) >= 3 ? 1 : 0) + (degOf(b) >= 3 ? 1 : 0);
+      polys.push({ pts, closed: false, endJunctions: ej });
+    }
+  };
+  // 끝점·교차점(차수≠2)에서 출발
+  for (const [v, nbrs] of adj) {
+    if (nbrs.length === 2) continue;
+    for (const nb of nbrs) {
+      if (usedSeg.has(segKeyOf(v, nb))) continue;
+      pushChain(walk(v, nb), false);
+    }
+  }
+  // 남은 세그먼트 = 순수 고리
+  for (const [v, nbrs] of adj) {
+    if (nbrs.length !== 2) continue;
+    for (const nb of nbrs) {
+      if (usedSeg.has(segKeyOf(v, nb))) continue;
+      pushChain(walk(v, nb), true);
+    }
   }
   return polys;
 }
