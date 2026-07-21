@@ -189,7 +189,42 @@ export async function photoToLineart(
     }
   }
 
-  /* 5) 잉크로 굽기 — 능선은 1px라 그대로 두면 화면에서 흐릿하다.
+  /* 5) 미세 노이즈 제거(정교화, 2026-07-21) — 그라데이션·질감에서 새는 고립된 짧은
+   * 조각(8이웃 연결 성분 < MIN_KEEP px)을 지운다. 실제 윤곽선은 수백 px 성분이라 안전하고,
+   * 잔점·티끌이 사라져 도안이 깔끔해진다. size가 임계에 닿으면 추적 종료(메모리·속도 가드). */
+  const MIN_KEEP = 10;
+  const compSeen = new Uint8Array(w * h);
+  const cstack: number[] = [];
+  for (let s = 0; s < keep.length; s++) {
+    if (!keep[s] || compSeen[s]) continue;
+    cstack.length = 0;
+    cstack.push(s);
+    compSeen[s] = 1;
+    const small: number[] = [s];
+    let size = 1;
+    while (cstack.length) {
+      const i = cstack.pop()!;
+      const x = i % w;
+      const y = (i / w) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          if (keep[j] && !compSeen[j]) {
+            compSeen[j] = 1;
+            cstack.push(j);
+            size++;
+            if (size < MIN_KEEP) small.push(j);
+          }
+        }
+      }
+    }
+    if (size < MIN_KEEP) for (const m of small) keep[m] = 0;
+  }
+
+  /* 6) 잉크로 굽기 — 능선은 1px라 그대로 두면 화면에서 흐릿하다.
    * 이웃 한 겹만 옅게(0.45) 덧대 "얇지만 또렷한" 선(≈2px)으로 만든다. */
   const ink = new Float32Array(w * h);
   for (let i = 0; i < keep.length; i++) if (keep[i]) ink[i] = 1;

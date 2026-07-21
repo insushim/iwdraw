@@ -104,34 +104,34 @@ export const PhotoImport = forwardRef<PhotoImportHandle, PhotoImportProps>(funct
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={pending.url} alt="가져온 그림" className="max-h-56 w-auto rounded-lg" />
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="mt-5 grid items-stretch gap-3 sm:grid-cols-3">
               <button
                 onClick={() => startWith("lineart")}
                 disabled={converting}
-                className="pressable rounded-card bg-sky px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
+                className="pressable flex min-w-0 flex-col rounded-card bg-sky px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
               >
-                <span className="font-display text-lg">✏️ 자동 선따기</span>
-                <span className="mt-1 block text-sm text-white/85">
+                <span className="whitespace-normal break-keep font-display text-base font-bold leading-snug">✏️ 자동 선따기</span>
+                <span className="mt-1 block whitespace-normal break-keep text-sm leading-snug text-white/85">
                   윤곽선 도안으로 바꿔서 색칠해요
                 </span>
               </button>
               <button
                 onClick={() => startWith("underlay")}
                 disabled={converting}
-                className="pressable rounded-card bg-coral px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
+                className="pressable flex min-w-0 flex-col rounded-card bg-coral px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
               >
-                <span className="font-display text-lg">🖊️ 밑그림 따라 그리기</span>
-                <span className="mt-1 block text-sm text-white/85">
+                <span className="whitespace-normal break-keep font-display text-base font-bold leading-snug">🖊️ 밑그림 따라 그리기</span>
+                <span className="mt-1 block whitespace-normal break-keep text-sm leading-snug text-white/85">
                   옅게 깔린 그림 위에 내가 직접 선을 따요
                 </span>
               </button>
               <button
                 onClick={() => startWith("continue")}
                 disabled={converting}
-                className="pressable rounded-card bg-leaf px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
+                className="pressable flex min-w-0 flex-col rounded-card bg-leaf px-4 py-4 text-left text-white shadow-soft disabled:opacity-60"
               >
-                <span className="font-display text-lg">🎨 그대로 이어 그리기</span>
-                <span className="mt-1 block text-sm text-white/85">
+                <span className="whitespace-normal break-keep font-display text-base font-bold leading-snug">🎨 그대로 이어 그리기</span>
+                <span className="mt-1 block whitespace-normal break-keep text-sm leading-snug text-white/85">
                   그리던 그림을 그대로 불러와 계속 그려요
                 </span>
               </button>
