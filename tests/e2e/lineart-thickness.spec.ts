@@ -70,6 +70,9 @@ test("선따기 선: 얇지만 잘 보이고 끊기지 않는다", async ({ page
     const el = document.querySelector('canvas[aria-label="그림 캔버스"]') as HTMLCanvasElement;
     const w = el.width;
     const h = el.height;
+    // DPR 백킹(465806d, ≤2배) 보정 — 굵기 판정은 화면(CSS) px 기준이어야 한다.
+    // 백킹 px 그대로 재면 DPR 2 기기에서 같은 화면 굵기가 2배로 읽혀 오탐(tablet 실측 10px).
+    const dprX = w / (el.getBoundingClientRect().width || w);
     const d = el.getContext("2d")!.getImageData(0, 0, w, h).data;
     const ink = new Uint8Array(w * h);
     let inkN = 0;
@@ -144,7 +147,7 @@ test("선따기 선: 얇지만 잘 보이고 끊기지 않는다", async ({ page
     }
     return {
       inkPct: Math.round((inkN / (w * h)) * 10000) / 100,
-      thickness: medW,
+      thickness: Math.round((medW / dprX) * 10) / 10, // 화면(CSS) px
       comps,
     };
   });

@@ -8,6 +8,10 @@ export async function photoToLineart(
   maxSize = 1536, // 표시 캔버스(1536)와 1:1 — 1200이면 업스케일되며 선이 지글거렸다(2026-07-21)
 ): Promise<Blob> {
   const img = await blobToImage(file);
+  /* 검출은 네이티브 해상도에서(업스케일 금지) — 업스케일 캔버스에서 검출하면 JPEG 노이즈
+   * 블록도 같이 커져 잔점이 폭증한다(2026-07-21 실측: 노이즈 사진 성분 5→129). 작은 입력의
+   * 화질은 아래 벡터 재획화가 해결: 골격 좌표를 K배 키워 출력 캔버스(≈maxSize)에 다시
+   * 긋기 때문에 검출이 작아도 최종 선은 또렷하고 균일하다. */
   const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
   const w = Math.max(1, Math.round(img.width * scale));
   const h = Math.max(1, Math.round(img.height * scale));
@@ -64,9 +68,6 @@ export async function photoToLineart(
   }
   const coloredEdgeFrac = coloredEdge / gray.length;
 
-  const out = sctx.createImageData(w, h);
-  const o = out.data;
-
   // "이미 도안" 경로는 어두운 무채색 선이 컬러 선 구조를 지배할 때만 —
   // 컬러 선 로고(레알마드리드 등)를 '색칠된 도안'으로 오판해 유채색 선을
   // 통째로 지우고 점선만 남기던 버그(2026-07-07 실사용 보고) 방지.
@@ -75,20 +76,34 @@ export async function photoToLineart(
     // Sobel을 다시 돌리면 선 양쪽에 이중 윤곽이 생겨 선이 진해지고 두꺼워진다
     // ("다시 선따기 하니 더 진해짐" 2026-07-07 사용자 실측) — 이 경로는 멱등.
     // 유채색(색칠)은 흰색으로 → 깨끗한 새 도안이 된다.
-    for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
-      const mx = Math.max(px[p], px[p + 1], px[p + 2]);
-      const sat = mx === 0 ? 0 : (mx - Math.min(px[p], px[p + 1], px[p + 2])) / mx;
+    // 작은 입력은 업스케일(캡 4배)해 표시 캔버스(1536)의 비트맵 확대 자글거림을 막는다 —
+    // drawImage 보간이 만든 부드러운 경계에 아래 연속 램프가 그대로 먹어 AA가 유지된다.
+    const us = Math.min(4, maxSize / Math.max(img.width, img.height));
+    const uw = us > 1 ? Math.max(1, Math.round(img.width * us)) : w;
+    const uh = us > 1 ? Math.max(1, Math.round(img.height * us)) : h;
+    const uc = document.createElement("canvas");
+    uc.width = uw;
+    uc.height = uh;
+    const uctx = uc.getContext("2d", { willReadFrequently: true })!;
+    uctx.drawImage(img, 0, 0, uw, uh);
+    const uData = uctx.getImageData(0, 0, uw, uh);
+    const up = uData.data;
+    for (let i = 0, p = 0; i < uw * uh; i++, p += 4) {
+      const r = up[p], g = up[p + 1], b = up[p + 2];
+      const luma = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+      const mx = Math.max(r, g, b);
+      const sat = mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx;
       // 어둡고(≤0.62) 채도 낮은(선) 픽셀만 잉크로 — 임계 부근은 부드럽게
-      const t = (0.62 - gray[i]) / 0.14;
+      const t = (0.62 - luma) / 0.14;
       const ink = sat < 0.3 ? Math.max(0, Math.min(1, t)) : 0;
       const v = Math.round(255 * (1 - ink));
-      o[p] = v;
-      o[p + 1] = v;
-      o[p + 2] = v;
-      o[p + 3] = 255;
+      up[p] = v;
+      up[p + 1] = v;
+      up[p + 2] = v;
+      up[p + 3] = 255;
     }
-    sctx.putImageData(out, 0, 0);
-    return canvasToBlob(src);
+    uctx.putImageData(uData, 0, 0);
+    return canvasToBlob(uc);
   }
 
   // 1) 약한 블러(노이즈 억제) — 사진 경로
@@ -189,6 +204,39 @@ export async function photoToLineart(
     }
   }
 
+  /* 4.5) 위성 능선 제거(2026-07-21) — JPEG 링잉·2스케일 혼합이 주 엣지와 8~12px
+   * 나란히 달리는 유령 능선(주 엣지의 10~30% 강도)을 만든다(원 재현: 호 안쪽 평행선).
+   * 각 능선 픽셀에서 기울기 방향(선의 수직) ±12px 안에 자기보다 3배+ 강한 능선이 있으면
+   * 위성으로 보고 지운다 — 진짜 인접 이중 구조(가는 획의 양쪽 엣지 등)는 강도가 비슷해
+   * 살아남는다. */
+  {
+    const SAT_R = 12;
+    const SAT_RATIO = 3;
+    const kill: number[] = [];
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x;
+        if (!keep[i]) continue;
+        const m = thin[i];
+        const L = Math.hypot(dirX[i], dirY[i]) || 1;
+        const ux = dirX[i] / L;
+        const uy = dirY[i] / L;
+        for (let s = -SAT_R; s <= SAT_R; s++) {
+          if (s >= -2 && s <= 2) continue; // 자기 자신·바로 옆(NMS가 이미 처리)
+          const nx = Math.round(x + ux * s);
+          const ny = Math.round(y + uy * s);
+          if (nx < 1 || ny < 1 || nx >= w - 1 || ny >= h - 1) continue;
+          const j = ny * w + nx;
+          if (keep[j] && thin[j] > m * SAT_RATIO) {
+            kill.push(i);
+            break;
+          }
+        }
+      }
+    }
+    for (const i of kill) keep[i] = 0;
+  }
+
   /* 5) 미세 노이즈 제거(정교화, 2026-07-21) — 그라데이션·질감에서 새는 고립된 짧은
    * 조각(8이웃 연결 성분 < MIN_KEEP px)을 지운다. 실제 윤곽선은 수백 px 성분이라 안전하고,
    * 잔점·티끌이 사라져 도안이 깔끔해진다. size가 임계에 닿으면 추적 종료(메모리·속도 가드). */
@@ -224,55 +272,110 @@ export async function photoToLineart(
     if (size < MIN_KEEP) for (const m of small) keep[m] = 0;
   }
 
-  /* 5.5) 골격화(Zhang-Suen 세선화, 2026-07-21) — keep를 1px 중심선으로 얇게 깎는다.
-   * NMS+이력 임계 뒤에도 접합부·병합된 이중 엣지가 2~4px로 두꺼워 선 폭이 들쭉날쭉했다
-   * (사용자 "선 두께 균일함이 어렵나"). 1px 골격 → 이후 고정 폭 확장 = 균일한 선. */
+  /* 5.5) 이중 능선 병합 + 골격화(2026-07-21) — NMS가 블러 스케일 차이로 3px 안짝의
+   * 평행 이중 능선을 만들면(완만한 각도 엣지에서 실측) 그대로 골격화 시 두 줄이 남아
+   * 선이 덩어리진다. 한 겹 팽창으로 근접 능선을 한 띠로 합친 뒤 Zhang-Suen으로 1px
+   * 중심선을 깎는다. */
+  dilate1(keep, w, h);
   thinZhangSuen(keep, w, h);
 
-  /* 6) 잉크로 굽기 — 능선은 1px라 그대로 두면 화면에서 흐릿하다.
-   * 이웃 한 겹만 옅게 덧대 "얇지만 또렷한" 선(≈2px 코어)을 만든 뒤,
-   * 커버리지를 살짝 블러→smoothstep으로 다시 세워 계단(경계 톱니)만 매끄럽게 편다
-   * (2026-07-21 정교화: 곡선이 폴리곤처럼 각지고 직선에 잔물결이 남던 것 완화 —
-   *  블러로 톱니를 녹이고 리샤프로 굵기는 거의 유지). */
-  // 능선(1px)을 8이웃으로 한 겹 채워 ~3px 실선 영역을 만든다(블러에 견딜 두께 확보).
-  const region = new Float32Array(w * h);
-  for (let i = 0; i < keep.length; i++) if (keep[i]) region[i] = 1;
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const i = y * w + x;
-      if (region[i] >= 1) continue;
-      for (const d of [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1]) {
-        if (keep[i + d]) {
-          region[i] = 1;
-          break;
+  /* 6) 벡터 재획화(2026-07-21 근본 개선) — 골격(1px)을 폴리라인으로 추출해 출력
+   * 캔버스(입력 크기와 무관하게 항상 ≈maxSize)에 고정 굵기·둥근 캡으로 다시 긋는다.
+   * 왜 래스터 bake(팽창+블러+재임계)를 버렸나(자글자글 5회 재발의 결론):
+   *  ① 방향 의존 — 8이웃 팽창은 대각선 획의 수직 두께가 3/√2≈2.1px로 얇아져
+   *     같은 그림에서 굵기가 ±30% 출렁였다(원 테스트 각도별 2.83~4px 실측).
+   *  ② 완만한 각도의 계단(주기 수px)은 블러 r1로 녹지 않는다.
+   *  ③ 작은 입력이 업스케일 없이 그대로 나가 표시에서 비트맵 확대됐다.
+   * 벡터 스트로크는 굵기가 정의상 어디서나 동일하고, 캔버스 래스터라이저의 AA가
+   * 모든 각도에서 매끈하다. Douglas-Peucker + 2차 곡선 스무딩이 골격의 계단을 편다. */
+  const polys = traceSkeleton(keep, w, h);
+  // K = 출력px/검출px. 입력이 maxSize 이상이면 검출=출력(K=1), 미만이면 K = maxSize/입력
+  // 최대변(캡 없음 — 200px 입력이면 K≈7.7). 폴리라인 좌표만 K배 하고 스트로크 굵기는 출력
+  // 기준 고정이라 K가 커도 선은 균일·매끈하다(지터 증폭은 아래 smoothPts+DP eps 확대가 상쇄,
+  // eps 배율은 2배 캡으로 자체 포화).
+  const K = maxSize / Math.max(img.width, img.height) / scale;
+  const outW = Math.max(1, Math.round(w * K));
+  const outH = Math.max(1, Math.round(h * K));
+  const dst = document.createElement("canvas");
+  dst.width = outW;
+  dst.height = outH;
+  const dctx = dst.getContext("2d")!;
+  dctx.fillStyle = "#ffffff";
+  dctx.fillRect(0, 0, outW, outH);
+  dctx.strokeStyle = "#1a1a1a";
+  dctx.lineWidth = 4.5; // 출력(1536) 기준 고정 굵기 — 입력 크기와 무관하게 균일
+  dctx.lineCap = "round";
+  dctx.lineJoin = "round";
+  const MIN_ISOLATED = 12; // px — 양끝이 자유단인 고립 조각(잔점) 버림
+  const MIN_SPUR = 7; // px — 접합부에서 삐져나온 짧은 수염 버림
+
+  /* 유령 조각 필터 — JPEG 링잉·이중 엣지 잔재는 "진짜 선 곁(≤6px)을 따라 붙은 짧은
+   * 조각"으로 나타난다(원 재현: 원둘레에 붙은 8~30px 틱들). 긴 선(≥48px)의 점을 격자에
+   * 넣고, 짧은 조각의 점 70%+가 긴 선 6px 안이면 버린다 — 외따로 있는 작은 디테일
+   * (눈동자·점 등)은 긴 선과 안 붙어 있어 살아남는다. */
+  const GHOST_LEN = 64;
+  const GHOST_DIST = 6;
+  const CELL = 8;
+  const anchor = new Map<number, number[]>();
+  for (const poly of polys) {
+    if (polyLength(poly.pts) < GHOST_LEN) continue;
+    for (let k = 0; k < poly.pts.length; k += 2) {
+      const key = ((poly.pts[k + 1] / CELL) | 0) * 8192 + ((poly.pts[k] / CELL) | 0);
+      let arr = anchor.get(key);
+      if (!arr) anchor.set(key, (arr = []));
+      arr.push(poly.pts[k], poly.pts[k + 1]);
+    }
+  }
+  const nearAnchor = (x: number, y: number): boolean => {
+    const cx = (x / CELL) | 0;
+    const cy = (y / CELL) | 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const arr = anchor.get((cy + dy) * 8192 + (cx + dx));
+        if (!arr) continue;
+        for (let k = 0; k < arr.length; k += 2) {
+          const ddx = arr[k] - x;
+          const ddy = arr[k + 1] - y;
+          if (ddx * ddx + ddy * ddy <= GHOST_DIST * GHOST_DIST) return true;
         }
       }
     }
-  }
-  // 강한 안티에일리어싱: 실선 영역을 두 번 블러(≈가우시안 σ1.6)해 능선의 좌우 흔들림과
-  // 경계 톱니를 함께 녹인 뒤, smoothstep(0.42~0.58)으로 다시 세운다 — 곡선이 매끄럽게
-  // 둥글고 직선이 곧아진다(2026-07-21 3차: "아직 자글자글" 실측 대응). 굵기 ≈3px로 유지.
-  const sm = boxBlur(boxBlur(region, w, h, 1), w, h, 1);
-  // 임계를 높여(0.55~0.72) 블러로 부푼 선을 다시 얇게 침식 — 매끄러움(블러)은 유지하되
-  // 굵기는 ~5px로 되돌린다(굵기 하네스 ≤6px 준수).
-  const e0 = 0.55,
-    e1 = 0.72;
-  for (let i = 0; i < w * h; i++) {
-    let t = (sm[i] - e0) / (e1 - e0);
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    const a = t * t * (3 - 2 * t); // smoothstep
-    const v = Math.round(255 * (1 - a));
-    const p = i * 4;
-    o[p] = v;
-    o[p + 1] = v;
-    o[p + 2] = v;
-    o[p + 3] = 255;
-  }
-  // 가장자리 1px는 흰색으로
-  for (let i = 0, p = 3; i < gray.length; i++, p += 4) if (o[p] === 0) { o[p] = 255; o[p - 1] = o[p - 2] = o[p - 3] = 255; }
-  sctx.putImageData(out, 0, 0);
+    return false;
+  };
 
-  return canvasToBlob(src);
+  for (const poly of polys) {
+    const len = polyLength(poly.pts);
+    if (poly.closed) {
+      if (len < 16) continue; // 노이즈 고리
+    } else if (poly.endJunctions === 0) {
+      if (len < MIN_ISOLATED) continue;
+    } else if (poly.endJunctions === 1) {
+      if (len < MIN_SPUR) continue;
+    }
+    // 양끝이 접합부인 조각은 두 선을 잇는 구조 연결선 — 유령 판정 제외(지우면 선이 끊긴다)
+    if (len < GHOST_LEN && poly.endJunctions <= 1 && !poly.closed) {
+      // 접합부/끝점 부근(양끝 2점)은 어차피 본선과 가깝므로 판정에서 제외
+      const n = poly.pts.length / 2;
+      const from = n > 6 ? 2 : 0;
+      const to = n > 6 ? n - 2 : n;
+      let near = 0;
+      for (let k = from; k < to; k++) if (nearAnchor(poly.pts[k * 2], poly.pts[k * 2 + 1])) near++;
+      if (to > from && near / (to - from) >= 0.7) continue; // 긴 선의 유령 — 버림
+    } else if (len < GHOST_LEN && poly.closed) {
+      let near = 0;
+      const n = poly.pts.length / 2;
+      for (let k = 0; k < poly.pts.length; k += 2) if (nearAnchor(poly.pts[k], poly.pts[k + 1])) near++;
+      if (near / n >= 0.7) continue; // 긴 선에 붙은 작은 유령 고리
+    }
+    // 업스케일 렌더(K>1.5)는 검출 골격의 ±1px 지터가 K배 증폭돼 보인다 —
+    // 이동평균 1패스로 지터를 반감하고 DP 허용오차도 K에 비례해 키운다(캡 2배).
+    const pre = K > 1.5 ? smoothPts(poly.pts, poly.closed) : poly.pts;
+    const simp = simplifyDP(pre, 1.25 * Math.max(1, Math.min(2, K * 0.6)));
+    dctx.beginPath();
+    drawSmoothPath(dctx, simp, poly.closed, K);
+    dctx.stroke();
+  }
+  return canvasToBlob(dst);
 }
 
 function canvasToBlob(c: HTMLCanvasElement): Promise<Blob> {
@@ -317,6 +420,237 @@ function thinZhangSuen(m: Uint8Array, w: number, h: number): void {
       }
     }
   }
+}
+
+/* 8이웃 한 겹 팽창(in-place) — 3px 안짝 평행 이중 능선을 한 띠로 병합해
+ * 골격화가 단일 중심선을 내게 한다. */
+function dilate1(m: Uint8Array, w: number, h: number): void {
+  const src = m.slice();
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (src[i]) continue;
+      if (
+        src[i - w - 1] || src[i - w] || src[i - w + 1] || src[i - 1] ||
+        src[i + 1] || src[i + w - 1] || src[i + w] || src[i + w + 1]
+      )
+        m[i] = 1;
+    }
+  }
+}
+
+interface SkeletonPoly {
+  pts: number[]; // [x0,y0,x1,y1,…] 검출 좌표
+  closed: boolean;
+  endJunctions: number; // 열린 체인의 양끝 중 접합부(차수≥3)에 붙은 끝 수(0~2)
+}
+
+/* 1px 골격 → 폴리라인 추출. 노드(차수≠2)에서 출발해 차수-2 체인을 걷고,
+ * 남은 차수-2 픽셀은 순수 고리(원 등)로 추적한다.
+ * ⚠️ 전제조건(불변식): m의 최외곽 1px 테두리는 항상 0이어야 한다 — N8 오프셋이 1차원
+ * 배열이라 테두리에 값이 있으면 행 래핑으로 반대쪽 끝을 이웃으로 오인한다. 현재 파이프라인
+ * (NMS·히스테리시스·dilate1·thinZhangSuen)은 전부 [1,h-2]×[1,w-2] 내부만 쓰므로 성립.
+ * 업스트림 단계를 고칠 때 이 불변식을 깨지 말 것. */
+function traceSkeleton(m: Uint8Array, w: number, h: number): SkeletonPoly[] {
+  const N8 = [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1];
+  const deg = new Uint8Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (!m[i]) continue;
+      let d = 0;
+      for (const o of N8) if (m[i + o]) d++;
+      deg[i] = d;
+    }
+  }
+  const used = new Uint8Array(w * h); // 차수-2 체인 픽셀 소비 표시
+  const polys: SkeletonPoly[] = [];
+  const pushPt = (pts: number[], i: number) => {
+    pts.push(i % w, (i / w) | 0);
+  };
+
+  // 노드에서 출발하는 체인
+  for (let i = 0; i < m.length; i++) {
+    if (!m[i] || deg[i] === 2) continue;
+    for (const o of N8) {
+      const nb = i + o;
+      if (!m[nb]) continue;
+      if (deg[nb] !== 2) {
+        // 노드-노드 직결 세그먼트(중복 방지: 작은 인덱스에서만)
+        if (i < nb) {
+          const pts: number[] = [];
+          pushPt(pts, i);
+          pushPt(pts, nb);
+          polys.push({ pts, closed: false, endJunctions: (deg[i] >= 3 ? 1 : 0) + (deg[nb] >= 3 ? 1 : 0) });
+        }
+        continue;
+      }
+      if (used[nb]) continue;
+      const pts: number[] = [];
+      pushPt(pts, i);
+      let prev = i;
+      let cur = nb;
+      used[cur] = 1;
+      pushPt(pts, cur);
+      for (;;) {
+        let next = -1;
+        for (const o2 of N8) {
+          const c = cur + o2;
+          if (!m[c] || c === prev) continue;
+          if (deg[c] === 2 && used[c]) continue;
+          next = c;
+          break;
+        }
+        if (next < 0) break; // 막다른 끝(끊긴 체인)
+        pushPt(pts, next);
+        if (deg[next] !== 2) break; // 반대쪽 노드 도달
+        used[next] = 1;
+        prev = cur;
+        cur = next;
+      }
+      const lastI = pts[pts.length - 2] + pts[pts.length - 1] * w;
+      polys.push({
+        pts,
+        closed: false,
+        endJunctions: (deg[i] >= 3 ? 1 : 0) + (deg[lastI] >= 3 ? 1 : 0),
+      });
+    }
+  }
+
+  // 남은 차수-2 픽셀 = 순수 고리(닫힌 곡선)
+  for (let s = 0; s < m.length; s++) {
+    if (!m[s] || deg[s] !== 2 || used[s]) continue;
+    const pts: number[] = [];
+    pushPt(pts, s);
+    used[s] = 1;
+    let prev = s;
+    let cur = -1;
+    for (const o of N8) {
+      if (m[s + o] && deg[s + o] === 2) {
+        cur = s + o;
+        break;
+      }
+    }
+    if (cur < 0) continue;
+    while (cur !== s && cur >= 0) {
+      used[cur] = 1;
+      pushPt(pts, cur);
+      let next = -1;
+      for (const o of N8) {
+        const c = cur + o;
+        if (!m[c] || c === prev || deg[c] !== 2) continue;
+        if (used[c] && c !== s) continue;
+        if (c === s && pts.length < 6) continue; // 3픽셀 미만 되돌이 방지
+        next = c;
+        break;
+      }
+      prev = cur;
+      cur = next;
+    }
+    if (cur === s && pts.length >= 6) polys.push({ pts, closed: true, endJunctions: 0 });
+    // 막다른 길(8연결 모호점)로 고리가 안 닫히면 곡선을 버리지 말고 열린 체인으로 살린다.
+    // (둘 다 못 미치는 3~7점짜리 초소형 조각은 여기서 조용히 버려지는데, 어차피 아래
+    //  노이즈 필터 임계(닫힌 고리 <16px·고립 <12px)보다 작아 시각적 손실은 없다 — 의도적 허용.)
+    else if (cur < 0 && pts.length >= 8) polys.push({ pts, closed: false, endJunctions: 0 });
+  }
+  return polys;
+}
+
+/* 폴리라인 이동평균(1-2-1 가중) — 골격 계단 지터를 반감. 열린 체인은 양 끝점 고정. */
+function smoothPts(pts: number[], closed: boolean): number[] {
+  const n = pts.length / 2;
+  if (n < 3) return pts;
+  const out = new Array(pts.length);
+  for (let i = 0; i < n; i++) {
+    if (!closed && (i === 0 || i === n - 1)) {
+      out[i * 2] = pts[i * 2];
+      out[i * 2 + 1] = pts[i * 2 + 1];
+      continue;
+    }
+    const p = (i - 1 + n) % n;
+    const q = (i + 1) % n;
+    out[i * 2] = (pts[p * 2] + 2 * pts[i * 2] + pts[q * 2]) / 4;
+    out[i * 2 + 1] = (pts[p * 2 + 1] + 2 * pts[i * 2 + 1] + pts[q * 2 + 1]) / 4;
+  }
+  return out;
+}
+
+function polyLength(pts: number[]): number {
+  let L = 0;
+  for (let k = 2; k < pts.length; k += 2) L += Math.hypot(pts[k] - pts[k - 2], pts[k + 1] - pts[k - 1]);
+  return L;
+}
+
+/* Douglas-Peucker 단순화 — 골격의 1px 계단(지그재그)을 직선·완만한 꺾임으로 정리.
+ * eps≈1.25px: 계단 진폭(±0.5~1px)은 지우고 실제 곡률은 보존. */
+function simplifyDP(pts: number[], eps: number): number[] {
+  const n = pts.length / 2;
+  if (n <= 2) return pts;
+  const keep = new Uint8Array(n);
+  keep[0] = keep[n - 1] = 1;
+  const stack: [number, number][] = [[0, n - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    if (b - a < 2) continue;
+    const ax = pts[a * 2], ay = pts[a * 2 + 1];
+    const bx = pts[b * 2], by = pts[b * 2 + 1];
+    const dx = bx - ax, dy = by - ay;
+    const len = Math.hypot(dx, dy) || 1;
+    let maxD = -1;
+    let maxI = -1;
+    for (let i = a + 1; i < b; i++) {
+      const d = Math.abs((pts[i * 2] - ax) * dy - (pts[i * 2 + 1] - ay) * dx) / len;
+      if (d > maxD) {
+        maxD = d;
+        maxI = i;
+      }
+    }
+    if (maxD > eps) {
+      keep[maxI] = 1;
+      stack.push([a, maxI], [maxI, b]);
+    }
+  }
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) if (keep[i]) out.push(pts[i * 2], pts[i * 2 + 1]);
+  return out;
+}
+
+/* 단순화된 꼭짓점을 2차 곡선(중점 통과)으로 이어 그린다 — 꺾임이 둥글게 펴진다.
+ * K = 검출→출력 좌표 배율(픽셀 중심 +0.5 보정). */
+function drawSmoothPath(
+  ctx: CanvasRenderingContext2D,
+  pts: number[],
+  closed: boolean,
+  K: number,
+): void {
+  const n = pts.length / 2;
+  const X = (i: number) => (pts[i * 2] + 0.5) * K;
+  const Y = (i: number) => (pts[i * 2 + 1] + 0.5) * K;
+  if (n === 1) {
+    ctx.moveTo(X(0), Y(0));
+    ctx.lineTo(X(0), Y(0));
+    return;
+  }
+  if (n === 2) {
+    ctx.moveTo(X(0), Y(0));
+    ctx.lineTo(X(1), Y(1));
+    return;
+  }
+  if (closed) {
+    ctx.moveTo((X(0) + X(1)) / 2, (Y(0) + Y(1)) / 2);
+    for (let i = 1; i <= n; i++) {
+      const c = i % n;
+      const nx = (i + 1) % n;
+      ctx.quadraticCurveTo(X(c), Y(c), (X(c) + X(nx)) / 2, (Y(c) + Y(nx)) / 2);
+    }
+    ctx.closePath();
+    return;
+  }
+  ctx.moveTo(X(0), Y(0));
+  for (let i = 1; i < n - 1; i++) {
+    ctx.quadraticCurveTo(X(i), Y(i), (X(i) + X(i + 1)) / 2, (Y(i) + Y(i + 1)) / 2);
+  }
+  ctx.lineTo(X(n - 1), Y(n - 1));
 }
 
 function boxBlur(src: Float32Array, w: number, h: number, r: number): Float32Array {
