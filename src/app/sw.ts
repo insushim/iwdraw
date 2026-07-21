@@ -15,14 +15,16 @@ declare global {
 declare const self: ServiceWorkerGlobalScope;
 
 const TEMPLATE_MANIFEST_URL = "/templates/manifest.json";
+const VERSION_URL = "/version.json";
 
-// ⚠️ 도안 목록(manifest.json)은 precache에서 제외한다(2026-07-21).
-// precache에 넣으면 배포 후에도 옛 SW가 옛 목록을 계속 서빙 → 명화/도안을 새로 추가해도
-// "그대로"로 보이고 새로고침을 두 번 해야 갱신됐다(사용자 실측: 명화 82종 배포했는데 안 보임).
-// 아래 NetworkFirst 라우트로 온라인이면 항상 최신, 오프라인이면 마지막 캐시로 폴백.
+// ⚠️ 도안 목록(manifest.json)·버전표식(version.json)은 precache에서 제외한다(2026-07-21).
+// precache에 넣으면 배포 후에도 옛 SW가 옛 파일을 계속 서빙 → ① 명화/도안을 새로 추가해도
+// "그대로"(사용자 실측: 명화 82종 배포했는데 안 보임) ② version.json이 옛 빌드ID를 줘서
+// 낡은 코드 자가치유(layout 인라인)가 영영 안 터짐. 아래 NetworkFirst로 온라인=항상 최신,
+// 오프라인=마지막 캐시 폴백.
 const precacheEntries = (self.__SW_MANIFEST ?? []).filter((e) => {
   const url = typeof e === "string" ? e : e.url;
-  return !url.includes(TEMPLATE_MANIFEST_URL);
+  return !url.includes(TEMPLATE_MANIFEST_URL) && !url.includes(VERSION_URL);
 });
 
 const serwist = new Serwist({
@@ -37,6 +39,15 @@ const serwist = new Serwist({
         sameOrigin && url.pathname === TEMPLATE_MANIFEST_URL,
       handler: new NetworkFirst({
         cacheName: "template-manifest",
+        networkTimeoutSeconds: 4,
+        plugins: [new ExpirationPlugin({ maxEntries: 2, maxAgeSeconds: 86400 })],
+      }),
+    },
+    {
+      // 버전표식도 항상 네트워크 우선 — 낡은 코드 자가치유가 최신 빌드ID를 봐야 한다
+      matcher: ({ url, sameOrigin }) => sameOrigin && url.pathname === VERSION_URL,
+      handler: new NetworkFirst({
+        cacheName: "app-version",
         networkTimeoutSeconds: 4,
         plugins: [new ExpirationPlugin({ maxEntries: 2, maxAgeSeconds: 86400 })],
       }),

@@ -11,8 +11,8 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "cf:dev": "NEXT_PUBLIC_HAS_BACKEND=1 wrangler dev",
-    "cf:build": "NEXT_PUBLIC_HAS_BACKEND=1 next build",
-    "cf:deploy": "NEXT_PUBLIC_HAS_BACKEND=1 next build && wrangler deploy",
+    "cf:build": "export NEXT_PUBLIC_BUILD_ID=$(date +%s) && node scripts/gen-version.mjs && NEXT_PUBLIC_HAS_BACKEND=1 next build",
+    "cf:deploy": "export NEXT_PUBLIC_BUILD_ID=$(date +%s) && node scripts/gen-version.mjs && NEXT_PUBLIC_HAS_BACKEND=1 next build && wrangler deploy",
     "cf:migrate:local": "wrangler d1 execute arton --local --file=worker/schema.sql",
     "cf:migrate:remote": "wrangler d1 execute arton --remote --file=worker/schema.sql"
   },
