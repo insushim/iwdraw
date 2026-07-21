@@ -5,6 +5,11 @@
   "outputDirectory": "public",
   "redirects": [
     {
+      "source": "/",
+      "destination": "https://arton.simssijjang.workers.dev/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "destination": "https://arton.simssijjang.workers.dev/:path*",
       "permanent": true
