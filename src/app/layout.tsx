@@ -124,6 +124,17 @@ export default function RootLayout({
     if(m.indexOf("ChunkLoadError")>=0||/Loading (chunk|CSS chunk)|dynamically imported module/i.test(m))heal();
   });
   if(tries()>2){screen(true);return}
+  // 배포 자동 반영 — 새 SW가 제어권을 잡으면(새 버전 활성화) 1회 새로고침해 새 앱 코드를 로드.
+  //   precache된 옛 JS 청크는 강력새로고침으로도 안 지워져 "고쳤는데 그대로"가 반복됐다
+  //   (2026-07-21 실측: 선따기 개선이 배포됐는데 옛 코드가 계속 서빙). skipWaiting+clientsClaim로
+  //   활성화된 새 SW가 controllerchange를 쏘면 그때 새로고침. 첫 등록(제어자 없음→claim)은 제외.
+  try{if(navigator.serviceWorker){
+    var hadCtrl=!!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange",function(){
+      if(window.__artonSwReloaded||!hadCtrl)return;
+      window.__artonSwReloaded=1;location.reload();
+    });
+  }}catch(e){}
   window.__artonBootSlow=setTimeout(function(){screen(false)},3500); // 흰 화면 대신 안내
   window.__artonBoot=setTimeout(heal,8000);
 })();`,
