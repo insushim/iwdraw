@@ -136,9 +136,27 @@ export async function photoToLineart(
     for (const poly of graphicPolys) {
       // 잔부스러기 필터 — 단 양끝이 교차점에 붙은 이음새 체인은 짧아도 지우면 구멍이 난다
       if (poly.endJunctions < 2 && polyLength(poly.pts) < 8 * up) continue;
-      // 격자 계단 → 이동평균 2패스로 녹인 뒤 DP·2차 곡선 스무딩(공유 인프라)
-      const pre = smoothPts(smoothPts(poly.pts, poly.closed), poly.closed);
-      const simp = simplifyDP(pre, 1.1 * Math.max(1, Math.min(2, K * 0.6)));
+      // 작은 닫힌 고리(글자 속 구멍: ㅁ·ㅂ의 속, ㅐ의 틈)는 기본 굵기(4.5px)가 안쪽 흰
+      // 공간을 삼켜 뭉개 보인다('쁨'의 ㅁ 실측) — 가는 선(3px)으로 긋고 스무딩도 1패스만
+      // 해서 모양·구멍을 지킨다. 큰 윤곽은 기존 그대로.
+      let bw = 0, bh = 0;
+      if (poly.closed) {
+        let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+        for (let k = 0; k < poly.pts.length; k += 2) {
+          if (poly.pts[k] < minx) minx = poly.pts[k];
+          if (poly.pts[k] > maxx) maxx = poly.pts[k];
+          if (poly.pts[k + 1] < miny) miny = poly.pts[k + 1];
+          if (poly.pts[k + 1] > maxy) maxy = poly.pts[k + 1];
+        }
+        bw = (maxx - minx) * K;
+        bh = (maxy - miny) * K;
+      }
+      const smallLoop = poly.closed && Math.max(bw, bh) < 36; // 출력px 기준(ㅁ 속·ㅐ 틈 포켓까지, 글자 획 윤곽 60px+는 미해당)
+      const pre = smallLoop
+        ? smoothPts(poly.pts, true)
+        : smoothPts(smoothPts(poly.pts, poly.closed), poly.closed);
+      const simp = simplifyDP(pre, (smallLoop ? 0.8 : 1.1) * Math.max(1, Math.min(2, K * 0.6)));
+      dctx.lineWidth = smallLoop ? 3 : 4.5;
       dctx.beginPath();
       drawSmoothPath(dctx, simp, poly.closed, K);
       dctx.stroke();
