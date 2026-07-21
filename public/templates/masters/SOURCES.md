@@ -87,3 +87,43 @@
 | masters_*_bird_flower.webp | 화조도(민화) | 작자 미상(조선 민화)(†1800) | https://commons.wikimedia.org/wiki/File:Korean_folk_painting_bird_flower.jpg |
 | masters_*_chaekgeori.webp | 책가도(민화) | 작자 미상(조선 민화)(†1800) | https://commons.wikimedia.org/wiki/File:Chaekgeori.jpg |
 | masters_*_juksan.webp | 묵죽도 | 이정(†1626) | https://commons.wikimedia.org/wiki/File:Yi_Jeong-Bamboo.jpg |
+| masters_*_olive_trees.webp | 올리브 나무 | 빈센트 반 고흐(†1890) | https://commons.wikimedia.org/wiki/File:Vincent_van_Gogh_-_Olive_Trees_-_Google_Art_Project.jpg |
+| masters_*_red_vineyard.webp | 아를의 붉은 포도밭 | 빈센트 반 고흐(†1890) | https://commons.wikimedia.org/wiki/File:Red_vineyards.jpg |
+| masters_*_green_wheat.webp | 초록 밀밭 | 빈센트 반 고흐(†1890) | https://commons.wikimedia.org/wiki/File:Vincent_van_Gogh_-_Green_Wheat_Fields,_Auvers.jpg |
+| masters_*_fishing_boats.webp | 생트마리의 고깃배 | 빈센트 반 고흐(†1890) | https://commons.wikimedia.org/wiki/File:Fishing_Boats_on_the_Beach_at_Saintes-Maries.jpg |
+| masters_*_poppies.webp | 개양귀비 들판 | 클로드 모네(†1926) | https://commons.wikimedia.org/wiki/File:Claude_Monet_024.jpg |
+| masters_*_parliament.webp | 국회의사당 | 클로드 모네(†1926) | https://commons.wikimedia.org/wiki/File:Claude_Monet_-_The_Houses_of_Parliament,_Sunset.jpg |
+| masters_*_artist_garden_giverny.webp | 지베르니의 화가 정원 | 클로드 모네(†1926) | https://commons.wikimedia.org/wiki/File:Claude_Monet_-_The_Artist's_Garden_at_Giverny.jpg |
+| masters_*_saint_lazare.webp | 생라자르 역 | 클로드 모네(†1926) | https://commons.wikimedia.org/wiki/File:Claude_Monet_-_Arrival_of_the_Normandy_Train,_Gare_Saint-Lazare.jpg |
+| masters_*_dance_bougival.webp | 부지발의 무도회 | 오귀스트 르누아르(†1919) | https://commons.wikimedia.org/wiki/File:Pierre-Auguste_Renoir,_Dance_at_Bougival.jpg |
+| masters_*_rehearsal.webp | 무용 리허설 | 에드가 드가(†1917) | https://commons.wikimedia.org/wiki/File:Edgar_Degas_-_The_Rehearsal_-_Google_Art_Project.jpg |
+| masters_*_basket_apples.webp | 사과 바구니 | 폴 세잔(†1906) | https://commons.wikimedia.org/wiki/File:Paul_Cézanne_-_The_Basket_of_Apples_-_Google_Art_Project.jpg |
+| masters_*_adele.webp | 아델레 블로흐바우어의 초상 | 구스타프 클림트(†1918) | https://commons.wikimedia.org/wiki/File:Gustav_Klimt_046.jpg |
+| masters_*_geographer.webp | 지리학자 | 요하네스 베르메르(†1675) | https://commons.wikimedia.org/wiki/File:Johannes_Vermeer_-_The_Geographer_-_Google_Art_Project.jpg |
+| masters_*_view_delft.webp | 델프트 풍경 | 요하네스 베르메르(†1675) | https://commons.wikimedia.org/wiki/File:Vermeer-view-of-delft.jpg |
+| masters_*_little_street.webp | 골목길 | 요하네스 베르메르(†1675) | https://commons.wikimedia.org/wiki/File:Johannes_Vermeer_-_Gezicht_op_huizen_in_Delft,_bekend_als_'Het_straatje'_-_Google_Art_Project.jpg |
+| masters_*_rembrandt_self.webp | 렘브란트 자화상 | 렘브란트(†1669) | https://commons.wikimedia.org/wiki/File:Rembrandt_van_Rijn_-_Self-Portrait_-_Google_Art_Project.jpg |
+| masters_*_fighting_temeraire.webp | 전함 테메레르 | 윌리엄 터너(†1851) | https://commons.wikimedia.org/wiki/File:The_Fighting_Temeraire,_JMW_Turner,_National_Gallery.jpg |
+| masters_*_meninas.webp | 시녀들 | 디에고 벨라스케스(†1660) | https://commons.wikimedia.org/wiki/File:Las_Meninas,_by_Diego_Velázquez,_from_Prado_in_Google_Earth.jpg |
+| masters_*_harvesters.webp | 추수하는 사람들 | 피터르 브뤼헐(†1569) | https://commons.wikimedia.org/wiki/File:Pieter_Bruegel_the_Elder-_The_Harvesters_-_Google_Art_Project.jpg |
+| masters_*_netherlandish_proverbs.webp | 네덜란드 속담 | 피터르 브뤼헐(†1569) | https://commons.wikimedia.org/wiki/File:Pieter_Brueghel_the_Elder_-_The_Dutch_Proverbs_-_Google_Art_Project.jpg |
+| masters_*_durer_hare.webp | 산토끼 | 알브레히트 뒤러(†1528) | https://commons.wikimedia.org/wiki/File:Dürer_-_Young_Hare.jpg |
+| masters_*_arcimboldo.webp | 베르툼누스(과일 얼굴) | 주세페 아르침볼도(†1593) | https://commons.wikimedia.org/wiki/File:Giuseppe_Arcimboldo_-_Vertumnus_-_Google_Art_Project.jpg |
+| masters_*_whistlejacket.webp | 휘슬재킷(말) | 조지 스터브스(†1806) | https://commons.wikimedia.org/wiki/File:Whistlejacket_by_George_Stubbs.jpg |
+| masters_*_blue_horses.webp | 푸른 말들 | 프란츠 마르크(†1916) | https://commons.wikimedia.org/wiki/File:The_Large_Blue_Horses.jpg |
+| masters_*_kandinsky_yrb.webp | 노랑·빨강·파랑 | 바실리 칸딘스키(†1944) | https://commons.wikimedia.org/wiki/File:Vassily_Kandinsky,_1925_-_Yellow-Red-Blue.jpg |
+| masters_*_klee_castle_sun.webp | 성과 태양 | 파울 클레(†1940) | https://commons.wikimedia.org/wiki/File:Paul_Klee_-_Castle_and_Sun.jpg |
+| masters_*_rousseau_tiger.webp | 놀란!(열대 폭풍 속 호랑이) | 앙리 루소(†1910) | https://commons.wikimedia.org/wiki/File:Henri_Rousseau_-_Tiger_in_a_Tropical_Storm_(Surprised!)_-_Google_Art_Project.jpg |
+| masters_*_rousseau_gypsy.webp | 잠자는 집시 | 앙리 루소(†1910) | https://commons.wikimedia.org/wiki/File:Henri_Rousseau_-_The_Sleeping_Gypsy_-_Google_Art_Project.jpg |
+| masters_*_munch_bridge.webp | 다리 위의 소녀들 | 에드바르 뭉크(†1944) | https://commons.wikimedia.org/wiki/File:Edvard_Munch_-_The_Girls_on_the_Bridge.jpg |
+| masters_*_carnation_lily.webp | 카네이션, 백합, 백합, 장미 | 존 싱어 사전트(†1925) | https://commons.wikimedia.org/wiki/File:John_Singer_Sargent_-_Carnation,_Lily,_Lily,_Rose_-_Google_Art_Project.jpg |
+| masters_*_cassatt_boating.webp | 뱃놀이 일행 | 메리 커샛(†1926) | https://commons.wikimedia.org/wiki/File:Mary_Cassatt_-_The_Boating_Party_-_Google_Art_Project.jpg |
+| masters_*_snap_whip.webp | 채찍놀이 | 윈슬로 호머(†1910) | https://commons.wikimedia.org/wiki/File:Winslow_Homer_-_Snap_the_Whip_-_Google_Art_Project.jpg |
+| masters_*_hokusai_waterfall.webp | 기리후리 폭포 | 가쓰시카 호쿠사이(†1849) | https://commons.wikimedia.org/wiki/File:Kirifuri_Waterfall_at_Kurokami_Mountain_in_Shimotsuke.jpg |
+| masters_*_hiroshige_saruwaka.webp | 밤의 사루와카초 | 우타가와 히로시게(†1858) | https://commons.wikimedia.org/wiki/File:Hiroshige_Saruwaka-machi.jpg |
+| masters_*_wind_thunder.webp | 바람신과 천둥신 | 다와라야 소타쓰(†1643) | https://commons.wikimedia.org/wiki/File:Fujin_and_Raijin_by_Tawaraya_Sotatsu.jpg |
+| masters_*_pine_trees.webp | 송림도(소나무 병풍) | 하세가와 도하쿠(†1610) | https://commons.wikimedia.org/wiki/File:Pine_Trees_(Shōrin-zu_byōbu)_by_Hasegawa_Tōhaku.jpg |
+| masters_*_miindo.webp | 미인도 | 신윤복(†1813) | https://commons.wikimedia.org/wiki/File:Hyewon-Miindo.jpg |
+| masters_*_kim_threshing.webp | 타작 | 김홍도(†1806) | https://commons.wikimedia.org/wiki/File:Danwon_Tajak.jpg |
+| masters_*_chochungdo.webp | 초충도(풀과 벌레) | 신사임당(†1551) | https://commons.wikimedia.org/wiki/File:Chochungdo_06.jpg |
+| masters_*_pajeokdo.webp | 파적도(야묘도추·들고양이) | 김득신(†1822) | https://commons.wikimedia.org/wiki/File:Kim_Deuksin_-_Pajeokdo.jpg |

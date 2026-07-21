@@ -132,8 +132,59 @@ PAINTINGS = [
     ("hiroshige_plum", "가메이도의 매화 정원", "우타가와 히로시게", 1858, ["Hiroshige Plum Park in Kameido.jpg", "Hiroshige Plum Garden Kameido"]),
     ("bird_flower", "화조도(민화)", "작자 미상(조선 민화)", 1800, ["Korean folk painting bird flower.jpg", "Minhwa hwajodo bird flower Korea"]),
     ("chaekgeori", "책가도(민화)", "작자 미상(조선 민화)", 1800, ["Chaekgeori.jpg", "Chaekgeori books scholar painting"]),
-    ("kim_deukshin", "야묘도추(들고양이)", "김득신", 1822, ["Kim Deuk-sin-Yamyodochu.jpg", "Yamyodochu Kim Deuksin"]),
     ("juksan", "묵죽도", "이정", 1626, ["Yi Jeong-Bamboo.jpg", "Korean ink bamboo painting Joseon"]),
+    # ── 2026-07-21 대폭 확장(최대한 많이) — 전원 작가 사후 70년+ PD, 초등 교실 적합 육안 기준 ──
+    # 반 고흐(1890)
+    ("olive_trees", "올리브 나무", "빈센트 반 고흐", 1890, ["Vincent van Gogh - Olive Trees - Google Art Project.jpg", "Van Gogh Olive Trees"]),
+    ("red_vineyard", "아를의 붉은 포도밭", "빈센트 반 고흐", 1890, ["Red vineyards.jpg", "Van Gogh The Red Vineyard"]),
+    ("green_wheat", "초록 밀밭", "빈센트 반 고흐", 1890, ["Vincent van Gogh - Green Wheat Fields, Auvers.jpg", "Van Gogh Green Wheat Fields Auvers"]),
+    ("fishing_boats", "생트마리의 고깃배", "빈센트 반 고흐", 1890, ["Fishing Boats on the Beach at Saintes-Maries.jpg", "Van Gogh Fishing Boats Saintes-Maries"]),
+    # 모네(1926)
+    ("poppies", "개양귀비 들판", "클로드 모네", 1926, ["Claude Monet 024.jpg", "Monet Poppy Field Argenteuil"]),
+    ("parliament", "국회의사당", "클로드 모네", 1926, ["Claude Monet - The Houses of Parliament, Sunset.jpg", "Monet Houses of Parliament Sunset"]),
+    ("artist_garden_giverny", "지베르니의 화가 정원", "클로드 모네", 1926, ["Claude Monet - The Artist's Garden at Giverny.jpg", "Monet Artist's Garden Giverny"]),
+    ("saint_lazare", "생라자르 역", "클로드 모네", 1926, ["Claude Monet - Arrival of the Normandy Train, Gare Saint-Lazare.jpg", "Monet Gare Saint-Lazare"]),
+    # 르누아르·드가·세잔
+    ("dance_bougival", "부지발의 무도회", "오귀스트 르누아르", 1919, ["Pierre-Auguste Renoir, Dance at Bougival.jpg", "Renoir Dance at Bougival"]),
+    ("rehearsal", "무용 리허설", "에드가 드가", 1917, ["Edgar Degas - The Rehearsal - Google Art Project.jpg", "Degas The Rehearsal"]),
+    ("basket_apples", "사과 바구니", "폴 세잔", 1906, ["Paul Cézanne - The Basket of Apples - Google Art Project.jpg", "Cezanne The Basket of Apples"]),
+    # 클림트(1918)
+    ("adele", "아델레 블로흐바우어의 초상", "구스타프 클림트", 1918, ["Gustav Klimt 046.jpg", "Adele Bloch-Bauer I Klimt"]),
+    # 베르메르(1675)
+    ("geographer", "지리학자", "요하네스 베르메르", 1675, ["Johannes Vermeer - The Geographer - Google Art Project.jpg", "Vermeer The Geographer"]),
+    ("view_delft", "델프트 풍경", "요하네스 베르메르", 1675, ["Vermeer-view-of-delft.jpg", "Vermeer View of Delft"]),
+    ("little_street", "골목길", "요하네스 베르메르", 1675, ["Johannes Vermeer - Gezicht op huizen in Delft, bekend als 'Het straatje' - Google Art Project.jpg", "Vermeer The Little Street"]),
+    # 렘브란트·터너·벨라스케스
+    ("rembrandt_self", "렘브란트 자화상", "렘브란트", 1669, ["Rembrandt van Rijn - Self-Portrait - Google Art Project.jpg", "Rembrandt Self-Portrait 1659"]),
+    ("fighting_temeraire", "전함 테메레르", "윌리엄 터너", 1851, ["The Fighting Temeraire, JMW Turner, National Gallery.jpg", "Turner Fighting Temeraire"]),
+    ("meninas", "시녀들", "디에고 벨라스케스", 1660, ["Las Meninas, by Diego Velázquez, from Prado in Google Earth.jpg", "Las Meninas Velazquez"]),
+    # 브뤼헐·보티첼리·뒤러·아르침볼도
+    ("harvesters", "추수하는 사람들", "피터르 브뤼헐", 1569, ["Pieter Bruegel the Elder- The Harvesters - Google Art Project.jpg", "Bruegel The Harvesters"]),
+    ("netherlandish_proverbs", "네덜란드 속담", "피터르 브뤼헐", 1569, ["Pieter Brueghel the Elder - The Dutch Proverbs - Google Art Project.jpg", "Bruegel Netherlandish Proverbs"]),
+    ("durer_hare", "산토끼", "알브레히트 뒤러", 1528, ["Dürer - Young Hare.jpg", "Durer Young Hare"]),
+    ("arcimboldo", "베르툼누스(과일 얼굴)", "주세페 아르침볼도", 1593, ["Giuseppe Arcimboldo - Vertumnus - Google Art Project.jpg", "Arcimboldo Vertumnus"]),
+    ("whistlejacket", "휘슬재킷(말)", "조지 스터브스", 1806, ["Whistlejacket by George Stubbs.jpg", "Stubbs Whistlejacket"]),
+    # 20세기 초 색채·나이브(아동 친화)
+    ("blue_horses", "푸른 말들", "프란츠 마르크", 1916, ["The Large Blue Horses.jpg", "Franz Marc Large Blue Horses"]),
+    ("kandinsky_yrb", "노랑·빨강·파랑", "바실리 칸딘스키", 1944, ["Vassily Kandinsky, 1925 - Yellow-Red-Blue.jpg", "Kandinsky Yellow Red Blue"]),
+    ("klee_castle_sun", "성과 태양", "파울 클레", 1940, ["Paul Klee - Castle and Sun.jpg", "Klee Castle and Sun"]),
+    ("rousseau_tiger", "놀란!(열대 폭풍 속 호랑이)", "앙리 루소", 1910, ["Henri Rousseau - Tiger in a Tropical Storm (Surprised!) - Google Art Project.jpg", "Rousseau Surprised Tiger"]),
+    ("rousseau_gypsy", "잠자는 집시", "앙리 루소", 1910, ["Henri Rousseau - The Sleeping Gypsy - Google Art Project.jpg", "Rousseau Sleeping Gypsy"]),
+    ("munch_bridge", "다리 위의 소녀들", "에드바르 뭉크", 1944, ["Edvard Munch - The Girls on the Bridge.jpg", "Munch Girls on the Bridge"]),
+    # 미국·인상주의(가족·아이 소재, 아동 친화)
+    ("carnation_lily", "카네이션, 백합, 백합, 장미", "존 싱어 사전트", 1925, ["John Singer Sargent - Carnation, Lily, Lily, Rose - Google Art Project.jpg", "Sargent Carnation Lily Lily Rose"]),
+    ("cassatt_boating", "뱃놀이 일행", "메리 커샛", 1926, ["Mary Cassatt - The Boating Party - Google Art Project.jpg", "Cassatt The Boating Party"]),
+    ("snap_whip", "채찍놀이", "윈슬로 호머", 1910, ["Winslow Homer - Snap the Whip - Google Art Project.jpg", "Homer Snap the Whip"]),
+    # 동아시아 추가
+    ("hokusai_waterfall", "기리후리 폭포", "가쓰시카 호쿠사이", 1849, ["Kirifuri Waterfall at Kurokami Mountain in Shimotsuke.jpg", "Hokusai Kirifuri Waterfall"]),
+    ("hiroshige_saruwaka", "밤의 사루와카초", "우타가와 히로시게", 1858, ["Hiroshige Saruwaka-machi.jpg", "Hiroshige Night View Saruwaka-machi"]),
+    ("wind_thunder", "바람신과 천둥신", "다와라야 소타쓰", 1643, ["Fujin and Raijin by Tawaraya Sotatsu.jpg", "Wind God and Thunder God Sotatsu"]),
+    ("pine_trees", "송림도(소나무 병풍)", "하세가와 도하쿠", 1610, ["Pine Trees (Shōrin-zu byōbu) by Hasegawa Tōhaku.jpg", "Hasegawa Tohaku Pine Trees"]),
+    # 한국 추가
+    ("miindo", "미인도", "신윤복", 1813, ["Hyewon-Miindo.jpg", "Hyewon, Miindo 2.jpg"]),
+    ("kim_threshing", "타작", "김홍도", 1806, ["Danwon Tajak.jpg", "Kim Hongdo threshing Danwon"]),
+    ("chochungdo", "초충도(풀과 벌레)", "신사임당", 1551, ["Chochungdo 06.jpg", "Chochungdo 04.jpg"]),
+    ("pajeokdo", "파적도(야묘도추·들고양이)", "김득신", 1822, ["Kim Deuksin - Pajeokdo.jpg", "Kim Deuk-sin Pajeokdo"]),
 ]
 
 
@@ -233,22 +284,27 @@ def main() -> None:
         if not download(fnames, src):
             print(f"skip (다운로드 실패): {slug} — {fnames[0]}", file=sys.stderr)
             continue
-        canvas, rect = fit_on_canvas(Image.open(src))
+        # 대량 처리 중 한 장이 깨져도(손상 이미지·이형 포맷) 전체 run이 죽지 않게 격리한다.
+        try:
+            canvas, rect = fit_on_canvas(Image.open(src))
 
-        # 따라 그리기: 전체를 적응형 농도로(대비 목표 기준 — 그림마다 알파가 다르다)
-        trace, a_t = faint_adaptive(canvas, TARGET_STD_TRACE)
-        save_webp(trace, OUT_DIR / f"masters_trace_{slug}.webp")
+            # 따라 그리기: 전체를 적응형 농도로(대비 목표 기준 — 그림마다 알파가 다르다)
+            trace, a_t = faint_adaptive(canvas, TARGET_STD_TRACE)
+            save_webp(trace, OUT_DIR / f"masters_trace_{slug}.webp")
 
-        # 1/4 완성하기: 옅은 전체 + 좌상단 1/4 원본 + 십자 가이드(그림 rect 기준)
-        q, a_q = faint_adaptive(canvas, TARGET_STD_QUARTER)
-        x0, y0, x1, y1 = rect
-        cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
-        q.paste(canvas.crop((x0, y0, cx, cy)), (x0, y0))
-        d = ImageDraw.Draw(q)
-        g = (GUIDE_GRAY,) * 3
-        d.line([(x0, cy), (x1, cy)], fill=g, width=3)
-        d.line([(cx, y0), (cx, y1)], fill=g, width=3)
-        save_webp(q, OUT_DIR / f"masters_quarter_{slug}.webp")
+            # 1/4 완성하기: 옅은 전체 + 좌상단 1/4 원본 + 십자 가이드(그림 rect 기준)
+            q, a_q = faint_adaptive(canvas, TARGET_STD_QUARTER)
+            x0, y0, x1, y1 = rect
+            cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+            q.paste(canvas.crop((x0, y0, cx, cy)), (x0, y0))
+            d = ImageDraw.Draw(q)
+            g = (GUIDE_GRAY,) * 3
+            d.line([(x0, cy), (x1, cy)], fill=g, width=3)
+            d.line([(cx, y0), (cx, y1)], fill=g, width=3)
+            save_webp(q, OUT_DIR / f"masters_quarter_{slug}.webp")
+        except Exception as e:  # noqa: BLE001 — 손상 이미지 격리, 다음 그림 계속
+            print(f"skip (처리 실패): {slug} — {e}", file=sys.stderr)
+            continue
 
         ok_list.append((slug, title, artist, died, fnames[0]))
         print(f"ok: {slug} ({title}) — trace α={a_t:.2f} quarter α={a_q:.2f}")

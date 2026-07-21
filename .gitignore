@@ -49,3 +49,4 @@ public/sw.js.map
 .wrangler/
 out/
 test-results/
+.masters-work/

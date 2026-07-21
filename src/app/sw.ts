@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { Serwist } from "serwist";
+import { Serwist, NetworkFirst, ExpirationPlugin } from "serwist";
 
 /*
  * Serwist 서비스 워커(next-pwa 후계). App Router 호환.
@@ -14,12 +14,35 @@ declare global {
 }
 declare const self: ServiceWorkerGlobalScope;
 
+const TEMPLATE_MANIFEST_URL = "/templates/manifest.json";
+
+// ⚠️ 도안 목록(manifest.json)은 precache에서 제외한다(2026-07-21).
+// precache에 넣으면 배포 후에도 옛 SW가 옛 목록을 계속 서빙 → 명화/도안을 새로 추가해도
+// "그대로"로 보이고 새로고침을 두 번 해야 갱신됐다(사용자 실측: 명화 82종 배포했는데 안 보임).
+// 아래 NetworkFirst 라우트로 온라인이면 항상 최신, 오프라인이면 마지막 캐시로 폴백.
+const precacheEntries = (self.__SW_MANIFEST ?? []).filter((e) => {
+  const url = typeof e === "string" ? e : e.url;
+  return !url.includes(TEMPLATE_MANIFEST_URL);
+});
+
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  precacheEntries,
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  runtimeCaching: defaultCache,
+  runtimeCaching: [
+    {
+      // 도안 목록은 항상 네트워크 우선(오프라인 시에만 캐시) — 배포 즉시 반영
+      matcher: ({ url, sameOrigin }) =>
+        sameOrigin && url.pathname === TEMPLATE_MANIFEST_URL,
+      handler: new NetworkFirst({
+        cacheName: "template-manifest",
+        networkTimeoutSeconds: 4,
+        plugins: [new ExpirationPlugin({ maxEntries: 2, maxAgeSeconds: 86400 })],
+      }),
+    },
+    ...defaultCache,
+  ],
   // ⚠️ fallbacks(/draw) 제거(2026-07-10): output:"export"에선 프리캐시 매니페스트에
   // HTML이 아예 안 들어가서 matchPrecache("/draw")가 항상 undefined — 죽은 설정이었고,
   // 오프라인 폴백이 필요해지면 HTML을 명시적으로 프리캐시에 추가한 뒤 되살릴 것.
