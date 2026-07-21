@@ -5,7 +5,7 @@
  */
 export async function photoToLineart(
   file: File | Blob,
-  maxSize = 1200,
+  maxSize = 1536, // 표시 캔버스(1536)와 1:1 — 1200이면 업스케일되며 선이 지글거렸다(2026-07-21)
 ): Promise<Blob> {
   const img = await blobToImage(file);
   const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
@@ -225,23 +225,39 @@ export async function photoToLineart(
   }
 
   /* 6) 잉크로 굽기 — 능선은 1px라 그대로 두면 화면에서 흐릿하다.
-   * 이웃 한 겹만 옅게(0.45) 덧대 "얇지만 또렷한" 선(≈2px)으로 만든다. */
-  const ink = new Float32Array(w * h);
-  for (let i = 0; i < keep.length; i++) if (keep[i]) ink[i] = 1;
+   * 이웃 한 겹만 옅게 덧대 "얇지만 또렷한" 선(≈2px 코어)을 만든 뒤,
+   * 커버리지를 살짝 블러→smoothstep으로 다시 세워 계단(경계 톱니)만 매끄럽게 편다
+   * (2026-07-21 정교화: 곡선이 폴리곤처럼 각지고 직선에 잔물결이 남던 것 완화 —
+   *  블러로 톱니를 녹이고 리샤프로 굵기는 거의 유지). */
+  const cov = new Float32Array(w * h);
+  for (let i = 0; i < keep.length; i++) if (keep[i]) cov[i] = 1;
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x;
-      let mx = 0;
+      if (cov[i] >= 1) continue;
       for (const d of [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1]) {
-        if (ink[i + d] > mx) mx = ink[i + d];
+        if (keep[i + d]) {
+          cov[i] = 0.6; // AA 기반이 될 한 겹(리샤프 임계 위)
+          break;
+        }
       }
-      const v = Math.round(255 * (1 - Math.max(ink[i], mx * 0.45)));
-      const p = i * 4;
-      o[p] = v;
-      o[p + 1] = v;
-      o[p + 2] = v;
-      o[p + 3] = 255;
     }
+  }
+  // 안티에일리어싱: 커버리지 3×3 블러로 톱니를 녹이고, smoothstep(0.28~0.72)로 다시
+  // 세워 경계만 부드럽게(굵기 보존). 블러만 하면 흐려지고, 리샤프만 하면 톱니가 남는다.
+  const sm = boxBlur(cov, w, h, 1);
+  const e0 = 0.28,
+    e1 = 0.72;
+  for (let i = 0; i < w * h; i++) {
+    let t = (sm[i] - e0) / (e1 - e0);
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const a = t * t * (3 - 2 * t); // smoothstep
+    const v = Math.round(255 * (1 - a));
+    const p = i * 4;
+    o[p] = v;
+    o[p + 1] = v;
+    o[p + 2] = v;
+    o[p + 3] = 255;
   }
   // 가장자리 1px는 흰색으로
   for (let i = 0, p = 3; i < gray.length; i++, p += 4) if (o[p] === 0) { o[p] = 255; o[p - 1] = o[p - 2] = o[p - 3] = 255; }
