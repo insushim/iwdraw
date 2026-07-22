@@ -31,6 +31,33 @@ export function exportPng(
   });
 }
 
+/**
+ * R2 저장용 원본(webp 손실압축). 무손실 PNG 대비 색칠 완성작 기준 약 6~7배 작아
+ * 무료 스토리지 한도를 그만큼 더 버틴다(육안 차이 거의 없음). 배경은 항상 불투명(크림).
+ * 아동 소장용 "내 컴퓨터에 저장"은 여전히 exportPng(PNG)로 — 화질·구형 PC 호환 유지.
+ */
+export function exportWebp(
+  layers: LayerStack,
+  width: number,
+  height: number,
+  quality = 0.9,
+): Promise<Blob> {
+  const out = document.createElement("canvas");
+  out.width = width;
+  out.height = height;
+  const ctx = out.getContext("2d")!;
+  ctx.fillStyle = "#FBF7F0";
+  ctx.fillRect(0, 0, width, height);
+  layers.composite(ctx);
+  return new Promise((resolve, reject) => {
+    out.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("WebP 인코딩 실패"))),
+      "image/webp",
+      quality,
+    );
+  });
+}
+
 /** 갤러리용 썸네일(webp 우선, 폴백 png) */
 export function exportThumb(
   layers: LayerStack,

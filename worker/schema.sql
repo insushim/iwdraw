@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS students (
   class_id    TEXT NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
   nickname    TEXT NOT NULL,
   avatar_seed TEXT NOT NULL DEFAULT '',
+  -- 작품 제출 rate limit 카운터(60초 슬라이딩 윈도). dedup 덮어쓰기까지 포함해 총 쓰기 시도를 세어
+  -- draft를 여러 개 돌려 난타하는 우회를 막는다. 단일 UPDATE...RETURNING으로 증가시켜 원자적.
+  -- ⚠️ 이미 배포된 DB엔 1회 필요:
+  --    ALTER TABLE students ADD COLUMN write_window_start INTEGER;
+  --    ALTER TABLE students ADD COLUMN write_count INTEGER;
+  write_window_start INTEGER,
+  write_count        INTEGER,
   created_at  INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 CREATE INDEX IF NOT EXISTS students_class_idx ON students(class_id);
@@ -55,12 +62,22 @@ CREATE TABLE IF NOT EXISTS artworks (
   --    (학생 갤러리 WHERE is_approved=1 필터에 영구 은닉되고 승인 UI도 제거됨 — 교차검증 발견)
   is_approved    INTEGER NOT NULL DEFAULT 1,
   like_count     INTEGER NOT NULL DEFAULT 0,   -- 캐시(원천은 artwork_likes)
+  -- dedup: 그리기 세션마다 클라가 발급하는 익명 랜덤 토큰. 같은 그림 재저장은 새 행을 만들지 않고
+  -- (student_id, draft_id)로 자기 행을 덮어쓴다(삭제 능력 노출 0 — 남의 작품 못 지움). NULL=구버전/단발.
+  -- ⚠️ 이미 배포된 DB엔 `ALTER TABLE artworks ADD COLUMN draft_id TEXT` 1회 필요(cf:deploy는 미실행).
+  draft_id       TEXT,
   created_at     INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 CREATE INDEX IF NOT EXISTS artworks_class_idx ON artworks(class_id);
 CREATE INDEX IF NOT EXISTS artworks_approved_idx ON artworks(class_id, is_approved);
 -- 만료 정리 cron(WHERE created_at < ?)·삭제 임박 집계 스캔용
 CREATE INDEX IF NOT EXISTS artworks_created_idx ON artworks(created_at);
+-- dedup upsert 조회용 + 동시 요청(더블탭·재시도)에도 행이 둘로 갈라지지 않도록 UNIQUE.
+-- SQLite는 NULL을 서로 다른 값으로 보므로 draft_id가 NULL인 구버전·단발 제출은 제한 없이 쌓인다.
+-- ⚠️ 이미 배포된 DB엔 아래 1회 필요:
+--    ALTER TABLE artworks ADD COLUMN draft_id TEXT;
+--    CREATE UNIQUE INDEX artworks_student_draft_idx ON artworks(student_id, draft_id);
+CREATE UNIQUE INDEX IF NOT EXISTS artworks_student_draft_idx ON artworks(student_id, draft_id);
 
 -- ── 좋아요(중복 방지) ──
 CREATE TABLE IF NOT EXISTS artwork_likes (

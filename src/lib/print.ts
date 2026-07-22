@@ -21,7 +21,11 @@ function safeFileName(name: string): string {
  */
 export async function downloadImage(src: string, baseName: string): Promise<boolean> {
   if (typeof window === "undefined") return false;
-  const filename = `${safeFileName(baseName)}.png`;
+  // 확장자는 실제 바이트 형식에 맞춘다 — 갤러리 원본은 2026-07-22부터 webp(용량 절감)라
+  // `.png` 고정 시 일부 이미지 뷰어가 열지 못한다(구 작품은 여전히 png라 혼재).
+  const stem = safeFileName(baseName);
+  const extFromMime = (mime: string) =>
+    mime === "image/webp" ? "webp" : mime === "image/jpeg" ? "jpg" : "png";
   const abs = (() => {
     try {
       return new URL(src, window.location.href).href;
@@ -36,7 +40,7 @@ export async function downloadImage(src: string, baseName: string): Promise<bool
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename;
+    a.download = `${stem}.${extFromMime(blob.type)}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -45,9 +49,11 @@ export async function downloadImage(src: string, baseName: string): Promise<bool
   } catch {
     // 폴백: 직접 링크(같은 오리진이면 download 유효, 실패해도 새 탭에서 저장 가능)
     try {
+      // blob을 못 받은 폴백 — 원본 URL의 확장자로 추정(없으면 png)
+      const urlExt = /\.(webp|png|jpe?g)(?:$|\?)/i.exec(abs)?.[1]?.toLowerCase() ?? "png";
       const a = document.createElement("a");
       a.href = abs;
-      a.download = filename;
+      a.download = `${stem}.${urlExt === "jpeg" ? "jpg" : urlExt}`;
       a.target = "_blank";
       a.rel = "noopener";
       document.body.appendChild(a);

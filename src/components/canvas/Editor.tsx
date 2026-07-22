@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ArtEngine } from "@/engine/ArtEngine";
 import { useEditor } from "@/store/editor";
-import { exportPng, exportThumb } from "@/engine/export/PngExporter";
+import { exportPng, exportWebp, exportThumb } from "@/engine/export/PngExporter";
 import { CanvasStage } from "./CanvasStage";
 import { ModeTabs } from "./ModeTabs";
 import { BrushBar } from "./BrushBar";
@@ -35,8 +35,11 @@ export interface EditorProps {
   initialMode?: import("@/engine/types").Mode;
   /** 협동 방 코드 */
   room?: string;
-  /** 저장 콜백(학생 작품 제출) — 없으면 로컬 다운로드 */
-  onSave?: (png: Blob, thumb: Blob) => Promise<void> | void;
+  /**
+   * 저장 콜백(학생 작품 제출) — 없으면 로컬 다운로드.
+   * draftId = 이 그리기 세션의 익명 토큰. 서버가 같은 토큰의 자기 행을 덮어써 갤러리에 최신본만 남긴다.
+   */
+  onSave?: (image: Blob, thumb: Blob, draftId?: string) => Promise<{ id: string } | null | void> | void;
   /** 상단에 표시할 닉네임/학급 */
   who?: string;
   backHref?: string;
@@ -49,10 +52,51 @@ export interface EditorProps {
  *  헤더 = 뒤로 · 로고 · [모드 탭] · 방향/무비/저학년 · 저장(주요 버튼)
  *  본체 = 좌 도구 레일(세로) · 캔버스(플로팅 되돌리기/다시) · 우 색/굵기/마법/레이어
  */
+/** 그리기 세션마다 발급하는 dedup 토큰(작품 id 아님·서버에 노출 안 되는 랜덤값). 구형 웹뷰 폴백 포함. */
+function genDraftId(): string {
+  try {
+    const u = globalThis.crypto?.randomUUID?.();
+    if (u) return u;
+    // randomUUID가 없는 구형 웹뷰(비보안 컨텍스트 등) — getRandomValues는 대개 살아있다.
+    const b = globalThis.crypto?.getRandomValues?.(new Uint8Array(16));
+    if (b) return Array.from(b, (n) => n.toString(16).padStart(2, "0")).join("");
+  } catch {
+    /* 폴백 */
+  }
+  // 최후 폴백. draft 토큰은 남의 작품을 지우지 못하고(자기 행 덮어쓰기뿐) 어떤 API로도 노출되지
+  // 않지만, 추측 저항성이 낮으면 같은 학생 명의로 재입장한 사람이 충돌을 노릴 수 있어 폭을 넓힌다.
+  return `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/* 마지막으로 "제출한" 그림의 draft 토큰을 자동저장(이어그리기)과 짝지어 보관한다.
+ * 새로고침·탭 크래시 후 [이어그리기]로 돌아온 그림은 같은 작품이므로, 그때만 이 토큰을 되살려
+ * 서버가 갤러리의 그 행을 덮어쓰게 한다. 반대로 단순 재마운트(가로/세로 전환 등)에는 항상
+ * 새 토큰을 쓴다 — 빈 캔버스에 그린 다른 그림이 옛 작품을 덮어쓰는 사고가 유실보다 나쁘기 때문. */
+const DRAFT_KEY = "arton.draftId";
+function rememberDraft(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(DRAFT_KEY, id);
+    else localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* 사생활 보호 모드 등 — dedup만 포기하고 저장은 정상 동작 */
+  }
+}
+function recallDraft(): string | null {
+  try {
+    return localStorage.getItem(DRAFT_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave, who, backHref = "/", galleryHref }: EditorProps) {
   useKeyboard();
   const engineRef = useRef<ArtEngine | null>(null);
   const [engine, setEngine] = useState<ArtEngine | null>(null);
+  // dedup: 같은 그림을 여러 번 저장하면(중간 저장→완성 저장) 갤러리에 최신본만 남긴다.
+  // 이 그리기 세션의 익명 토큰 — 저장 때 서버로 보내면 서버가 같은 토큰의 자기 행을 덮어쓴다.
+  // 새 그림(리셋)·다른 도안 진입 시 새 토큰으로 갈려, 진짜 다른 작품은 별개로 남는다.
+  const draftIdRef = useRef<string>(genDraftId());
   const collab = useCollab(engine, room);
   const mode = useEditor((s) => s.mode);
   const juniorMode = useEditor((s) => s.juniorMode);
@@ -74,6 +118,9 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     }
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
     setConfirmNew(false);
+    // 새 그림 = 새 그리기 세션 → 다음 저장은 별개 작품(이어그리기 짝도 끊는다)
+    draftIdRef.current = genDraftId();
+    rememberDraft(null);
     newDrawing();
   };
   const setSuggestSuppressed = useEditor((s) => s.setSuggestSuppressed);
@@ -126,16 +173,27 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       else setDownloading(true);
       try {
         const layers = engine.getLayers();
-        const png = await exportPng(layers, engine.width, engine.height, {
-          background: true,
-          scale: 1,
-        });
+        // ⚠️ draft 토큰은 인코딩(await) 전에 캡처한다 — 인코딩 중 "새 그림"·재마운트가 일어나면
+        //    ref는 새 세션 토큰으로 갈리는데, 지금 내보내는 픽셀은 그 전 그림이다. 나중에 읽으면
+        //    서로 다른 두 작품이 같은 토큰을 공유해 앞 작품이 덮어써진다(2026-07-22 교차검증).
+        const draftId = draftIdRef.current;
         if (submit) {
+          // 갤러리 제출(R2 누적) = webp 원본 — 무료 스토리지 한도를 6~7배 더 버틴다.
+          const image = await exportWebp(layers, engine.width, engine.height);
           const thumb = await exportThumb(layers, engine.width, engine.height);
-          await onSave!(png, thumb);
+          // 같은 그림 재저장이면 같은 draft 토큰으로 → 서버가 자기 행을 덮어써 최신본만 남김.
+          await onSave!(image, thumb, draftId);
+          // 이 그림 = 갤러리의 그 행. 이어그리기로 돌아오면 되살린다. 저장 도중 새 그림으로
+          // 갈렸다면 자동저장은 이미 다른 그림이므로 짝을 갱신하지 않는다.
+          if (draftIdRef.current === draftId) rememberDraft(draftId);
           setSaved(true);
           setTimeout(() => setSaved(false), 3500); // 제출 안내 문구가 길어 읽을 시간 확보
         } else {
+          // 내 컴퓨터에 저장 = 무손실 PNG 유지(아이 소장·인쇄·구형 PC 호환).
+          const png = await exportPng(layers, engine.width, engine.height, {
+            background: true,
+            scale: 1,
+          });
           const url = URL.createObjectURL(png);
           const a = document.createElement("a");
           a.href = url;
@@ -324,7 +382,17 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
 
       {/* 복구 배너 */}
       {restoreAt && (
-        <RestoreBanner savedAt={restoreAt} onRestore={() => engineRef.current?.restore()} onDismiss={dismissRestore} />
+        <RestoreBanner
+          savedAt={restoreAt}
+          onRestore={() => {
+            // 되살린 그림은 저장했던 그 작품 — 짝지어둔 draft 토큰을 되살려 갤러리에 중복으로
+            // 쌓이지 않게 한다(없으면 그냥 새 작품으로 남는다).
+            const prev = recallDraft();
+            if (prev) draftIdRef.current = prev;
+            void engineRef.current?.restore();
+          }}
+          onDismiss={dismissRestore}
+        />
       )}
 
       {/* ── 본체: 좌 도구 레일 · 캔버스 · 우 패널 ── */}
@@ -354,6 +422,9 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             onEngineReady={(e) => {
               engineRef.current = e;
               setEngine(e);
+              // 재마운트(다른 도안·재진입·가로세로 전환)는 빈 캔버스로 시작한다 → 항상 새 토큰.
+              // 이어그리기로 되살린 경우에만 RestoreBanner가 옛 토큰을 되돌려준다.
+              draftIdRef.current = genDraftId();
             }}
           />
           <SuggestBar />

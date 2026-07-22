@@ -842,6 +842,13 @@ app.post("/api/artwork", async (c) => {
   const image = fileOrNull(form.get("image"));
   const thumb = fileOrNull(form.get("thumb"));
   const timelapse = fileOrNull(form.get("timelapse"));
+  // dedup: 그리기 세션마다 클라가 발급하는 익명 랜덤 토큰(작품 id 아님). 같은 그림 재저장은
+  // 새 행을 만들지 않고 (student_id, draft_id)로 자기 행을 덮어쓴다(upsert) → 갤러리에 최신본만.
+  // 삭제 능력을 노출하지 않으므로(자기 행 덮어쓰기뿐) 닉네임 도용으로도 남의 작품을 못 지운다.
+  // 길이 상한으로 비정상 입력 차단.
+  const draftRaw = form.get("draft_id");
+  const draftId =
+    typeof draftRaw === "string" && draftRaw.length > 0 && draftRaw.length <= 64 ? draftRaw : null;
   if (!image || !thumb) return c.json({ error: "missing_files" }, 400);
   if (image.size > MAX_BYTES || thumb.size > MAX_BYTES) return c.json({ error: "too_large" }, 413);
 
@@ -856,23 +863,88 @@ app.post("/api/artwork", async (c) => {
   if (!student) return c.json({ error: "unauthorized" }, 401);
   if (!student.is_active) return c.json({ error: "inactive" }, 403);
 
-  // 제출 rate limit(학생당 분당 5점) — 즉시 전시라 스팸이 갤러리를 그대로 덮는다(교차검증 발견).
-  // 정상 사용(작품 저장)은 분당 1~2회 수준이라 여유가 크다.
-  const recent = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM artworks WHERE student_id = ? AND created_at >= ?",
+  // dedup upsert면 이 draft의 기존 행을 찾는다(자기 student_id 소유만 — 남의 행 접근 불가).
+  // draft_id는 갤러리/목록 API 어디에도 노출되지 않는 랜덤 토큰이라, 도용자가 피해자의 draft_id를
+  // 알 수 없어 피해자 행을 타깃할 수 없다(설계상 권한 상승 차단).
+  const existing = draftId
+    ? await c.env.DB.prepare(
+        `SELECT id, image_path, thumb_path, timelapse_path, created_at
+         FROM artworks WHERE student_id = ? AND draft_id = ? LIMIT 1`,
+      )
+        .bind(claims.student_id, draftId)
+        .first<{
+          id: string;
+          image_path: string;
+          thumb_path: string;
+          timelapse_path: string | null;
+          created_at: number;
+        }>()
+    : null;
+
+  // rate limit — dedup 덮어쓰기가 방어를 우회하지 못하도록 세 겹(2026-07-22 교차검증 CRITICAL):
+  //  ① 총량(원자적): 학생당 60초 "쓰기 시도" 15회. 신규·덮어쓰기를 가리지 않고 세므로
+  //     draft를 여러 개 만들어 라운드로빈으로 난타하는 우회가 막힌다. 카운터를
+  //     단일 UPDATE...RETURNING으로 증가시켜 SELECT-then-check의 TOCTOU도 함께 제거.
+  //     (정상 사용은 그림당 1~2회 저장이라 15회는 매우 여유롭다.)
+  //  ② 신규 그림 스팸: 최근 60초에 새로 만든 행 ≥ 5 차단(갤러리 도배 방지 — 기존 방어 유지).
+  //  ③ 같은 draft 난타: 같은 그림을 1.5초 안에 또 덮어쓰기 시도하면 차단.
+  const now = Date.now();
+  const budget = await c.env.DB.prepare(
+    `UPDATE students
+        SET write_count = CASE WHEN COALESCE(write_window_start, 0) >= ? THEN COALESCE(write_count, 0) + 1 ELSE 1 END,
+            write_window_start = CASE WHEN COALESCE(write_window_start, 0) >= ? THEN write_window_start ELSE ? END
+      WHERE id = ?
+      RETURNING write_count`,
   )
-    .bind(claims.student_id, Date.now() - 60_000)
-    .first<{ n: number }>();
-  if ((recent?.n ?? 0) >= 5) return c.json({ error: "rate_limited" }, 429);
+    .bind(now - 60_000, now - 60_000, now, claims.student_id)
+    .first<{ write_count: number }>();
+  if ((budget?.write_count ?? 0) > 15) return c.json({ error: "rate_limited" }, 429);
+  if (existing && now - existing.created_at < 1500) return c.json({ error: "rate_limited" }, 429);
+  if (!existing) {
+    const recent = await c.env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM artworks WHERE student_id = ? AND created_at >= ?",
+    )
+      .bind(claims.student_id, now - 60_000)
+      .first<{ n: number }>();
+    if ((recent?.n ?? 0) >= 5) return c.json({ error: "rate_limited" }, 429);
+  }
 
-  const artId = genId();
+  // 덮어쓰기는 기존 행의 artId(=R2 키)를 재사용 → 같은 키에 새 내용을 put(제자리 갱신, orphan 없음).
+  const artId = existing?.id ?? genId();
   const base = `${claims.class_id}/${claims.student_id}/${artId}`;
-  const imagePath = `${base}.png`;
-  const thumbPath = `${base}.thumb.webp`;
-  let timelapsePath: string | null = null;
+  // 원본 확장자·Content-Type은 업로드된 blob 타입에서 파생 — 신규 클라는 webp,
+  // 배포 직후 캐시된 구 클라가 보내는 png도 그대로 수용(하위호환). 읽기/삭제/purge는
+  // D1에 저장된 경로를 그대로 쓰므로 포맷 혼재(.png/.webp)여도 안전.
+  const imageCt = image.type === "image/webp" ? "image/webp" : "image/png";
+  const imageExt = imageCt === "image/webp" ? "webp" : "png";
+  const imagePath = `${base}.${imageExt}`;
+  // 썸네일도 마찬가지 — 구형 웹뷰는 canvas.toBlob("image/webp")가 png로 폴백하므로
+  // 무조건 webp로 기록하면 깨진 썸네일이 된다(blob.type을 그대로 신뢰).
+  const thumbCt = thumb.type === "image/webp" ? "image/webp" : "image/png";
+  const thumbPath = `${base}.thumb.${thumbCt === "image/webp" ? "webp" : "png"}`;
+  // 재저장에 타임랩스가 없으면 기존 것을 유지(덮어쓰기가 다른 필드를 지우지 않도록).
+  let timelapsePath: string | null = existing?.timelapse_path ?? null;
 
-  await c.env.BUCKET.put(imagePath, await image.arrayBuffer(), { httpMetadata: { contentType: "image/png" } });
-  await c.env.BUCKET.put(thumbPath, await thumb.arrayBuffer(), { httpMetadata: { contentType: "image/webp" } });
+  // 업로드 바이트가 정말 그 포맷인지 확인한다 — 지금까지 클라가 보낸 MIME만 믿었기에, 조작된
+  // 클라가 아무 바이트나(또는 0바이트) 올려 갤러리에 깨진 그림을 만들 수 있었다(교차검증 발견).
+  const imageBuf = await image.arrayBuffer();
+  const thumbBuf = await thumb.arrayBuffer();
+  const matchesFormat = (buf: ArrayBuffer, ct: string): boolean => {
+    const b = new Uint8Array(buf);
+    if (b.length < 12) return false;
+    if (ct === "image/png") return b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+    // WebP = "RIFF" ....  "WEBP"
+    return (
+      b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+    );
+  };
+  if (!matchesFormat(imageBuf, imageCt) || !matchesFormat(thumbBuf, thumbCt)) {
+    return c.json({ error: "bad_image" }, 400);
+  }
+
+  await c.env.BUCKET.put(imagePath, imageBuf, { httpMetadata: { contentType: imageCt } });
+  await c.env.BUCKET.put(thumbPath, thumbBuf, { httpMetadata: { contentType: thumbCt } });
   if (timelapse && timelapse.size > 0 && timelapse.size <= MAX_BYTES * 4) {
     timelapsePath = `${base}.webm`;
     await c.env.BUCKET.put(timelapsePath, await timelapse.arrayBuffer(), {
@@ -880,23 +952,66 @@ app.post("/api/artwork", async (c) => {
     });
   }
 
-  try {
-    // 승인 게이트 비활성(2026-07-09 사용자 결정): 제출 즉시 전시(is_approved=1).
-    // 되살리려면 아래 1을 0으로 — 조회(is_approved=1 필터)·PATCH 승인 엔드포인트·교사 UI는 보존됨.
-    await c.env.DB.prepare(
-      `INSERT INTO artworks (id, class_id, student_id, mode, image_path, thumb_path, timelapse_path, is_approved)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+  // 신규 행 삽입 — 같은 draft로 요청이 동시에 들어와도(더블탭·재시도) UNIQUE(student_id, draft_id)에
+  // 걸려 두 번째는 새 행 대신 기존 행을 갱신한다(dedup을 DB 레벨에서 원자적으로 보장).
+  // 승인 게이트 비활성(2026-07-09 사용자 결정): 제출 즉시 전시(is_approved=1).
+  // 되살리려면 아래 1을 0으로 — 조회(is_approved=1 필터)·PATCH 승인 엔드포인트·교사 UI는 보존됨.
+  const insertRow = () =>
+    c.env.DB.prepare(
+      `INSERT INTO artworks (id, class_id, student_id, mode, image_path, thumb_path, timelapse_path, draft_id, is_approved, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT(student_id, draft_id) DO UPDATE SET
+         mode = excluded.mode, image_path = excluded.image_path, thumb_path = excluded.thumb_path,
+         timelapse_path = excluded.timelapse_path, created_at = excluded.created_at
+       RETURNING id`,
     )
-      .bind(artId, claims.class_id, claims.student_id, mode, imagePath, thumbPath, timelapsePath)
-      .run();
+      .bind(artId, claims.class_id, claims.student_id, mode, imagePath, thumbPath, timelapsePath, draftId, now)
+      .first<{ id: string }>();
+
+  let rowId = artId;
+  try {
+    if (existing) {
+      // 덮어쓰기: 새 행을 만들지 않고 자기 행을 갱신(삭제 없음). created_at를 올려 최신 저장 기준으로
+      // 정렬·리텐션(180일) 재산정. student_id 조건으로 자기 행만 갱신됨을 이중 보장.
+      const res = await c.env.DB.prepare(
+        `UPDATE artworks SET mode = ?, image_path = ?, thumb_path = ?, timelapse_path = ?, created_at = ?
+         WHERE id = ? AND student_id = ?`,
+      )
+        .bind(mode, imagePath, thumbPath, timelapsePath, now, artId, claims.student_id)
+        .run();
+      // 조회와 갱신 사이에 교사가 그 작품을 지웠으면 갱신 대상이 없다(changes=0). 그대로 200을 주면
+      // 방금 올린 R2 파일이 어떤 행에도 안 붙은 영구 고아가 되므로, 새 행으로 되살린다.
+      if ((res.meta?.changes ?? 0) === 0) rowId = (await insertRow())?.id ?? artId;
+    } else {
+      rowId = (await insertRow())?.id ?? artId;
+    }
   } catch (e) {
-    // D1 insert 실패 시 방금 올린 R2 객체를 best-effort 정리(orphan 방지)
-    const paths = [imagePath, thumbPath, ...(timelapsePath ? [timelapsePath] : [])];
-    await Promise.allSettled(paths.map((p) => c.env.BUCKET.delete(p)));
+    // 신규 INSERT 실패 → 방금 올린 R2 객체를 best-effort 정리(orphan 방지).
+    // UPDATE(덮어쓰기) 실패는 기존 행의 키라 지우면 안 됨(기존 작품 파괴) — 이미지만 갱신된 채 둔다.
+    // (이때 R2 바이트는 이미 새 그림으로 바뀌어 있고 mode·created_at만 옛 값으로 남는다. 학생이
+    //  의도적으로 덮어쓴 그림이라 유실은 아니며, 500을 받은 클라가 재시도하면 그대로 수렴한다.)
+    if (!existing) {
+      const paths = [imagePath, thumbPath, ...(timelapsePath ? [timelapsePath] : [])];
+      await Promise.allSettled(paths.map((p) => c.env.BUCKET.delete(p)));
+    }
     return c.json({ error: "db" }, 500);
   }
 
-  return c.json({ id: artId });
+  // 덮어쓰기에서 포맷이 바뀌면(구 클라 png → 신규 webp, 또는 썸네일 폴백) 옛 키가 참조를 잃는다.
+  // D1 갱신이 성공한 뒤에만(=행이 새 경로를 가리킨 뒤) best-effort 정리 — 실패해도 제출은 성공.
+  if (existing) {
+    // 지우기 직전에 행이 지금 가리키는 경로를 다시 읽는다 — 같은 draft로 다른 포맷 요청이 동시에
+    // 들어와 순서가 엇갈리면, 옛 경로라고 믿은 키가 실은 최종 행이 참조하는 키일 수 있다(사진 증발).
+    const live = await c.env.DB.prepare("SELECT image_path, thumb_path FROM artworks WHERE id = ?")
+      .bind(rowId)
+      .first<{ image_path: string; thumb_path: string }>();
+    const inUse = new Set([imagePath, thumbPath, live?.image_path, live?.thumb_path].filter(Boolean));
+    const stale = [existing.image_path, existing.thumb_path].filter((p) => p && !inUse.has(p));
+    if (stale.length) await Promise.allSettled(stale.map((p) => c.env.BUCKET.delete(p)));
+  }
+
+  // rowId ≠ artId인 경우 = 동시 요청 경쟁에서 ON CONFLICT로 기존 행을 갱신했을 때(그 행의 id를 반환).
+  return c.json({ id: rowId });
 });
 
 // ══════════════════════ 협동: WebSocket → Durable Object ══════════════════════
@@ -951,7 +1066,10 @@ async function purgeExpiredArtworks(env: Env): Promise<{ deleted: number }> {
     const ph = ids.map(() => "?").join(",");
     const res = await env.DB.batch([
       env.DB.prepare(`DELETE FROM artwork_likes WHERE artwork_id IN (${ph})`).bind(...ids),
-      env.DB.prepare(`DELETE FROM artworks WHERE id IN (${ph})`).bind(...ids),
+      // ⚠️ created_at를 다시 확인한다 — SELECT와 DELETE 사이에 학생이 그 작품을 다시 저장하면
+      //    created_at이 현재 시각으로 갱신돼 더 이상 만료가 아니다(dedup 덮어쓰기 도입 전에는
+      //    created_at이 불변이라 문제가 없었다). id만으로 지우면 방금 저장한 작품이 사라진다.
+      env.DB.prepare(`DELETE FROM artworks WHERE created_at < ? AND id IN (${ph})`).bind(cutoff, ...ids),
     ]);
     deleted += res[1]?.meta.changes ?? rows.length;
     if (rows.length < BATCH) break;

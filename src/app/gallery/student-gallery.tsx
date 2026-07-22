@@ -47,7 +47,8 @@ export function StudentGallery() {
       }
       setItems(list);
       const entries = await Promise.all(
-        list.map(async (a) => [a.id, (await fetchStudentImage(a.thumb_path)) ?? ""] as const),
+        // created_at을 버전으로 — 재저장(dedup)은 경로를 재사용하므로 이게 없으면 옛 그림이 남는다
+        list.map(async (a) => [a.id, (await fetchStudentImage(a.thumb_path, a.created_at)) ?? ""] as const),
       );
       setUrls(Object.fromEntries(entries));
     })();
@@ -60,7 +61,7 @@ export function StudentGallery() {
     }
     // 연달아 다른 작품을 클릭해도 늦게 도착한 응답이 최신 선택을 덮지 않게 가드
     let stale = false;
-    void fetchStudentImage(big.image_path).then((u) => {
+    void fetchStudentImage(big.image_path, big.created_at).then((u) => {
       if (!stale) setBigUrl(u);
     });
     return () => {

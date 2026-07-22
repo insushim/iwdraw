@@ -49,21 +49,23 @@ export function DrawClient() {
   const showBanner = !!assignment && !dismissed && templateParam !== assignment.image;
 
   const handleSave = useCallback(
-    async (png: Blob, thumb: Blob) => {
+    async (image: Blob, thumb: Blob, draftId?: string) => {
       if (!session) {
-        // 학생 세션 없음 → 로컬 다운로드로 폴백
-        const url = URL.createObjectURL(png);
+        // 학생 세션 없음 → 로컬 다운로드로 폴백(원본 확장자에 맞춰 저장)
+        const ext = image.type === "image/webp" ? "webp" : "png";
+        const url = URL.createObjectURL(image);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `arton-${Date.now()}.png`;
+        a.download = `arton-${Date.now()}.${ext}`;
         a.click();
         URL.revokeObjectURL(url);
         return;
       }
-      await submitArtwork({
-        png,
+      return await submitArtwork({
+        image,
         thumb,
         mode: (params.get("mode") as string) ?? "sketch",
+        draftId,
       });
     },
     [session, params],

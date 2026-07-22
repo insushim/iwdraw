@@ -10,10 +10,13 @@ import { withStudentAuth } from "./student-auth";
  * 클라이언트는 class_id/student_id를 보내지 않는다. 서버가 JWT claim에서 읽어 삽입한다.
  */
 export interface SubmitArtworkInput {
-  png: Blob;
+  /** 갤러리 원본(webp). 확장자·Content-Type은 서버가 blob.type을 보고 정한다. */
+  image: Blob;
   thumb: Blob;
   mode: string;
   timelapse?: Blob;
+  /** 이 그리기 세션의 익명 토큰 — 서버가 같은 토큰의 자기 행을 덮어써 최신본만 남긴다(dedup upsert). */
+  draftId?: string;
 }
 
 export async function submitArtwork(input: SubmitArtworkInput): Promise<{ id: string } | null> {
@@ -26,9 +29,11 @@ export async function submitArtwork(input: SubmitArtworkInput): Promise<{ id: st
 
   const form = new FormData();
   form.append("mode", input.mode);
-  form.append("image", input.png, "artwork.png");
+  const imageExt = input.image.type === "image/webp" ? "webp" : "png";
+  form.append("image", input.image, `artwork.${imageExt}`);
   form.append("thumb", input.thumb, "thumb.webp");
   if (input.timelapse) form.append("timelapse", input.timelapse, "timelapse.webm");
+  if (input.draftId) form.append("draft_id", input.draftId);
 
   // 401(6시간 토큰 만료)이면 조용히 재입장 후 1회 재시도 — 저장 순간 세션이 끊겨
   // 그림을 못 내던 사고 방지(2026-07-13 사용자 실측). FormData는 재사용 가능.

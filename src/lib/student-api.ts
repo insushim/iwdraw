@@ -79,7 +79,11 @@ export async function getAssignment(): Promise<Assignment | null> {
 const blobCache = new Map<string, string>();
 let blobCacheOwner: string | null = null;
 
-export async function fetchStudentImage(path: string): Promise<string | null> {
+/**
+ * @param version 작품의 created_at. dedup 덮어쓰기는 R2 경로를 그대로 재사용하므로, 경로만 캐시 키로
+ *   쓰면 갱신된 그림이 옛 버전으로 계속 보인다(서버도 10분 캐시). 저장 시각을 키·쿼리에 얹어 무효화.
+ */
+export async function fetchStudentImage(path: string, version?: number): Promise<string | null> {
   if (!hasBackend() || !getStudentSession()) return null;
   const owner = getStudentSession()?.studentId ?? null;
   if (owner !== blobCacheOwner) {
@@ -87,15 +91,19 @@ export async function fetchStudentImage(path: string): Promise<string | null> {
     blobCache.clear();
     blobCacheOwner = owner;
   }
-  const cached = blobCache.get(path);
+  const key = version ? `${path}#${version}` : path;
+  const cached = blobCache.get(key);
   if (cached) return cached;
   try {
     const res = await withStudentAuth((h) =>
-      apiFetch(`/student/file?path=${encodeURIComponent(path)}`, { headers: h }),
+      apiFetch(
+        `/student/file?path=${encodeURIComponent(path)}${version ? `&v=${version}` : ""}`,
+        { headers: h },
+      ),
     );
     if (!res?.ok) return null;
     const url = URL.createObjectURL(await res.blob());
-    blobCache.set(path, url);
+    blobCache.set(key, url);
     return url;
   } catch {
     return null;
