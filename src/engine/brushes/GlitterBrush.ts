@@ -105,8 +105,11 @@ export class GlitterBrush extends BrushBase {
   }
 
   /**
-   * 브러시색당 입자 이산 팔레트(≤12색): 순백 글린트 + 하이라이트 3단 + 무지개 틴트 4종
-   * (+ 밝은 색 획에만 다크 스펙 2단). 순백·하이라이트를 중복 배치해 출현 빈도에 가중.
+   * 브러시색당 입자 이산 팔레트(≤12색): 순백 글린트 + 하이라이트 2단 + 무지개 틴트 4종.
+   * 순백을 중복 배치해 출현 빈도에 가중. 어두운 색은 넣지 않는다 — "빛을 등진 플레이크"를
+   * 근사하던 다크 스펙(×0.35~0.5)은 밝은 획에서 때/티끌로 읽혔다(2026-07-23 사용자 실측
+   * "검은 점"; 실제 글리터 구현들도 밝은 글린트+미세 쉬머 조합이지 검은 점을 쓰지 않는다).
+   * 그늘 깊이는 sparkleDab의 저알파 그늘 플레이크가 담당.
    */
   private palette(): RGB[] {
     const c = this.settings.color;
@@ -139,14 +142,6 @@ export class GlitterBrush extends BrushBase {
       tint(-14, 10, 20), // 하늘빛
       tint(5, -10, 24), // 보랏빛
     ];
-    const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-    if (lum > 140) {
-      // 밝은 색 획 전용 다크 스펙 — 흰 입자가 묻히는 자리를 어두운 은박이 채운다
-      out.push(
-        { r: Math.round(c.r * 0.5), g: Math.round(c.g * 0.5), b: Math.round(c.b * 0.5) },
-        { r: Math.round(c.r * 0.35), g: Math.round(c.g * 0.35), b: Math.round(c.b * 0.35) },
-      );
-    }
     this.paletteCache = out;
     this.paletteKey = key;
     return out;
@@ -163,25 +158,36 @@ export class GlitterBrush extends BrushBase {
     // ⚠️ Canvas2D 폴백의 tinted() 캐시가 정확한 RGB를 키로 쓰므로, dab마다 연속 랜덤 색이면
     // 캐시 미스 100% → 매 dab 팁 캔버스 재생성 → 웨일북 렉(실측: 크레용 27ms vs 471ms).
     // 유화 드리프트의 "색 4단계 양자화" 교훈과 같은 함정 — 팔레트 크기 ≤12로 캐시가 즉시 포화된다.
+    // 입자 3종 분포(2026-07-23 사용자 실측 2회 반영 — "기포처럼 보여"·"검은 점"):
+    // · 별 글린트(12%): 십자 플레어(sparkle 팁), 순백, 획폭 40~65% — 반짝임의 주역.
+    // · 잔스펙(대부분): 밝은 팔레트 색, 획폭 6~14% — 글리터 가루.
+    // · 그늘 플레이크(10%): 잉크색 ×0.7을 저알파(0.28~0.42)로 살짝 — 빛을 등진 플레이크의
+    //   깊이감. 불투명 다크 스펙은 밝은 획에서 때/티끌·검은 마름모 덩어리로 읽혀 폐기.
+    //   둥근 팁(hard)·초소형 고정이라 확대해도 덩어리가 안 된다.
+    const roll = r();
+    const star = forceStar || roll < 0.12;
+    const flake = !star && roll > 0.9;
+    const c = this.settings.color;
+    const sizeK = star ? 0.4 + r() * 0.25 : flake ? 0.05 + r() * 0.05 : 0.06 + r() * 0.08;
     const pal = this.palette();
-    const color = pal[Math.floor(r() * pal.length)];
-    // 크기 이중 분포 재조정(2026-07-23 사용자 실측 "기포처럼 보여"): 이전의
-    // 중간 크기 원(획폭 12~36%)이 물방울로 읽혔다 → ①대부분은 훨씬 작은 스펙
-    // ②큰 것은 원이 아니라 별(sparkle 팁) 글린트 — 십자 플레어가 반짝임의 지각 신호.
-    const star = forceStar || r() < 0.12;
-    const sizeK = star ? 0.4 + r() * 0.25 : 0.06 + r() * 0.08;
+    const color = star
+      ? { r: 255, g: 255, b: 255 } // 별은 항상 순백 점광원
+      : flake
+        ? { r: Math.round(c.r * 0.7), g: Math.round(c.g * 0.7), b: Math.round(c.b * 0.7) }
+        : pal[Math.floor(r() * pal.length)];
     return {
       x: p.x - Math.cos(angle) * back + px * lateral,
       y: p.y - Math.sin(angle) * back + py * lateral,
       // 최소 2.4px(서브픽셀 증발 방지 — MIN_DAB_PX 불변식)
       size: Math.max(MIN_DAB_PX, size * sizeK),
       // 진하기 슬라이더를 입자에도 반영 — 옅게 그린 리본 위에 입자만 쨍하면 이질적
-      alpha: clamp((star ? 1 : 0.85 + r() * 0.15) * this.settings.opacity, 0.05, 1),
+      alpha: clamp((star ? 1 : flake ? 0.28 + r() * 0.14 : 0.85 + r() * 0.15) * this.settings.opacity, 0.05, 1),
       // 별 글린트만 회전 지터(±22.5° — 4갈래 대칭이라 그 이상은 무의미).
       // 잔입자는 축소 시 커버리지 요동만 만들므로 고정(ROT_JITTER_MIN_PX 취지).
       rotation: star ? (r() - 0.5) * (Math.PI / 4) : 0,
-      color: star ? { r: 255, g: 255, b: 255 } : color, // 별은 항상 순백 점광원
-      tip: "sparkle",
+      color,
+      // 그늘 플레이크는 스트로크 팁(hard, 둥근 점) — 별 실루엣이면 확대 시 검은 마름모
+      tip: flake ? undefined : "sparkle",
     };
   }
 }
