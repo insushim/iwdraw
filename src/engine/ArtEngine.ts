@@ -612,6 +612,7 @@ export class ArtEngine {
     this.beforeFull = null;
     this.beforeTiles = null;
     this.quickShapeApplied = false;
+    this.quickShapePts = null;
     this.requestComposite(); // 라이브 프리뷰에 떠 있던 획 지우기
   }
 
@@ -890,6 +891,7 @@ export class ArtEngine {
       this.beforeFull = null;
       this.beforeTiles = null;
       this.brush = null;
+      this.quickShapePts = null; // push 없이 종료 — 로그도 안 남긴다(1:1)
       return;
     }
     const x = Math.max(0, Math.floor(bb.minX));
@@ -913,7 +915,19 @@ export class ArtEngine {
         points: this.curPoints,
         symmetry: this.symmetry,
       });
+    } else if (this.quickShapePts) {
+      // QuickShape: 프리핸드 대신 스냅 폴리라인을 기록 — 안 하면 히스토리 push만 남아
+      // 무비에서 도형이 빠지고, 언두 커서가 한 칸 밀려 무관한 획이 사라진다(교차검증 CRITICAL)
+      this.recorder.record({
+        brush: this.brushId,
+        settings: { ...this.settings },
+        layerId: layer.id,
+        points: this.quickShapePts,
+        symmetry: this.symmetry,
+        extra: { shape: true },
+      });
     }
+    this.quickShapePts = null;
     // 협동 전송용 방출(로컬 스트로크만)
     this.emit("strokeCommitted", {
       brush: this.brushId,
@@ -1269,8 +1283,12 @@ export class ArtEngine {
       tiles,
     );
     // 제안 수락이면 스케치 획 k개를 되돌려 지운다(그룹 불변식: 최상단 k개 = 이 스케치).
+    // 실제 성공 횟수를 세서 로그도 같은 수만 지운다 — 히스토리가 자체 축출(50개/메모리
+    // 예산)로 조기 소진되면 replaceCount 고정 삭제가 무관한 이전 획까지 지운다(교차검증).
+    let undone = 0;
     for (let i = 0; i < pd.replaceCount; i++) {
       if (!this.history.undo()) break;
+      undone++;
     }
     if (pd.kind === "text" && pd.text) drawTextOnCtx(layer.ctx, pd.text, cx, cy, size, this.settings.color);
     else if (def) drawStampOnCtx(layer.ctx, def, cx, cy, size, this.settings.color);
@@ -1280,8 +1298,10 @@ export class ArtEngine {
       tiles,
     );
     this.pushTileCommand(layer, tiles, before, after);
-    // 무비 재생 정합 — 교체된 스케치 획은 로그에서도 제거
-    this.recorder.dropLast(pd.replaceCount);
+    // 무비 재생 정합 — 교체된 스케치 획은 로그에서도 제거.
+    // ⚠️ 잠복 한계(수용): 이 커밋을 undo하면 캔버스엔 스케치가 복귀하지만 로그에선
+    // 이미 지워져 무비에 안 나온다 — 정확 수정은 히스토리-로그 완전 연동이 필요해 보류.
+    this.recorder.dropLast(undone);
     this.recorder.record({
       brush: pd.kind === "text" ? "text" : "stamp",
       settings: { ...this.settings },
@@ -1384,6 +1404,8 @@ export class ArtEngine {
   }
 
   private quickShapeApplied = false;
+  /** QuickShape 스냅 폴리라인 — finalizeStroke에서 무비 로그로 소비 */
+  private quickShapePts: StrokePoint[] | null = null;
 
   private applyQuickShape(kind: QuickShapeKind, points: { x: number; y: number }[]): void {
     // 지우개(destination-out)는 레이어에 직접 그려 프리핸드 취소가 불가 + 색선 도형이
@@ -1418,6 +1440,10 @@ export class ArtEngine {
     }
     ctx.restore();
     this.quickShapeApplied = true;
+    // 무비 로그용 스냅 폴리라인 보관 — 기록 자체는 finalizeStroke(히스토리 push와 같은
+    // 지점)에서 한다. 여기서 기록하면 핀치 취소(strokeCancel: push 없음) 시 1:1이 깨진다.
+    const qt0 = performance.now();
+    this.quickShapePts = points.map((q, i) => ({ x: q.x, y: q.y, pressure: 1, t: qt0 + i }));
     this.clearHold();
     this.emit("quickShapeApplied", { kind });
     this.requestComposite();
@@ -1470,6 +1496,7 @@ export class ArtEngine {
     }
     this.resetSuggest(); // 그룹↔히스토리 최상단 k개 대응이 깨진다
     if (this.history.undo()) {
+      this.recorder.undo(); // 무비 로그 정합 — 되돌린 획은 재생에서도 제외
       this.requestComposite();
       this.emitHistory();
     }
@@ -1478,6 +1505,7 @@ export class ArtEngine {
     if (this.pending) return; // 배치 중엔 redo 무시
     this.resetSuggest();
     if (this.history.redo()) {
+      this.recorder.redo();
       this.requestComposite();
       this.emitHistory();
     }
@@ -1499,6 +1527,15 @@ export class ArtEngine {
       tiles,
     );
     this.pushTileCommand(layer, tiles, before, after);
+    // 무비 로그 정합 — clear도 히스토리 1커맨드 = 로그 1항목(언두 커서 1:1 불변식)
+    this.recorder.record({
+      brush: "fill",
+      settings: { ...this.settings },
+      layerId: layer.id,
+      points: [{ x: 0, y: 0, pressure: 1, t: performance.now() }],
+      symmetry: "none",
+      extra: { clear: true },
+    });
     this.requestComposite();
   }
 
@@ -1899,6 +1936,9 @@ export class ArtEngine {
     this.resetSuggest(); // 히스토리 없는 픽셀 대체 — 그룹 무효
     const state = await this.autosave.restore();
     if (!state) return false;
+    // 구버전 저장분(width/height 없음) 폴백 — 픽셀 경로와 같은 소스(저장 PNG 실크기)
+    let imgW = 0;
+    let imgH = 0;
     for (const saved of state.layers) {
       // 역할(도안/원본)로 먼저 매칭 — 재마운트로 id가 바뀌어도 잠금 레이어가
       // 일반 레이어로 둔갑해 지우개에 뚫리는 사고 방지
@@ -1910,6 +1950,10 @@ export class ArtEngine {
             this.layers.addLayer(saved.name));
       if (!layer) continue;
       const img = await blobToImage(saved.png);
+      if (!imgW) {
+        imgW = img.width;
+        imgH = img.height;
+      }
       layer.ctx.clearRect(0, 0, this.width, this.height);
       /*
        * 저장 당시 캔버스 크기 ≠ 지금 캔버스 크기일 수 있다 — 선따기는 원본 사진 비율로
@@ -1931,7 +1975,19 @@ export class ArtEngine {
       this.layers.setOpacity(layer.id, saved.opacity);
       this.layers.setBlend(layer.id, saved.blend as LayerInfo["blend"]);
     }
+    // 복원 = 상태 통째 교체 — 복원 전 세션의 undo 커맨드가 남으면 undo 시 옛 타일이
+    // 복원된 그림 위에 블릿돼 픽셀이 오염되고, 무비 언두 커서와도 어긋난다
+    this.history.clear();
+    this.emitHistory();
     this.recorder.load(state.recorder);
+    // 저장 당시 크기 ≠ 지금 크기면 픽셀과 동일한 contain 배율·중앙 오프셋을 로그 좌표에도
+    // 적용 — 안 하면 무비 획이 원좌표로 재생돼 엉뚱한 위치/화면 밖에 그려진다
+    const rsw = state.width || imgW || this.width;
+    const rsh = state.height || imgH || this.height;
+    if (rsw > 0 && rsh > 0 && (rsw !== this.width || rsh !== this.height)) {
+      const rk = Math.min(this.width / rsw, this.height / rsh);
+      this.recorder.rescale(rk, (this.width - rsw * rk) / 2, (this.height - rsh * rk) / 2);
+    }
     this.emitLayers();
     this.requestComposite();
     return true;

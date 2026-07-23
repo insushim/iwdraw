@@ -7,6 +7,7 @@ import { smearSegment } from "@/engine/tools/SmudgeTool";
 import { drawStampOnCtx, getStamp } from "@/engine/tools/StampTool";
 import { drawTextOnCtx } from "@/engine/tools/TextInsert";
 import { floodFill } from "@/engine/brushes/FillTool";
+import { mulberry32 } from "@/engine/types";
 import { playMovie, recordMovie, type MovieSpeed, type ReplayHandle } from "@/engine/export/TimelapseExporter";
 import { Button } from "@/components/ui";
 import type { RecordedStroke } from "@/engine/types";
@@ -168,6 +169,16 @@ function replayOne(
     );
     return;
   }
+  if (stroke.extra?.clear) {
+    // 전체 지우기: progress 100%에서 흰 종이로(재생 캔버스는 단일 합성이라 근사)
+    if (progress < 1) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    return;
+  }
   if (stroke.extra?.fill) {
     // 페인트통 재생: 전체 다시 채우기(간이 — progress 100%에서만)
     if (progress < 1) return;
@@ -175,6 +186,22 @@ function replayOne(
     const p = stroke.points[0];
     floodFill(img.data, canvas.width, canvas.height, p.x, p.y, stroke.settings.color, { tolerance: 32 });
     ctx.putImageData(img, 0, 0);
+    return;
+  }
+  if (stroke.extra?.shape) {
+    // QuickShape: 엔진(applyQuickShape)과 동일한 폴리라인 스트로크로 재생
+    const pts = stroke.points.slice(0, Math.max(2, Math.ceil(stroke.points.length * progress)));
+    const c = stroke.settings.color;
+    ctx.save();
+    ctx.strokeStyle = `rgb(${c.r},${c.g},${c.b})`;
+    ctx.globalAlpha = stroke.settings.opacity;
+    ctx.lineWidth = stroke.settings.size;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.stroke();
+    ctx.restore();
     return;
   }
   if (stroke.brush === "smudge") {
@@ -186,7 +213,10 @@ function replayOne(
     }
     return;
   }
-  const brush = createBrush(stroke.brush);
+  // 시드 고정 — 같은 스트로크의 prefix를 progress 스텝마다 다시 그리므로, 브러시가
+  // Math.random()이면(글리터 입자 등) 스텝마다 배치가 달라져 이전 스텝 위에 누적된다
+  // (에디터보다 훨씬 빽빽·재생마다 다름 — 교차검증 발견). 같은 시드면 동일 위치에 덮여 무해.
+  const brush = createBrush(stroke.brush, mulberry32(7));
   const pts = stroke.points.slice(0, Math.max(2, Math.ceil(stroke.points.length * progress)));
   if (pts.length < 1) return;
   const color = stroke.settings.color;
@@ -207,9 +237,32 @@ function replayOne(
     ctx.globalAlpha = d.alpha * washK;
     const c = d.color ?? color;
     ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, d.size / 2, 0, Math.PI * 2);
-    ctx.fill();
+    if (d.tip === "sparkle" && d.size > 6) {
+      // 글리터 별 글린트 — 원으로 그리면 "기포"가 된다(에디터와 동일한 지각 원리)
+      const r2 = d.size / 2;
+      ctx.save();
+      ctx.translate(d.x, d.y);
+      ctx.rotate(d.rotation);
+      ctx.beginPath();
+      for (let k = 0; k < 4; k++) {
+        const a0 = (k * Math.PI) / 2;
+        ctx.moveTo(0, 0);
+        // 갈래: 끝점 + 양옆 짧은 허리(오목한 4각 별)
+        ctx.lineTo(Math.cos(a0 - 0.35) * r2 * 0.18, Math.sin(a0 - 0.35) * r2 * 0.18);
+        ctx.lineTo(Math.cos(a0) * r2, Math.sin(a0) * r2);
+        ctx.lineTo(Math.cos(a0 + 0.35) * r2 * 0.18, Math.sin(a0 + 0.35) * r2 * 0.18);
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, r2 * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.size / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.restore();
 }
