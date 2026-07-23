@@ -1629,8 +1629,24 @@ export class ArtEngine {
        * 도달하지 못해 렌더 루프가 영영 멈췄다 = 화면이 굳고 선이 안 나온다(브라우저를 껐다
        * 켜야 회복 — 웨일북 실사용 증상과 일치). 이제 예외를 삼키고 다음 프레임을 예약한다. */
       try {
-        const dt = this.lastTick ? ts - this.lastTick : 16;
-        this.lastTick = ts;
+        /* ⚠️ dt는 rAF 인자(ts)가 아니라 performance.now()로 잰다 — 렉으로 밀린 프레임을
+         * 브라우저가 따라잡을 때 rAF 타임스탬프는 몇 ms 간격으로 촘촘히 찍혀(실측 3~5ms),
+         * 벽시계 500ms 렉이 dt에 전혀 나타나지 않는다. 수채 마름 시뮬(tick)도 실제 경과
+         * 시간을 받는 쪽이 정확하다. */
+        void ts;
+        const nowMs = performance.now();
+        const dt = this.lastTick ? nowMs - this.lastTick : 16;
+        this.lastTick = nowMs;
+        /* 렉 감지는 "합성에 걸린 JS 시간"이 아니라 "획 중 rAF 간격"으로 —
+         * Canvas2D 명령은 비동기 큐잉이라 JS 측 합성 시간이 실제 래스터 비용을 반영하지
+         * 못하고(에어브러시 렉 471ms인데 측정 4ms — 2026-07-23 실측), 렉 gap은 합성을
+         * 건너뛴 프레임에 흡수되는 런도 있어 합성 프레임의 dt만 봐서도 놓친다.
+         * 획 진행 중(this.brush)의 rAF는 매끄러워야 정상이므로 120ms+ gap 자체가 부하 신호.
+         * ⚠️ gap은 EMA가 아니라 "1.2초 창 3회" 패스트패스에만 태운다 — EMA에 넣으면 획 중
+         * 탭 전환·기기 슬립 복귀의 단발 gap 하나(×0.15=수십 ms)로도 임계(10ms)를 넘어
+         * 정상 기기가 오강등된다(교차검증 발견). 진짜 렉은 gap이 연달아 오므로 창 안 3회로
+         * 충분히 빠르게(~1.5초) 잡힌다. */
+        if (this.brush && dt > 120) this.trackLagGap();
         // 수채/유화 시간 진행 시뮬
         const changed = this.cm.backend.tick(dt);
         if (changed) this.needsComposite = true;
@@ -1638,6 +1654,8 @@ export class ArtEngine {
           const t0 = performance.now();
           this.compositeNow();
           this.needsComposite = false;
+          // JS 측 합성 시간(grain 등 동기화 지점이 있는 브러시에서 유효한 신호).
+          // 큐잉으로 이 값이 안 잡히는 브러시는 위의 rAF gap 신호가 렉을 잡는다.
           this.trackCompositeCost(performance.now() - t0);
         }
       } catch (err) {
@@ -1658,14 +1676,34 @@ export class ArtEngine {
   private trackCompositeCost(ms: number): void {
     this.compositeEma += (ms - this.compositeEma) * 0.15;
     if (++this.compositeSamples < 20) return; // 워밍업(첫 합성·셰이더·폰트) 제외
-    if (this.compositeEma > 10 && this.cm.dpr > 1) {
-      if (this.cm.setDpr(1)) {
-        this.compositeEma = 0;
-        this.compositeSamples = 0;
-        this.requestComposite();
-      }
+    if (this.compositeEma > 10) this.downgradeDpr();
+  }
+
+  /** 명백한 렉 패스트패스: 획 중 120ms+ rAF gap이 1.2초 슬라이딩 창 안에 3개면 즉시 강등.
+   * EMA 경로는 471ms급 렉에서도 워밍업 20샘플 = 강등까지 ~9초가 걸려 획 첫 9초가
+   * 초당 2프레임인 채로 남는다(2026-07-23 실측 p90 484ms). "연속 3회" 대신 시간 창인
+   * 이유 = 렉 gap과 정상 JS 샘플이 교대로 들어오면 연속 카운트가 영영 안 쌓인다(실측).
+   * 창은 인접-샘플 체인이 아니라 진짜 슬라이딩(첫·셋째 gap 간격 기준) — 체인 방식은
+   * 1.1초 간격 gap이 획 여러 개에 걸쳐 이어져도 발동해 획 시작 1회성 스파이크(레이어
+   * 미러 캡처 등)가 3획 연속이면 오강등된다(교차검증 발견). 탭 전환·슬립 복귀의 단발
+   * gap, 셰이더 컴파일 스파이크는 창 안 3개를 못 채운다. */
+  private trackLagGap(): void {
+    const now = performance.now();
+    this.lagGapTs.push(now);
+    if (this.lagGapTs.length > 3) this.lagGapTs.shift();
+    if (this.lagGapTs.length === 3 && now - this.lagGapTs[0] < 1200) this.downgradeDpr();
+  }
+
+  private downgradeDpr(): void {
+    if (this.cm.dpr > 1 && this.cm.setDpr(1)) {
+      this.compositeEma = 0;
+      this.compositeSamples = 0;
+      this.lagGapTs.length = 0;
+      this.requestComposite();
     }
   }
+  /** 최근 120ms+ rAF gap 시각(최대 3개) — 슬라이딩 창 판정용 */
+  private lagGapTs: number[] = [];
 
   private compositeNow(): void {
     const ctx = this.cm.displayCtx;

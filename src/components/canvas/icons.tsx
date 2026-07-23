@@ -23,6 +23,7 @@ export type IconName =
   | "oilpastel"
   | "glow"
   | "rainbow"
+  | "glitter"
   | "smudge"
   | "eraser"
   | "fill"
@@ -173,6 +174,22 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M12.2 21.5a3.8 3.8 0 0 1 7.6 0" stroke="#5BB8F5" strokeWidth="3.2" />
       <ellipse cx="5.5" cy="22.5" rx="3.2" ry="2.2" fill="#fff" stroke={INK} strokeWidth="1.2" />
       <ellipse cx="26.5" cy="22.5" rx="3.2" ry="2.2" fill="#fff" stroke={INK} strokeWidth="1.2" />
+    </g>
+  ),
+  glitter: (
+    // 반짝이 펜: 분홍 획 리본 위에 크고 작은 반짝 별
+    <g>
+      <path
+        d="M4.5 24c5-6 13-9.5 22-9"
+        stroke="#F06AAE"
+        strokeWidth="5.5"
+        strokeLinecap="round"
+        fill="none"
+      />
+      <path d="M12 8.2 13.3 12l3.8 1.3-3.8 1.3L12 18.4l-1.3-3.8-3.8-1.3 3.8-1.3z" fill="#FFE082" {...O} />
+      <path d="M23 17.4l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" fill="#fff" {...O} />
+      <circle cx="19.5" cy="10" r="1.5" fill="#FFE082" />
+      <circle cx="7.5" cy="19.5" r="1.3" fill="#fff" />
     </g>
   ),
   smudge: (
@@ -410,6 +427,7 @@ const PNG_ICONS = new Set<IconName>([
   "oilpastel",
   "glow",
   "rainbow",
+  "glitter",
   "eraser",
   "fill",
   "palette",

@@ -13,6 +13,7 @@ import { Airbrush } from "./Airbrush";
 import { OilPastel } from "./OilPastel";
 import { GlowBrush } from "./GlowBrush";
 import { RainbowBrush } from "./RainbowBrush";
+import { GlitterBrush } from "./GlitterBrush";
 import { Eraser } from "./Eraser";
 
 /** 스트로크형 브러시 팩토리(fill/stamp/text는 도구라 별도) */
@@ -44,6 +45,8 @@ export function createBrush(id: BrushId, rng?: () => number): BrushBase {
       return new GlowBrush(rng);
     case "rainbow":
       return new RainbowBrush(rng);
+    case "glitter":
+      return new GlitterBrush(rng);
     case "eraser":
       return new Eraser(rng);
     default:
@@ -65,6 +68,7 @@ export const STROKE_BRUSHES: BrushId[] = [
   "oilpastel",
   "glow",
   "rainbow",
+  "glitter",
   "eraser",
 ];
 
@@ -89,6 +93,7 @@ export const BRUSH_META: BrushMeta[] = [
   { id: "oilpastel", label: "오일파스텔", junior: false },
   { id: "glow", label: "글로우", junior: false },
   { id: "rainbow", label: "무지개", junior: true },
+  { id: "glitter", label: "반짝이", junior: true },
   // 번짐: dab 브러시가 아니라 레이어 직접 편집 도구(SmudgeTool) — createBrush 미등록 의도
   { id: "smudge", label: "번짐", junior: false },
   { id: "eraser", label: "지우개", junior: true },

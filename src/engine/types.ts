@@ -18,6 +18,7 @@ export type BrushId =
   | "oilpastel"
   | "glow"
   | "rainbow"
+  | "glitter"
   | "smudge"
   | "eyedropper"
   | "pointer"

@@ -65,6 +65,61 @@ describe("BrushBase dab 스트림", () => {
     expect(b[a.length ? a.length - 1 : 0]?.color).toBeDefined();
   });
 
+  it("반짝이펜은 밝은 입자를 '지나간 자리'에 찍는다", () => {
+    const brush = createBrush("glitter", mulberry32(7));
+    brush.begin({ x: 0, y: 0, pressure: 1, t: 0 }, SETTINGS);
+    const dabs = [
+      ...brush.move({ x: 80, y: 0, pressure: 1, t: 80 }),
+      ...brush.move({ x: 160, y: 0, pressure: 1, t: 160 }),
+      ...brush.end(),
+    ];
+    const luma = (c: { r: number; g: number; b: number }) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+    const base = dabs.filter((d) => !d.color);
+    const sparks = dabs.filter((d) => d.color);
+    // 베이스 리본 + 반짝 입자가 모두 존재
+    expect(base.length).toBeGreaterThan(5);
+    expect(sparks.length).toBeGreaterThan(2);
+    for (const s of sparks) {
+      // 입자는 브러시색(어두운)보다 확연히 밝다 — 반짝임의 본질
+      expect(luma(s.color!)).toBeGreaterThan(luma(SETTINGS.color) + 60);
+      // 서브픽셀 증발 방지 하한(MIN_DAB_PX 불변식)
+      expect(s.size).toBeGreaterThanOrEqual(2.4);
+      // 획 폭(±0.5×실제폭) 안 — 밖으로 나가면 "잉크 튄 방울"
+      expect(Math.abs(s.y)).toBeLessThanOrEqual(SETTINGS.size * 0.8 * 0.5 + 0.01);
+    }
+    // 이동 중 입자는 진행 위치보다 뒤에 있어야 다음 베이스 dab에 덮이지 않는다
+    const moving = [
+      ...(() => {
+        const b2 = createBrush("glitter", mulberry32(8));
+        b2.begin({ x: 0, y: 0, pressure: 1, t: 0 }, SETTINGS);
+        return b2.move({ x: 100, y: 0, pressure: 1, t: 100 });
+      })(),
+    ];
+    const movingSparks = moving.filter((d) => d.color);
+    expect(movingSparks.length).toBeGreaterThan(0);
+    for (const s of movingSparks) expect(s.x).toBeLessThan(100);
+    // 베이스는 불투명 잉크(같은 색 겹침 얼룩 없음의 전제)
+    for (const d of base) expect(d.alpha).toBeGreaterThan(0.9);
+  });
+
+  it("반짝이펜: 대각선 획에서도 입자가 리본 안에 있다", () => {
+    // 회귀 가드 — end()의 끝 입자 산포축이 angle=0 하드코딩이던 버그는 수평 획에서만
+    // 우연히 통과했다(2026-07-23 교차검증). 45° 대각선으로 리본 이탈을 검증한다.
+    const brush = createBrush("glitter", mulberry32(11));
+    brush.begin({ x: 0, y: 0, pressure: 1, t: 0 }, SETTINGS);
+    const dabs = [
+      ...brush.move({ x: 70, y: 70, pressure: 1, t: 70 }),
+      ...brush.move({ x: 140, y: 140, pressure: 1, t: 140 }),
+      ...brush.end(),
+    ];
+    const ribbonHalf = (SETTINGS.size * 0.8) / 2; // 실제 획 반경(sizeScale 0.8)
+    for (const s of dabs.filter((d) => d.color)) {
+      // 대각선 y=x 축까지 수직 거리 = |x−y|/√2 — 리본 반경 + 입자 반경 안이어야 한다
+      const distToAxis = Math.abs(s.x - s.y) / Math.SQRT2;
+      expect(distToAxis).toBeLessThanOrEqual(ribbonHalf + s.size / 2 + 0.01);
+    }
+  });
+
   it("필압이 낮으면 dab 크기가 minSizeRatio 아래로 안 내려간다", () => {
     const brush = new BrushBase({ id: "pencil", tip: "grain", sizePressure: 1, minSizeRatio: 0.5 });
     const dabs = brush.begin({ x: 0, y: 0, pressure: 0, t: 0 }, SETTINGS);
