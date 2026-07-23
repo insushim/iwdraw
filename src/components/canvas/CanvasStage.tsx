@@ -94,7 +94,19 @@ export function CanvasStage({
       store.setMode(initialMode);
     }
     onEngineReady?.(engine);
+    // 데스크톱 트랙패드/마우스 줌(ctrl+wheel)은 touch-action·viewport 잠금으로 못 막는다
+    // — 크로뮴이 이걸 브라우저 페이지 줌으로 처리하면 새로고침해도 확대가 안 풀린다(JS로
+    // 페이지 줌 리셋 불가). 캔버스 위에서 가로채 앱 뷰 줌으로 돌리면 새로고침 시 리셋된다.
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return; // 핀치/줌 제스처만(일반 스크롤은 통과)
+      e.preventDefault();
+      // deltaY<0 = 확대. 감도 완만하게(트랙패드는 delta가 크게 들어온다)
+      const factor = Math.exp(-e.deltaY * 0.01);
+      engine.zoomBy(factor, e.clientX, e.clientY);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
     return () => {
+      el.removeEventListener("wheel", onWheel);
       detach();
       engine.destroy();
       engineRef.current = null;

@@ -267,6 +267,12 @@ export class ArtEngine {
     this.requestComposite();
   }
 
+  /** 마우스휠/트랙패드 줌(데스크톱) — 브라우저 페이지 줌 대신 앱 뷰 줌으로.
+   * factor>1=확대. cx,cy=화면(clientX/Y) 기준 줌 중심. 앱 뷰라 새로고침 시 리셋된다. */
+  zoomBy(factor: number, cx: number, cy: number): void {
+    this.applyTransform(factor, 0, 0, cx, cy);
+  }
+
   resetView(): void {
     this.view = { scale: 1, ox: 0, oy: 0 };
     this.emit("viewChange", { scale: 1 });

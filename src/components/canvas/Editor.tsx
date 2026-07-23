@@ -91,6 +91,19 @@ function recallDraft(): string | null {
 
 export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave, who, backHref = "/", galleryHref }: EditorProps) {
   useKeyboard();
+  const editorRef = useRef<HTMLDivElement>(null);
+  // 캔버스 밖(툴바·여백)에서 시작한 ctrl+wheel(트랙패드 핀치/마우스 줌)은 브라우저 페이지
+  // 줌을 걸어 새로고침해도 확대가 안 풀린다(JS로 페이지 줌 리셋 불가) — 에디터 전역 차단.
+  // 캔버스 위 줌은 CanvasStage가 앱 뷰 줌으로 처리(새로고침 시 리셋). 여기선 막기만 한다.
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const block = (e: WheelEvent) => {
+      if (e.ctrlKey) e.preventDefault();
+    };
+    el.addEventListener("wheel", block, { passive: false });
+    return () => el.removeEventListener("wheel", block);
+  }, []);
   const engineRef = useRef<ArtEngine | null>(null);
   const [engine, setEngine] = useState<ArtEngine | null>(null);
   // dedup: 같은 그림을 여러 번 저장하면(중간 저장→완성 저장) 갤러리에 최신본만 남긴다.
@@ -223,7 +236,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     // editor-no-pinch: 데스크톱 크로뮴(웨일북)은 뷰포트 메타 줌 잠금을 무시 — 툴바·여백에서
     // 시작한 핀치가 "브라우저 페이지 줌"을 걸면 캔버스(touch-action:none) 위 핀치로는 못 되돌려
     // 갇힌다(2026-07-07 실사용 보고). 에디터 전역에서 핀치줌 제스처 자체를 차단.
-    <div className="editor-no-pinch flex h-dvh flex-col bg-cream">
+    <div ref={editorRef} className="editor-no-pinch flex h-dvh flex-col bg-cream">
       {/* ── 상단바: 모드 탭이 중앙, 저장이 가장 눈에 띄게 ── */}
       <header className="flex items-center gap-2 px-3 py-2">
         <Link href={backHref} className="pressable touch-target grid place-items-center rounded-full bg-paper px-3 text-xl shadow-soft" aria-label="나가기">
