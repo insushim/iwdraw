@@ -408,7 +408,19 @@ export class WebGL2Backend implements RendererBackend {
     const uRot = gl.getUniformLocation(this.dabProg, "u_rot");
     const uColor = gl.getUniformLocation(this.dabProg, "u_color");
 
+    // dab별 팁 오버라이드(글리터 별 글린트) — 팁이 바뀔 때만 텍스처 리바인드.
+    // 글리터도 베이스 dab이 연속이고 입자가 간헐이라 리바인드는 이벤트당 몇 회 수준.
+    let boundTip = this.ctx.tip;
     for (const dab of dabs) {
+      const dabTip = dab.tip ?? this.ctx.tip;
+      if (dabTip !== boundTip) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.tipTexture(dabTip));
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, this.tipHlTexture(dabTip));
+        gl.activeTexture(gl.TEXTURE0);
+        boundTip = dabTip;
+      }
       const col = dab.color ?? this.ctx.color;
       gl.uniform2f(uCenter, dab.x, dab.y);
       gl.uniform1f(uSize, dab.size);

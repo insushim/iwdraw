@@ -69,10 +69,11 @@ export class GlitterBrush extends BrushBase {
     this.totalLen += segLen;
     this.sparkleResidual += segLen;
 
-    // 획 폭 0.2배마다 입자 1개 — 촘촘하되 베이스 dab 수(spacing 0.09)의 절반 수준(성능 캡).
+    // 획 폭 0.13배마다 입자 1개 — 입자가 잔스펙(획폭 6~14%) 위주가 되면서 밀도를
+    // 올려야 "글리터 가루"로 읽힌다(0.2는 듬성해서 낱개 방울로 보임). 소형 dab이라 저렴.
     // 이벤트당 상한 10개: 포인터가 한 이벤트에 크게 점프해도(저사양 이벤트 배칭) 입자가
     // 한 프레임에 수십 개 몰리지 않게 — 초과분 예산은 버린다(밀도 일관 유지).
-    const budgetStep = Math.max(2, size * 0.2);
+    const budgetStep = Math.max(2, size * 0.13);
     let sparkleCount = 0;
     while (this.sparkleResidual >= budgetStep && sparkleCount < 10) {
       this.sparkleResidual -= budgetStep;
@@ -94,8 +95,9 @@ export class GlitterBrush extends BrushBase {
     // 획 끝(탭 점 포함)에도 반짝 한두 개 — 점만 찍어도 반짝이 펜답게
     if (this.prevPt) {
       const size = Math.max(MIN_DAB_PX, this.settings.size * this.cfg.sizeScale);
-      // 산포축이 실제 진행 방향을 따라야 대각선 획 끝에서 입자가 리본 밖으로 안 튄다
-      out.push(this.sparkleDab(this.prevPt, this.lastAngle, 0, size));
+      // 산포축이 실제 진행 방향을 따라야 대각선 획 끝에서 입자가 리본 밖으로 안 튄다.
+      // 끝 입자는 별 글린트 확정 — 점만 콕 찍어도(탭) 별이 하나 반짝이는 게 이 펜의 얼굴
+      out.push(this.sparkleDab(this.prevPt, this.lastAngle, 0, size, true));
       if (this.totalLen > size) out.push(this.sparkleDab(this.prevPt, this.lastAngle, size * 0.4, size));
     }
     this.prevPt = null;
@@ -116,7 +118,9 @@ export class GlitterBrush extends BrushBase {
       b: Math.round(c.b + (255 - c.b) * t),
     });
     const tint = (dr: number, dg: number, db: number): RGB => {
-      const h = lift(0.75);
+      // 틴트 베이스를 0.75→0.88로 상향 — 중간 밝기 파스텔은 "우유빛 기포"로
+      // 읽힌다(2026-07-23 사용자 실측 "기포처럼 보여"). 반짝임은 흰색에 가까워야 한다.
+      const h = lift(0.88);
       return {
         r: clamp(h.r + dr, 0, 255),
         g: clamp(h.g + dg, 0, 255),
@@ -126,15 +130,14 @@ export class GlitterBrush extends BrushBase {
     const white: RGB = { r: 255, g: 255, b: 255 };
     const out: RGB[] = [
       white,
-      white, // 순백 글린트 가중 ×2
-      lift(0.65),
-      lift(0.8),
+      white,
+      white, // 순백 가중 ×3 — 글리터 입자의 주역은 흰 스펙
+      lift(0.9),
       lift(0.95),
-      lift(0.8), // 하이라이트 가중
-      tint(28, -6, 10), // 핑크빛
-      tint(20, 16, -14), // 금빛
-      tint(-16, 12, 24), // 하늘빛
-      tint(6, -12, 28), // 보랏빛
+      tint(24, -6, 8), // 핑크빛
+      tint(18, 14, -12), // 금빛
+      tint(-14, 10, 20), // 하늘빛
+      tint(5, -10, 24), // 보랏빛
     ];
     const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
     if (lum > 140) {
@@ -150,7 +153,7 @@ export class GlitterBrush extends BrushBase {
   }
 
   /** 반짝 입자 1개 — 진행 반대쪽 back px 뒤, 획 폭 안 수직 산포 */
-  private sparkleDab(p: StrokePoint, angle: number, back: number, size: number): Dab {
+  private sparkleDab(p: StrokePoint, angle: number, back: number, size: number, forceStar = false): Dab {
     const r = this.rng2;
     // 획 폭 안(±0.3)으로 제한 — 밖으로 나가면 "잉크 튄 방울"(fringe 실패 이력과 동일)
     const lateral = (r() - 0.5) * 2 * 0.3 * size;
@@ -162,18 +165,23 @@ export class GlitterBrush extends BrushBase {
     // 유화 드리프트의 "색 4단계 양자화" 교훈과 같은 함정 — 팔레트 크기 ≤12로 캐시가 즉시 포화된다.
     const pal = this.palette();
     const color = pal[Math.floor(r() * pal.length)];
-    // 크기 이중 분포: 대부분 잔입자 + 가끔(18%) 큰 글린트 — 실물 글리터의 성단 느낌
-    const big = r() < 0.18;
-    const sizeK = big ? 0.24 + r() * 0.12 : 0.12 + r() * 0.1;
+    // 크기 이중 분포 재조정(2026-07-23 사용자 실측 "기포처럼 보여"): 이전의
+    // 중간 크기 원(획폭 12~36%)이 물방울로 읽혔다 → ①대부분은 훨씬 작은 스펙
+    // ②큰 것은 원이 아니라 별(sparkle 팁) 글린트 — 십자 플레어가 반짝임의 지각 신호.
+    const star = forceStar || r() < 0.12;
+    const sizeK = star ? 0.4 + r() * 0.25 : 0.06 + r() * 0.08;
     return {
       x: p.x - Math.cos(angle) * back + px * lateral,
       y: p.y - Math.sin(angle) * back + py * lateral,
       // 최소 2.4px(서브픽셀 증발 방지 — MIN_DAB_PX 불변식)
       size: Math.max(MIN_DAB_PX, size * sizeK),
       // 진하기 슬라이더를 입자에도 반영 — 옅게 그린 리본 위에 입자만 쨍하면 이질적
-      alpha: clamp((0.85 + r() * 0.15) * this.settings.opacity, 0.05, 1),
-      rotation: 0, // 소형 hard dab — 회전 무의미(ROT_JITTER_MIN_PX 취지와 동일)
-      color,
+      alpha: clamp((star ? 1 : 0.85 + r() * 0.15) * this.settings.opacity, 0.05, 1),
+      // 별 글린트만 회전 지터(±22.5° — 4갈래 대칭이라 그 이상은 무의미).
+      // 잔입자는 축소 시 커버리지 요동만 만들므로 고정(ROT_JITTER_MIN_PX 취지).
+      rotation: star ? (r() - 0.5) * (Math.PI / 4) : 0,
+      color: star ? { r: 255, g: 255, b: 255 } : color, // 별은 항상 순백 점광원
+      tip: "sparkle",
     };
   }
 }

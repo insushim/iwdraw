@@ -21,7 +21,8 @@ export type TipKind =
   | "flat"
   | "wet"
   | "ink"
-  | "glow";
+  | "glow"
+  | "sparkle";
 
 /**
  * dab 최소 지름(px) — 이보다 작으면 래스터에서 서브픽셀이 돼 획이 통째로 증발하거나

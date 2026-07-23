@@ -414,6 +414,42 @@ export function makeTipCanvas(tip: TipKind, size = 128): HTMLCanvasElement {
       }
       break;
     }
+    case "sparkle": {
+      // 글리터 별 글린트: 밝은 코어 + 십자 4갈래 플레어(+옅은 대각 플레어).
+      // 둥근 원 입자는 "기포/물방울"로 읽힌다(2026-07-23 사용자 실측) — 반짝임의
+      // 지각 신호는 점광원의 회절 스파이크(십자 광선)라 별 모양이 필수.
+      // 축소(3~6px)되면 밉맵이 십자를 뭉개 살짝 트윙클한 점이 된다 — 잔입자에도 안전.
+      ctx.clearRect(0, 0, size, size);
+      const ray = (rot: number, sy: number, radius: number, a: number) => {
+        ctx.save();
+        ctx.translate(r, r);
+        ctx.rotate(rot);
+        ctx.scale(1, sy); // y 압축 → 가로로 긴 렌즈꼴 플레어(끝으로 갈수록 소멸)
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+        g.addColorStop(0, `rgba(255,255,255,${a})`);
+        g.addColorStop(0.55, `rgba(255,255,255,${a * 0.35})`);
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      };
+      ray(0, 0.09, r, 1); // 가로 광선
+      ray(Math.PI / 2, 0.09, r, 1); // 세로 광선
+      ray(Math.PI / 4, 0.06, r * 0.55, 0.7); // 대각(짧고 옅게 — 8갈래는 과함)
+      ray(-Math.PI / 4, 0.06, r * 0.55, 0.7);
+      // 중심 코어 — 플레어 교차점의 점광원
+      const core = ctx.createRadialGradient(r, r, 0, r, r, r * 0.2);
+      core.addColorStop(0, "rgba(255,255,255,1)");
+      core.addColorStop(0.5, "rgba(255,255,255,0.9)");
+      core.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(r, r, r * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
     case "glow": {
       // 네온 단면: 중심 플래토(솔리드 코어) + 넓게 퍼지는 할로.
       // wash(MAX)에서 이 프로필이 그대로 튜브 단면이 된다 — 획 내부 균일이 전제.

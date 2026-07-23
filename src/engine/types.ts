@@ -60,6 +60,8 @@ export interface Dab {
   rotation: number;
   /** 색 오버라이드(무지개 브러시 등). 없으면 브러시 색 */
   color?: RGB;
+  /** 팁 오버라이드(글리터 별 글린트 등). 없으면 스트로크 팁 */
+  tip?: import("./brushes/BrushBase").TipKind;
 }
 
 export interface BrushSettings {

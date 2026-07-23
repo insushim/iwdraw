@@ -102,7 +102,8 @@ export class Canvas2DBackend implements RendererBackend {
     if (eraser) target.save();
     for (const dab of dabs) {
       const color = dab.color ?? this.ctx.color;
-      const stamp = this.tinted(this.ctx.tip, color);
+      // dab별 팁 오버라이드(글리터 별 글린트) — tintCache 키에 kind가 이미 포함돼 안전
+      const stamp = this.tinted(dab.tip ?? this.ctx.tip, color);
       const s = dab.size;
       target.save();
       // 수채는 팁 플래토 포화용으로 alpha>1을 보낼 수 있다 — globalAlpha에 1 초과

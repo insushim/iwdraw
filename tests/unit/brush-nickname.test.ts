@@ -79,6 +79,15 @@ describe("BrushBase dab 스트림", () => {
     // 베이스 리본 + 반짝 입자가 모두 존재
     expect(base.length).toBeGreaterThan(5);
     expect(sparks.length).toBeGreaterThan(2);
+    // 입자는 전부 sparkle 팁(별 글린트 텍스처) — 둥근 원은 "기포"로 읽힌다(2026-07-23 사용자 실측)
+    for (const s of sparks) expect(s.tip).toBe("sparkle");
+    // 획 끝(end)은 별 글린트 확정(순백·풀알파) — 탭 점에도 별이 하나 반짝여야 한다
+    const last = sparks[sparks.length - 2];
+    expect(last.color).toEqual({ r: 255, g: 255, b: 255 });
+    // 별(획폭 40%+)과 잔스펙(소형)이 공존 — 중간 크기 원 일변도(기포)의 회귀 가드
+    const width = SETTINGS.size * 0.8;
+    expect(sparks.some((s) => s.size >= width * 0.4)).toBe(true);
+    expect(sparks.some((s) => s.size <= width * 0.16)).toBe(true);
     for (const s of sparks) {
       // 입자는 브러시색(어두운)보다 확연히 밝다 — 반짝임의 본질
       expect(luma(s.color!)).toBeGreaterThan(luma(SETTINGS.color) + 60);
