@@ -76,29 +76,21 @@ describe("BrushBase dab 스트림", () => {
     const luma = (c: { r: number; g: number; b: number }) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
     const base = dabs.filter((d) => !d.color);
     const sparks = dabs.filter((d) => d.color);
-    // 밝은 입자(별·잔스펙)는 sparkle 팁, 그늘 플레이크는 둥근 팁(별 실루엣이면 검은 마름모)
-    const glints = sparks.filter((s) => s.tip === "sparkle");
-    const flakes = sparks.filter((s) => !s.tip);
     // 베이스 리본 + 반짝 입자가 모두 존재
     expect(base.length).toBeGreaterThan(5);
-    expect(glints.length).toBeGreaterThan(2);
+    expect(sparks.length).toBeGreaterThan(2);
+    // 모든 입자는 sparkle 팁(별 글린트). 어두운 그늘 플레이크는 폐기(검은 점 근절, 2026-07-23 3차)
+    for (const s of sparks) expect(s.tip).toBe("sparkle");
     // 획 끝(end)은 별 글린트 확정(순백·풀알파) — 탭 점에도 별이 하나 반짝여야 한다
     const last = sparks[sparks.length - 2];
     expect(last.color).toEqual({ r: 255, g: 255, b: 255 });
     // 별(획폭 40%+)과 잔스펙(소형)이 공존 — 중간 크기 원 일변도(기포)의 회귀 가드
     const width = SETTINGS.size * 0.8;
-    expect(glints.some((s) => s.size >= width * 0.4)).toBe(true);
-    expect(glints.some((s) => s.size <= width * 0.16)).toBe(true);
-    for (const s of glints) {
-      // 밝은 입자는 브러시색(어두운)보다 확연히 밝다 — 반짝임의 본질
-      expect(luma(s.color!)).toBeGreaterThan(luma(SETTINGS.color) + 60);
-    }
-    for (const s of flakes) {
-      // 그늘 플레이크는 저알파·초소형 — 불투명 다크 스펙은 "검은 점/때"(2026-07-23 사용자 실측)
-      expect(s.alpha).toBeLessThanOrEqual(0.45);
-      expect(s.size).toBeLessThanOrEqual(Math.max(2.4, width * 0.12));
-    }
+    expect(sparks.some((s) => s.size >= width * 0.4)).toBe(true);
+    expect(sparks.some((s) => s.size <= width * 0.16)).toBe(true);
     for (const s of sparks) {
+      // 모든 입자는 브러시색(어두운)보다 확연히 밝다 — 어두운 입자 0(검은 점 회귀 가드)
+      expect(luma(s.color!)).toBeGreaterThan(luma(SETTINGS.color) + 60);
       // 서브픽셀 증발 방지 하한(MIN_DAB_PX 불변식)
       expect(s.size).toBeGreaterThanOrEqual(2.4);
       // 획 폭(±0.5×실제폭) 안 — 밖으로 나가면 "잉크 튄 방울"
