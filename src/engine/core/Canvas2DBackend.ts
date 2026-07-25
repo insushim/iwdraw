@@ -1,5 +1,5 @@
 import type { BackendCaps, Dab, RGB } from "../types";
-import { getTipCanvas, getTipEpoch, type RendererBackend, type StrokeContext } from "./backend";
+import { getTipCanvas, getTipEpoch, getTipPixels, type RendererBackend, type StrokeContext } from "./backend";
 import { applyImpastoRelief, applyPaperGrain, applyPaperGrainLift, applyWetEdge, compositeGlaze } from "./paper";
 import type { TipKind } from "../brushes/BrushBase";
 
@@ -14,6 +14,8 @@ export class Canvas2DBackend implements RendererBackend {
   private strokeCtx: CanvasRenderingContext2D;
   private tipCache = new Map<TipKind, HTMLCanvasElement>();
   private tintCache = new Map<string, HTMLCanvasElement>();
+  /** 틴트 스탬프의 수동 밉맵 체인(각 레벨 = 이전의 절반) — stampFor 참조 */
+  private mipCache = new Map<string, HTMLCanvasElement[]>();
   private ctx: StrokeContext | null = null;
   private layerCtx: CanvasRenderingContext2D | null = null;
 
@@ -35,6 +37,7 @@ export class Canvas2DBackend implements RendererBackend {
     if (epoch !== this.tipEpoch) {
       this.tipCache.clear();
       this.tintCache.clear();
+      this.mipCache.clear();
       this.tipEpoch = epoch;
     }
     let t = this.tipCache.get(kind);
@@ -67,22 +70,77 @@ export class Canvas2DBackend implements RendererBackend {
       // 결을 밝게 "선택"(GL step(0.6, dk)과 동일 임계). 항상 섞으면 밝은 색까지 회색빛.
       const dk = 1 - Math.max(color.r, color.g, color.b) / 255;
       if (dk > 0.6) {
-        cx.globalCompositeOperation = "screen";
-        cx.globalAlpha = 0.28 * dk; // GL의 캡된 lift(≤0.16)와 체감 정합(어두운 색 붓결)
-        cx.drawImage(tip, 0, 0);
-        cx.globalAlpha = 1;
-        cx.globalCompositeOperation = "destination-in";
-        cx.drawImage(tip, 0, 0);
+        // GL 셰이더와 같은 식을 픽셀로: lift = min(0.2, (1−f)·0.5)·dk, f = 팁 셰이드.
+        //
+        // ⚠️ 합성 연산(screen + destination-in)으로 하면 안 된다 — 두 가지가 동시에 깨진다:
+        //  ① 폴라리티: 팁을 그대로 screen하면 밝은 몸통(f≈1)이 가장 밝아진다. GL은 반대로
+        //     골(1−f)만 밝힌다. 연필 grain 팁은 순백(=골 없음)이라 GL 리프트가 0인데
+        //     2D는 획 전체를 들어올렸다.
+        //  ② 알파 제곱: 위에서 이미 destination-in을 한 번 했는데 여기서 또 하면 알파가
+        //     a→a²가 된다(연필 심지 0.2 → 0.05). 이 둘이 겹쳐 2D 폴백의 검은 획이
+        //     GL보다 2.3배 옅었다(2026-07-25 실측: 굵기 16 peak 2D 0.287 vs GL 0.675).
+        // 픽셀 연산은 알파를 건드리지 않아 두 문제가 원천적으로 없다(캐시되므로 색당 1회).
+        const shade = getTipPixels(kind).data;
+        const img = cx.getImageData(0, 0, c.width, c.height);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] === 0) continue;
+          const lift = Math.min(0.2, (1 - shade[i] / 255) * 0.5) * dk;
+          if (lift <= 0) continue;
+          d[i] += (255 - d[i]) * lift;
+          d[i + 1] += (255 - d[i + 1]) * lift;
+          d[i + 2] += (255 - d[i + 2]) * lift;
+        }
+        cx.putImageData(img, 0, 0);
       }
       cx.globalCompositeOperation = "source-over";
       this.tintCache.set(key, c);
       // 캐시 폭주 방지
       if (this.tintCache.size > 48) {
         const first = this.tintCache.keys().next().value;
-        if (first) this.tintCache.delete(first);
+        if (first) {
+          this.tintCache.delete(first);
+          this.mipCache.delete(first);
+        }
       }
     }
     return c;
+  }
+
+  /**
+   * 이 dab 크기에 맞는 스탬프 — 필요하면 절반씩 줄인 밉맵 레벨을 쓴다.
+   *
+   * ⚠️ Canvas2D의 drawImage 축소는 2×2 탭짜리 필터라, 128px 입자 팁(연필 grain·크레용
+   * rough)을 2~3px로 한 번에 줄이면 샘플 대부분이 팁의 구멍에 떨어져 획이 통째로
+   * 증발한다 — 2D 폴백(웨일북·저사양 크롬북 경로)에서 굵기 2 연필이 점선이 되고
+   * 농도가 GL의 절반이었다(2026-07-25 실측: 빈 열 36개, peak 0.14 vs GL 0.28).
+   * GL은 generateMipmap으로 같은 문제를 이미 막아 뒀다(2026-07-13) — 그 2D판.
+   * 축소비를 2배 이하로만 유지하면 박스 필터가 제대로 걸린다.
+   */
+  private stampFor(kind: TipKind, color: RGB, size: number): HTMLCanvasElement {
+    const base = this.tinted(kind, color);
+    if (size >= base.width / 2) return base;
+    const key = `${kind}:${color.r},${color.g},${color.b}`;
+    let chain = this.mipCache.get(key);
+    if (!chain || chain[0] !== base) {
+      chain = [base];
+      this.mipCache.set(key, chain);
+    }
+    // 목표 크기 이상인 가장 작은 레벨까지만 지연 생성
+    for (;;) {
+      const last = chain[chain.length - 1];
+      if (last.width <= 4 || last.width / 2 < size) break;
+      const half = document.createElement("canvas");
+      half.width = Math.max(2, last.width >> 1);
+      half.height = Math.max(2, last.height >> 1);
+      const hx = half.getContext("2d")!;
+      hx.imageSmoothingQuality = "high";
+      hx.drawImage(last, 0, 0, half.width, half.height);
+      chain.push(half);
+    }
+    let pick = chain[0];
+    for (const c of chain) if (c.width >= size) pick = c;
+    return pick;
   }
 
   beginStroke(ctx: StrokeContext): void {
@@ -103,8 +161,8 @@ export class Canvas2DBackend implements RendererBackend {
     for (const dab of dabs) {
       const color = dab.color ?? this.ctx.color;
       // dab별 팁 오버라이드(글리터 별 글린트) — tintCache 키에 kind가 이미 포함돼 안전
-      const stamp = this.tinted(dab.tip ?? this.ctx.tip, color);
       const s = dab.size;
+      const stamp = this.stampFor(dab.tip ?? this.ctx.tip, color, s);
       target.save();
       // 수채는 팁 플래토 포화용으로 alpha>1을 보낼 수 있다 — globalAlpha에 1 초과
       // 대입은 "무시"(이전 값 유지)라 반드시 클램프

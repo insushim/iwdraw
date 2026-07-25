@@ -63,7 +63,7 @@ export class GlitterBrush extends BrushBase {
     const segLen = dist(from.x, from.y, p.x, p.y);
     if (segLen === 0) return dabs;
 
-    const size = Math.max(MIN_DAB_PX, this.settings.size * this.cfg.sizeScale);
+    const size = this.strokePx(this.settings.size);
     const angle = Math.atan2(p.y - from.y, p.x - from.x);
     this.lastAngle = angle;
     this.totalLen += segLen;
@@ -94,7 +94,7 @@ export class GlitterBrush extends BrushBase {
     const out = super.end();
     // 획 끝(탭 점 포함)에도 반짝 한두 개 — 점만 찍어도 반짝이 펜답게
     if (this.prevPt) {
-      const size = Math.max(MIN_DAB_PX, this.settings.size * this.cfg.sizeScale);
+      const size = this.strokePx(this.settings.size);
       // 산포축이 실제 진행 방향을 따라야 대각선 획 끝에서 입자가 리본 밖으로 안 튄다.
       // 끝 입자는 별 글린트 확정 — 점만 콕 찍어도(탭) 별이 하나 반짝이는 게 이 펜의 얼굴
       out.push(this.sparkleDab(this.prevPt, this.lastAngle, 0, size, true));

@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 
 test.use({ launchOptions: { args: ["--enable-unsafe-swiftshader"] } });
+// 브러시 6종 × (대각선 1 + 수평선 3) + 매번 전체 지우기 — 정상 실행이 45~55초라
+// 기본 60초로는 여유가 없다(개발 서버가 한 번만 재컴파일해도 초과).
+test.setTimeout(150_000);
 
 /*
  * 최소 굵기(1)에서 모든 펜이 끊기고 계단이 진다는 사용자 실측(2026-07-13).
@@ -19,7 +22,7 @@ test("최소 굵기에서도 획이 끊기지 않고 부드럽다", async ({ pag
   await page.getByRole("button", { name: "색 1", exact: true }).click();
 
   const box = (await canvas.boundingBox())!;
-  const report: Record<string, { gaps: number; cov: number; sd: number }> = {};
+  const report: Record<string, { gaps: number; cov: number; sd: number; rawSd: number }> = {};
 
   for (const name of BRUSHES) {
     await page.getByRole("button", { name, exact: true }).click();
@@ -90,17 +93,44 @@ test("최소 굵기에서도 획이 끊기지 않고 부드럽다", async ({ pag
           (rows[i] ??= []).push(e);
         });
       }
+      /* 톱니 = "열마다" 오르내리는 고주파 성분이다. 원시 편차(sd)로 재면 저주파
+       * 성분까지 같이 잡힌다 — 연필류의 길이 방향 농담(thinGrain, 파장 15~37px)은
+       * 톱니가 아니라 의도된 결인데도 sd를 0.1~0.45로 흔들어 이 테스트를 무작위로
+       * 실패시켰다(2026-07-25: 색연필 sd 0.42/0.09/0.34로 실행마다 달라짐).
+       * 이동평균으로 추세를 빼고 남은 고주파만 잰다.
+       *
+       * ⚠️ 창은 "좁게". 창 N의 이동평균은 파장 L 성분을 sinc(N/L)만큼만 통과시키므로,
+       * 창이 넓을수록 저주파가 잔차에 더 많이 남는다(창 9에서 색연필 잔차 0.21로 게이트
+       * 0.2를 아슬아슬하게 넘겼다 — 태블릿 실측). 창 5면 파장 15~37px(연필 결)은 잔차가
+       * 1/6로 줄고, 파장 2~3px(진짜 톱니 = dab별 회전)은 거의 그대로 남는다. */
+      const hp = (r: number[]): number => {
+        const K = 2; // 반창(창 5)
+        const res: number[] = [];
+        for (let i = K; i < r.length - K; i++) {
+          let s = 0;
+          for (let j = i - K; j <= i + K; j++) s += r[j];
+          res.push(r[i] - s / (2 * K + 1));
+        }
+        if (!res.length) return 0;
+        const m = res.reduce((a, b) => a + b, 0) / res.length;
+        return Math.sqrt(res.reduce((a, b) => a + (b - m) * (b - m), 0) / res.length);
+      };
       let worst = 0;
+      let worstRaw = 0;
       for (const r of rows) {
         if (r.length < w * 0.9) continue; // 그 줄이 crop 전체를 지나지 않으면 무시
         const m = r.reduce((a, b) => a + b, 0) / r.length;
-        const sd = Math.sqrt(r.reduce((a, b) => a + (b - m) * (b - m), 0) / r.length);
-        worst = Math.max(worst, sd);
+        worstRaw = Math.max(
+          worstRaw,
+          Math.sqrt(r.reduce((a, b) => a + (b - m) * (b - m), 0) / r.length),
+        );
+        worst = Math.max(worst, hp(r));
       }
       return {
         gaps: empty,
         cov: Math.round((cov / w) * 10) / 10,
         sd: Math.round(worst * 100) / 100,
+        rawSd: Math.round(worstRaw * 100) / 100,
       };
     });
     report[name] = stat;
@@ -119,7 +149,15 @@ test("최소 굵기에서도 획이 끊기지 않고 부드럽다", async ({ pag
     // 수평선인데 열마다 두께가 오르내리면 톱니로 보인다 — dab 무작위 회전이 원인이었다
     // 수평선인데 윗변이 열마다 오르내리면 톱니("구불구불")로 보인다.
     // 원인 = dab마다 팁 쿼드를 무작위 회전 → 얇은 획에서 텍셀 커버리지가 dab마다 달라짐.
-    // 수정 전 실측: 연필 0.5 · 사인펜 0.36 / 수정 후: 전 브러시 0
-    expect(s.sd, `${name} 수평선 윗변 편차(톱니)`).toBeLessThan(0.2);
+    /* 고주파(이동평균 제거 후) 편차만 본다 — 저주파 농담(연필 결)은 톱니가 아니다.
+     * dab 무작위 회전을 얇은 획에서 되살리면(ROT_JITTER_MIN_PX=0) 연필 0.38 · 사인펜 0.35로
+     * 게이트를 넘는다(2026-07-25 실측) = 원래 잡으려던 결함은 그대로 잡힌다.
+     *
+     * ⚠️ 붓펜은 제외. 서예 붓이라 굵기 자체가 필압·속도로 0.45~1.15배 변하는 게 설계라
+     * "수평선 윗변이 일정하다"는 불변식이 성립하지 않는다(정상 0.15~0.21 · 회전 켰을 때
+     * 0.22로 정상과 결함의 간격이 없다). 붓펜은 끊김(gaps)·두께(cov) 게이트로만 본다. */
+    if (name !== "붓펜") {
+      expect(s.sd, `${name} 수평선 윗변 고주파 편차(톱니)`).toBeLessThan(0.2);
+    }
   }
 });

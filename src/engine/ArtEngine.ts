@@ -407,7 +407,10 @@ export class ArtEngine {
     const brush = this.brush!;
     const wash = brush.cfg.strokeBlend === "wash";
     // 작은 유화 획은 bold 붓결 LOD — fine 맵의 미세 골은 dab 축소 시 서브픽셀로 사라진다
-    const pxSize = this.settings.size * brush.cfg.sizeScale;
+    // ⚠️ 원(raw) 크기가 아니라 "실제로 그려지는 폭" 기준 — 브러시별 최소 선 폭(하한 압축)
+    // 때문에 raw 2px가 화면에선 4px로 나가는 구간이 있다. raw로 재면 4px 크레용 획에
+    // 종이 결이 0.06밖에 안 실려(=민무늬) 굵기만 굵고 질감은 없는 획이 된다.
+    const pxSize = brush.strokePx(this.settings.size);
     const tip: TipKind =
       brush.cfg.tip === "bristle" && pxSize < 40 ? "bristle-bold" : brush.cfg.tip;
     // 얇은 획 보호(2026-07-13 사용자 실측: 붓펜 굵기 1이 점선처럼 끊긴다) —
@@ -850,7 +853,10 @@ export class ArtEngine {
     if (!dabs.length) return;
     // 최종 안전망 — makeDab 이후 크기를 곱하는 브러시(수채 벌지·로브, 유화 등)가 다시
     // 서브픽셀로 내려가면 획이 끊기고 계단이 진다(2026-07-13 실측). 여기서 한 번 더 하한.
-    for (const d of dabs) if (d.size < MIN_DAB_PX) d.size = MIN_DAB_PX;
+    // 하한은 브러시별(minDabPxFor) — 도구마다 그을 수 있는 최소 선 폭이 다르다.
+    // 공통 하한 하나로 누르면 굵기 1~4에서 전 브러시가 같은 헤어라인이 된다(2026-07-25).
+    const floor = this.brush?.minDabPx ?? MIN_DAB_PX;
+    for (const d of dabs) if (d.size < floor) d.size = floor;
     if (this.firstDabLatency < 0) {
       this.firstDabLatency = performance.now() - this.strokeStartTs;
       this.emit("strokeLatency", { ms: this.firstDabLatency });

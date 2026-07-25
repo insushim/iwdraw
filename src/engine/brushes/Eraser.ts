@@ -15,6 +15,8 @@ export class Eraser extends BrushBase {
         alphaPressure: 0,
         minSizeRatio: 0.7,
         composite: "destination-out",
+        // 지우개는 매체가 아니라 도구 — 사실성보다 정밀도. 최소 폭은 절대 하한 근처로
+        minLinePx: 2.4,
       },
       rng,
     );

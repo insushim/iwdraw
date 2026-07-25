@@ -19,6 +19,7 @@ export class OilPastel extends BrushBase {
         paperGrain: 0.45, // 0.25는 민무늬 "진한 마커"로 읽힘(사용자 실측)
         grainLift: true, // 불투명 매체 — 결은 알파 구멍이 아니라 백화(겹침 진해짐 방지, 유화와 동일)
         strokeBlend: "wash", // 크리미한 덩어리 질감이 획 전체에 유지
+        thinGrain: 0.6, // 얇게 그으면 기름진 덩어리가 끊긴다(크레용보다는 덜)
         washOpacity: 1,
       },
       rng,

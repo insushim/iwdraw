@@ -16,6 +16,7 @@ export class RainbowBrush extends BrushBase {
         minSizeRatio: 0.6,
         composite: "source-over",
         dynamicHue: true,
+        thinGrain: 0.06,
       },
       rng,
     );

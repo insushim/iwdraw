@@ -30,6 +30,7 @@ export class AcrylicPen extends BrushBase {
         strokeBlend: "wash", // 한 획 안 자기 교차 자국 없음(균일한 물감 면)
         washOpacity: 1,
         paperGrain: 0.1, // 마른 아크릴의 아주 옅은 결(유화 0.38처럼 캔버스가 드러나지 않게)
+        thinGrain: 0.04, // 물감 마카 = 균일한 선
       },
       rng,
     );

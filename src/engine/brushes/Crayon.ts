@@ -17,6 +17,8 @@ export class Crayon extends BrushBase {
         composite: "source-over",
         rotationFollowsStroke: true,
         paperGrain: 0.5, // 왁스가 종이 요철 골을 건너뛰는 크레용 특유의 흰 틈 — 연필과의 질감 구분점
+        // 실물 크레용은 가는 선일수록 왁스가 끊긴다 — 얇은 획 정체성 중 가장 강한 값
+        thinGrain: 0.85,
       },
       rng,
     );

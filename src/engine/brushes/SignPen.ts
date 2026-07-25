@@ -23,6 +23,7 @@ export class SignPen extends BrushBase {
         strokeBlend: "wash", // 한 획 안은 균일한 잉크(자기 교차 자국 없음)
         washOpacity: 1,
         paperGrain: 0.05, // 종이 결은 아주 살짝만(펠트펜은 잉크가 결을 메운다)
+        thinGrain: 0.05, // 잉크펜 = 가늘어도 끝까지 균일(연필·크레용과의 대비점)
       },
       rng,
     );

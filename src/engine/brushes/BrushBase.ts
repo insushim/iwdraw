@@ -32,6 +32,43 @@ export type TipKind =
  */
 export const MIN_DAB_PX = 2.4;
 
+/** 어떤 브러시도 이보다 얇게는 못 찍는 절대 하한(px) — 팁 폴오프 2px = 안티에일리어싱 생존선 */
+export const ABS_MIN_DAB_PX = 2.0;
+
+/**
+ * 브러시별 "그을 수 있는 가장 가는 선"(px) — sizeScale에서 유도.
+ *
+ * ⚠️ 하드 클램프 하나(MIN_DAB_PX)로 전 브러시를 같은 폭에 눌러버리면 굵기 1~4에서
+ * 연필=색연필=사인펜=마커=유화붓이 **완전히 같은 헤어라인**이 된다(2026-07-25 계측:
+ * 굵기 1에서 사인펜 peak 0.605/ink 1.77 vs 아크릴펜 0.607/1.76 — 차이 0.3%).
+ * 굵기가 얇아질수록 도구 특성이 사라진다는 사용자 지적의 1차 원인.
+ * 실물도 도구마다 최소 선 폭이 다르다(샤프심 0.5mm vs 크레용·마커 납작촉 vs 유화붓) —
+ * 얇은 쪽 하한을 sizeScale에 비례시켜 굵기 1에서도 "연필은 가늘고 유화붓은 굵다"를 남긴다.
+ * 지수 0.45 = 폭 비율을 압축(마커가 연필의 2.3배가 아니라 1.45배)해 "굵기 1인데 뚱뚱함"을 방지.
+ */
+export function minDabPxFor(sizeScale: number): number {
+  return clamp(ABS_MIN_DAB_PX * Math.pow(sizeScale / 0.45, 0.45), ABS_MIN_DAB_PX, 4.2);
+}
+
+/**
+ * 하한 부근의 부드러운 압축 — `Math.max(floor, raw)`는 굵기 슬라이더에 **죽은 구간**을
+ * 만든다(연필 sizeScale 0.45 → 굵기 1·2·3·4가 raw 0.45~1.8로 전부 하한에 걸려 같은 획.
+ * 2026-07-25 계측: 연필 굵기 1/2/4의 peak 0.341/0.333/0.332 = 무변화).
+ * [0, floor×1.6] 구간을 [floor, floor×1.6]로 선형 압축해 단조성(굵기를 올리면 굵어진다)과
+ * 브러시 간 순서를 함께 보존한다.
+ */
+export function softFloorSize(raw: number, floor: number): number {
+  const knee = floor * 1.6;
+  return raw >= knee ? raw : floor + (knee - floor) * (raw / knee);
+}
+
+/**
+ * 이 폭(px) 미만에서는 2D 질감(종이 결·붓결)이 획 안에 들어가지 못한다 —
+ * 폭 2~4px 획은 결 한 칸이 획을 통째로 관통하거나(끊김) 아예 안 보인다.
+ * 대신 질감을 "획 길이 방향 농담"으로 환산한다(cfg.thinGrain).
+ */
+export const THIN_TEX_PX = 9;
+
 /**
  * dab 무작위 회전을 쓰는 최소 지름(px). 이보다 작으면 회전을 고정한다.
  * 입자 팁의 패턴이 반복돼 보이지 않게 dab마다 무작위로 회전시키는데(rotationFollowsStroke가
@@ -119,6 +156,20 @@ export interface BrushConfig {
    * 엔진이 baseSampler를 주입할 때만 동작(빈 종이·미주입 시 원색 그대로).
    */
   wetMix: number;
+  /**
+   * 얇은 획(THIN_TEX_PX 미만)에서 획을 "따라" 흐르는 농담 0~1 — 가는 선의 질감 정체성.
+   *
+   * 폭이 2~4px이면 종이 결·붓결·팁 무늬가 획 폭 안에 들어가지 않아 모든 도구가 같은
+   * 헤어라인이 된다(2026-07-25 사용자 지적·계측). 실물의 가는 선도 질감이 '가로 결'이
+   * 아니라 **길이 방향 농담**으로 나타난다 — 연필은 종이 결을 타고 옅어졌다 진해지고,
+   * 크레용은 왁스가 끊기고, 사인펜·마커는 끝까지 균일하다. 그 차이를 그대로 옮긴 값.
+   * 저주파(파장 15~35px) 사인 합성이라 얼룩이 아니라 "손맛"으로 읽힌다.
+   */
+  thinGrain: number;
+  /** 최소 선 폭(px) 직접 지정 — 0이면 sizeScale에서 유도(minDabPxFor).
+   * 붓펜처럼 굵은 붓이지만 붓끝은 아주 가는 도구, 지우개처럼 정밀도가 사실성보다 중요한
+   * 도구를 위한 예외 창구. */
+  minLinePx: number;
 }
 
 const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
@@ -145,6 +196,8 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   grainLift: false,
   streaks: 0,
   wetMix: 0,
+  thinGrain: 0,
+  minLinePx: 0,
 };
 
 /**
@@ -153,11 +206,19 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
  */
 export class BrushBase {
   readonly cfg: BrushConfig;
+  /** 이 브러시가 그을 수 있는 가장 가는 선(px) — 도구별로 다르다(minDabPxFor 참조) */
+  readonly minDabPx: number;
   protected settings!: BrushSettings;
   private last: StrokePoint | null = null;
   /** 다음 dab까지 남은 거리 */
   private residual = 0;
   private traveled = 0;
+  /** 지금 만드는 dab의 획 시작점부터의 호 길이(px) — 길이 방향 농담·hue의 위상 */
+  private arc = 0;
+  /** 획별 위상(결정론 — 같은 획을 다시 재생하면 같은 무늬) */
+  private grainSeed = 0;
+  /** 직전 makeDab이 적용한 길이 방향 농담 계수 — 알파를 직접 쓰는 서브클래스(붓펜)가 곱한다 */
+  protected thinGrainK = 1;
   /** 결 방향 스무딩(EMA) — dab별 각도 점프가 만드는 줄무늬(마커/유화) 방지 */
   private smoothedAngle: number | null = null;
   /** rotationFollows 브러시의 첫 dab — 방향을 알 수 없어 첫 move까지 보류(시작 블롭 방지) */
@@ -175,6 +236,12 @@ export class BrushBase {
   constructor(cfg: Partial<BrushConfig> & Pick<BrushConfig, "id" | "tip">, rng?: () => number) {
     this.cfg = { ...DEFAULTS, ...cfg };
     this.rng = rng ?? Math.random;
+    this.minDabPx = this.cfg.minLinePx || minDabPxFor(this.cfg.sizeScale);
+  }
+
+  /** 굵기 슬라이더 값 → 이 브러시가 실제로 찍는 dab 지름(px). UI 미리보기도 이걸 쓴다 */
+  strokePx(size: number): number {
+    return softFloorSize(size * this.cfg.sizeScale, this.minDabPx);
   }
 
   get id(): BrushId {
@@ -186,6 +253,13 @@ export class BrushBase {
     this.last = p;
     this.residual = 0;
     this.traveled = 0;
+    this.arc = 0;
+    /* 획마다 다른 위상 — Math.random 금지(무비 재생·협동에서 같은 획이 다르게 그려진다).
+     * 시각(p.t)도 쓰지 않는다: 위상이 실행마다 달라져 "같은 조작 → 같은 그림"이 깨지고,
+     * 얇은 획의 결 굵기가 실행마다 오르내려 회귀 테스트가 무작위로 빨개졌다
+     * (2026-07-25 실측: 색연필·붓펜의 윗변 편차가 실행마다 0~0.25). 시작 좌표만으로
+     * 정하면 자리가 다르면 결도 다르고, 같은 자리 같은 획은 항상 같게 재현된다. */
+    this.grainSeed = (p.x % 733) * 0.0031 + (p.y % 577) * 0.0047;
     this.smoothedAngle = null;
     // wet mixing: 붓을 대는 순간부터 밑색을 살짝 묻힌다(반 지름만큼 문지른 셈)
     this.carried = { ...settings.color };
@@ -210,7 +284,7 @@ export class BrushBase {
 
     // 간격은 "실제로 찍히는" dab 지름(최소 지름 반영) 기준 — 굵기 1에서 step 1px·dab 1px면
     // 점이 띄엄띄엄 찍혀 끊긴다. 하한 0.6px로 촘촘히 겹쳐 연속선이 되게 한다.
-    const dabDia = Math.max(MIN_DAB_PX, this.settings.size * this.cfg.sizeScale);
+    const dabDia = this.strokePx(this.settings.size);
     const step = Math.max(0.6, dabDia * this.cfg.spacing);
     const dabs: Dab[] = [];
     const angle = this.smoothAngle(Math.atan2(p.y - from.y, p.x - from.x));
@@ -232,6 +306,7 @@ export class BrushBase {
         pressure: from.pressure + (p.pressure - from.pressure) * k,
         t: from.t + (p.t - from.t) * k,
       };
+      this.arc = this.traveled + offset;
       dabs.push(this.makeDab(ip, angle));
       offset += step;
     }
@@ -244,12 +319,49 @@ export class BrushBase {
   end(): Dab[] {
     // 탭(이동 없이 뗌)이면 보류된 첫 dab을 지금이라도 찍는다 — 점 찍기 보장
     const out = this.pendingBegin ? [this.makeDab(this.pendingBegin, 0)] : [];
-    // 획 꼬리의 마른 붓털 트레일(진행 방향)
-    if (!this.pendingBegin && this.last && this.smoothedAngle !== null) {
+    // "제자리 탭" 판정은 이동 0이 아니라 dab 지름의 1/4 이하 — 손가락·마우스로 콕 찍으면
+    // 1~2px은 흔들린다. 그 미세 이동 때문에 탭 보강이 빠지면 "가끔만 점이 흐리다"가 된다.
+    const at = this.pendingBegin ?? this.last;
+    const tapAt = at && this.traveled <= this.strokePx(this.settings.size) * 0.25 ? at : null;
+    if (tapAt) {
+      out.push(...this.tapDabs(tapAt));
+    } else if (this.last && this.smoothedAngle !== null) {
+      // 획 꼬리의 마른 붓털 트레일(진행 방향)
       out.push(...this.fringeDabs(this.last, this.smoothedAngle, 1));
     }
     this.pendingBegin = null;
     this.last = null;
+    return out;
+  }
+
+  /**
+   * 제자리 탭(점 찍기) 보강 — 획과 같은 농도가 나오도록 같은 자리에 dab을 더 겹친다.
+   *
+   * 획은 한 점 위로 dab이 1/spacing겹(연필 11겹)씩 지나가며 쌓이는데 탭은 1겹뿐이다.
+   * 그래서 ① buildup 매체(연필·크레용·수채)는 점만 유독 흐리고 ② wash 매체도 팁의
+   * 성긴 구멍이 그대로 남아 얼룩진 점이 된다(2026-07-25 전수 시트 검수: 연필·색연필·
+   * 크레용의 탭이 획보다 훨씬 옅어 거의 안 보임). 아이들은 눈·코·별·물방울을 콕콕
+   * 찍는 용도로 탭을 많이 쓴다 — "찍으면 획과 같은 진하기의 점"이 기대 동작.
+   *
+   * ⚠️ 지우개(destination-out)는 제외 — 알파 1이라 이미 한 겹으로 다 지워지는데 겹치면
+   *    팁 폴오프까지 파고들어 지운 자국이 의도보다 커진다.
+   */
+  private tapDabs(p: StrokePoint): Dab[] {
+    if (this.cfg.composite === "destination-out") return [];
+    const layers = clamp(Math.round(0.55 / Math.max(0.02, this.cfg.spacing)), 1, 8);
+    const out: Dab[] = [];
+    // 입자 팁(연필 grain·크레용/색연필 rough)은 겹만 쌓아선 소용없다 — 같은 구멍이 같은 자리에
+    // 겹치기 때문. 겹마다 팁을 돌려 찍어야 구멍이 메워진다. 반대로 납작촉(마커)·둥근촉
+    // (사인펜)은 돌리면 촉 모양이 뭉개지므로 각도 고정.
+    // ⚠️ 붓털(bristle)·덩어리(chunk) 팁은 제외 — 이들은 원래도 탭이 진했고(농도비 0.98),
+    //    돌려 찍으면 실루엣이 톱니바퀴 모양으로 뭉친다(2026-07-25 확대 실측).
+    const t = this.cfg.tip;
+    const spin = t === "rough" || t === "grain";
+    // begin()(또는 위의 pendingBegin)이 이미 1겹 찍었으므로 나머지만.
+    // 각도는 0 기준 — makeDab이 rotationFollows 브러시에 tipAngleOffset을 스스로 더한다(이중 가산 금지)
+    for (let i = 1; i < layers; i++) {
+      out.push(this.makeDab(p, spin ? (i / layers) * Math.PI * 2 : 0));
+    }
     return out;
   }
 
@@ -260,7 +372,9 @@ export class BrushBase {
   private fringeDabs(p: StrokePoint, angle: number, dir: 1 | -1): Dab[] {
     const c = this.cfg;
     if (!c.fringe) return [];
-    const base = this.settings.size * c.sizeScale;
+    // 실제로 찍히는 지름 기준 — 얇은 획에서 raw(0.5px)로 오프셋을 잡으면 테이퍼 체인이
+    // 본획 안에 전부 겹쳐 사라진다(하한 압축 도입 후 정합)
+    const base = this.strokePx(this.settings.size);
     const steps: Array<[number, number, number, number]> = [
       // [진행 오프셋, 크기 배율, 알파 배율, 수직 산포(±size 비율)]
       [0.1, 0.62, 0.95, 0.03],
@@ -330,6 +444,30 @@ export class BrushBase {
     };
   }
 
+  /**
+   * 얇은 획의 길이 방향 농담 계수(0~1) — 굵은 획에서는 항상 1(기존 룩 불변).
+   *
+   * 파장 15~37px 사인 2개의 합성이라 "얼룩"이 아니라 결을 타는 손맛으로 읽힌다.
+   * buildup(연필·크레용)은 겹친 dab이 알파를 다시 채워 넣으므로(4겹이면 0.35도 0.82로
+   * 복원) wash보다 훨씬 깊게 변조해야 같은 체감이 나온다 — 블렌드별 깊이 분리 필수.
+   */
+  private thinGrainFactor(basePx: number): number {
+    const g = this.cfg.thinGrain;
+    if (!(g > 0)) return (this.thinGrainK = 1);
+    const thin = 1 - Math.min(1, basePx / THIN_TEX_PX);
+    if (thin <= 0) return (this.thinGrainK = 1);
+    const a = this.arc;
+    const n =
+      Math.sin(a * 0.41 + this.grainSeed * 6.3) * 0.5 +
+      Math.sin(a * 0.17 + this.grainSeed * 11.7 + 1.9) * 0.5; // -1~1
+    const dip = 0.5 - 0.5 * n; // 0(진함)~1(옅음)
+    const depth = g * thin * (this.cfg.strokeBlend === "wash" ? 0.5 : 0.95);
+    // ⚠️ 평균 보존 필수: (1 - depth·dip)만 쓰면 dip 평균이 0.5라 획 전체가 그만큼 옅어진다
+    //    — "연필이 흐려졌다"가 되는 지름길(1차 구현 실측: 연필 peak 0.34→0.23).
+    //    평균 1로 정규화하면 밝은 구간은 원래 농도, 어두운 구간은 더 진해 대비만 생긴다.
+    return (this.thinGrainK = Math.max(0.06, (1 - depth * dip) / (1 - depth * 0.5)));
+  }
+
   protected makeDab(p: StrokePoint, angle: number): Dab {
     const c = this.cfg;
     const s = this.settings;
@@ -337,10 +475,15 @@ export class BrushBase {
     const base = s.size * c.sizeScale;
 
     const sizeK = 1 - c.sizePressure * (1 - pr);
-    const size = Math.max(MIN_DAB_PX, base * Math.max(c.minSizeRatio, sizeK));
+    const size = softFloorSize(base * Math.max(c.minSizeRatio, sizeK), this.minDabPx);
     const alphaK = 1 - c.alphaPressure * (1 - pr);
     // wash는 진하기(opacity)를 dab이 아니라 스트로크 합성 시 1회 적용(strokeOpacity)
-    const alpha = clamp(c.flow * (c.strokeBlend === "wash" ? 1 : s.opacity) * alphaK, 0.01, 1);
+    const alpha = clamp(
+      // 길이 방향 농담은 "실제로 그려지는 폭" 기준 — 2D 결이 들어갈 자리가 없을 때만 켠다
+      c.flow * (c.strokeBlend === "wash" ? 1 : s.opacity) * alphaK * this.thinGrainFactor(size),
+      0.01,
+      1,
+    );
 
     const j = c.jitter * base;
     const dab: Dab = {
@@ -355,7 +498,10 @@ export class BrushBase {
           : 0,
     };
     if (c.dynamicHue) {
-      dab.color = hslToRgb((this.traveled / 340) % 1, 0.9, 0.55);
+      // ⚠️ traveled(세그먼트 끝에서만 갱신)가 아니라 arc(dab별 호 길이) — 세그먼트 단위로
+      // 색을 바꾸면 포인터 이벤트 간격(≈15px)마다 같은 색 dab이 뭉쳐 "구슬 목걸이"가 된다
+      // (2026-07-25 3배 확대 실측: 색 경계마다 dab 원호가 그대로 보임).
+      dab.color = hslToRgb((this.arc / 340) % 1, 0.9, 0.55);
     } else if (c.wetMix > 0 && this.baseSampler) {
       dab.color = this.paintColor();
     }

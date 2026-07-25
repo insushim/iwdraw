@@ -26,6 +26,8 @@ export class ColorPencil extends BrushBase {
         washOpacity: 0.78, // 1회칠 = 반투명 한 겹(진하기 슬라이더와 곱해진다)
         rotationFollowsStroke: true,
         paperGrain: 0.35, // 심이 종이 요철 봉우리에만 묻는 색연필 특유의 흰 틈
+        // 얇은 획에서는 그 흰 틈이 획 폭 안에 못 들어간다 → 길이 방향 농담으로 환산
+        thinGrain: 0.62,
       },
       rng,
     );

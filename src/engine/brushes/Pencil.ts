@@ -15,6 +15,8 @@ export class Pencil extends BrushBase {
         alphaPressure: 0.6, // 필압 반응은 남기되 빠른 획(저필압)이 반투명해지는 낙폭 축소
         minSizeRatio: 0.7,
         composite: "source-over",
+        // 가는 연필선은 종이 결을 타고 옅어졌다 진해진다 — 얇을수록 이게 유일한 정체성
+        thinGrain: 0.55,
       },
       rng,
     );

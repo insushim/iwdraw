@@ -99,9 +99,12 @@ export const BRUSH_META: BrushMeta[] = [
   { id: "eraser", label: "지우개", junior: true },
 ];
 
-/** 브러시별 실제 픽셀 배율 — UI(굵기 미리보기 등)가 엔진 클래스를 직접 만들지 않게 여기서 1회 산출 */
-export const BRUSH_SIZE_SCALE: Partial<Record<BrushId, number>> = Object.fromEntries(
-  STROKE_BRUSHES.map((id) => [id, createBrush(id).cfg.sizeScale]),
-);
+/** 굵기 슬라이더 값 → 실제로 그려지는 획 폭(px). 브러시별 최소 선 폭(하한 압축)까지 반영.
+ * ⚠️ UI는 sizeScale을 직접 곱하지 말 것 — 하한 구간에서 "미리보기는 계속 작아지는데 실제
+ * 획은 그대로"가 된다(구 BRUSH_SIZE_SCALE 상수를 이 함수로 대체, 2026-07-25). */
+const PREVIEW_BRUSHES = new Map(STROKE_BRUSHES.map((id) => [id, createBrush(id)]));
+export function brushStrokePx(id: BrushId, size: number): number {
+  return PREVIEW_BRUSHES.get(id)?.strokePx(size) ?? size;
+}
 
 export { BrushBase, MIN_DAB_PX };
