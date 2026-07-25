@@ -138,6 +138,21 @@ export class LayerStack {
     return true;
   }
 
+  indexOf(id: string): number {
+    return this.layers.findIndex((l) => l.id === id);
+  }
+
+  get(id: string): Layer | undefined {
+    return this.layers.find((l) => l.id === id);
+  }
+
+  /** 삭제한 레이어를 원래 자리·원래 픽셀 그대로 되돌린다(되돌리기 전용).
+   * 캔버스 객체를 그대로 다시 꽂으므로 그림이 손실되지 않는다. */
+  insertAt(layer: Layer, index: number): void {
+    if (this.layers.some((l) => l.id === layer.id)) return;
+    this.layers.splice(Math.max(0, Math.min(this.layers.length, index)), 0, layer);
+  }
+
   setActive(id: string): void {
     const l = this.layers.find((x) => x.id === id);
     if (l && !this.isLocked(l)) this.activeId = id;

@@ -236,6 +236,13 @@ export class ArtEngine {
   private emitHistory(): void {
     this.emit("historyChange", { canUndo: this.history.canUndo, canRedo: this.history.canRedo });
   }
+  /** UI 초기 동기화용 — 스토어는 constructor의 emitHistory를 놓친다(구독이 뒤에 붙음) */
+  get canUndo(): boolean {
+    return this.history.canUndo;
+  }
+  get canRedo(): boolean {
+    return this.history.canRedo;
+  }
 
   /* ── 좌표 변환 ── */
   private toCanvas(clientX: number, clientY: number, el: HTMLElement): { x: number; y: number } {
@@ -1578,12 +1585,62 @@ export class ArtEngine {
       this.emitLayers();
     }
   }
+  /**
+   * 레이어 삭제 — 되돌리기 가능.
+   * 예전엔 히스토리에 안 남겨서 ① 그림이 영영 사라지고 ② 그 레이어에 그렸던 획들의
+   * 커맨드가 화면에 없는 캔버스를 되돌리느라 "되돌리기를 눌러도 아무 일이 없다가
+   * 남의 레이어 획이 사라지는" 상태가 됐다(2026-07-25 실측). 삭제한 레이어 객체를
+   * 커맨드가 붙들고 있다가 원래 자리에 그대로 꽂는다.
+   */
   removeLayer(id: string): void {
-    if (this.layers.removeLayer(id)) {
-      this.resetSuggest();
+    const idx = this.layers.indexOf(id);
+    const layer = this.layers.get(id);
+    if (idx < 0 || !layer) return;
+    const prevActive = this.layers.activeId;
+    if (!this.layers.removeLayer(id)) return;
+    const nextActive = this.layers.activeId;
+    this.resetSuggest();
+
+    let removed = true;
+    const sync = () => {
       this.emitLayers();
       this.requestComposite();
-    }
+      this.emitHistory();
+    };
+    this.history.push({
+      cost: this.width * this.height * 4,
+      apply: () => {
+        this.layers.removeLayer(id);
+        this.layers.setActive(nextActive);
+        removed = true;
+        sync();
+      },
+      revert: () => {
+        this.layers.insertAt(layer, idx);
+        this.layers.setActive(prevActive);
+        removed = false;
+        sync();
+      },
+      // 히스토리 예산에서 밀려날 때만 픽셀을 놓는다. 되돌려서 살아 있는 레이어라면
+      // 절대 건드리면 안 된다(redo 스택 폐기 시에도 dispose가 불린다).
+      dispose: () => {
+        if (!removed) return;
+        layer.canvas.width = 0;
+        layer.canvas.height = 0;
+      },
+    });
+    // 무비 로그 정합 — 히스토리 1커맨드 = 로그 1항목(언두 커서 1:1 불변식).
+    // 재생 캔버스는 레이어가 없는 단일 합성이라 그리는 건 없다.
+    this.recorder.record({
+      brush: "fill",
+      settings: { ...this.settings },
+      layerId: id,
+      points: [{ x: 0, y: 0, pressure: 1, t: performance.now() }],
+      symmetry: "none",
+      extra: { layerDelete: true },
+    });
+    sync();
+    this.scheduleAutoSave();
   }
   /** 레이어 순서 바꾸기 — toIndex는 아래(0)부터 센 위치. 잠금 레이어(도안·원본)는 못 움직인다 */
   reorderLayer(id: string, toIndex: number): void {

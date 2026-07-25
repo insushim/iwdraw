@@ -140,6 +140,11 @@ function replayOne(
   stroke: RecordedStroke,
   progress: number,
 ) {
+  if (stroke.extra?.layerDelete) {
+    // 레이어 삭제: 히스토리 1커맨드 = 로그 1항목 정합용 자리표시(재생 캔버스는 단일
+    // 합성이라 레이어 개념이 없다). 그리는 것 없이 넘어간다.
+    return;
+  }
   if (stroke.extra?.stamp) {
     // 뚝딱그림 스탬프: progress 100%에서 한 번에(스케치 획들 뒤에 "뿅" 등장)
     if (progress < 1) return;

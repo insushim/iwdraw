@@ -204,6 +204,10 @@ export const useEditor = create<EditorState>((set, get) => ({
       layers: stack.info,
       activeLayerId: stack.activeId,
       viewScale: 1,
+      // ⚠️ 이것까지 동기화하지 않으면 재마운트(가로/세로 전환·모드 이동·재입장) 후에도
+      // 앞 엔진의 값이 남아 되돌리기/다시 버튼이 켜진 채로 아무 반응이 없다(2026-07-25 실측).
+      canUndo: engine.canUndo,
+      canRedo: engine.canRedo,
     });
     // UI(스토어)에 남아있는 설정을 새 엔진에 전부 푸시 — 페이지 이동 후 재마운트 시
     // 엔진이 기본값(검정 연필 18)으로 그리던 버그(UI 표시와 실제 그리기 불일치)
@@ -233,6 +237,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({
       engine: null,
       ready: false,
+      canUndo: false,
+      canRedo: false,
       layers: [],
       suggestions: [],
       pending: null,
