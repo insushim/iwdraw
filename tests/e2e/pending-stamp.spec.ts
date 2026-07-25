@@ -51,10 +51,10 @@ test("팔레트로 스탬프를 골라 확인하면 캔버스에 찍힌다", asy
   await page.getByRole("button", { name: /넣기$/ }).first().click();
 
   // 떠 있는 배치 바 표시
-  await expect(page.getByRole("button", { name: "스탬프 놓기 확인" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "놓기 확인" })).toBeVisible();
 
-  await page.getByRole("button", { name: "스탬프 놓기 확인" }).click();
-  await expect(page.getByRole("button", { name: "스탬프 놓기 확인" })).toHaveCount(0);
+  await page.getByRole("button", { name: "놓기 확인" }).click();
+  await expect(page.getByRole("button", { name: "놓기 확인" })).toHaveCount(0);
   await page.waitForTimeout(200);
 
   const after = await inkFrac(page);
@@ -68,9 +68,9 @@ test("취소하면 캔버스는 그대로", async ({ page }) => {
 
   await page.getByRole("button", { name: /그림 도장/ }).click();
   await page.getByRole("button", { name: /넣기$/ }).first().click();
-  await expect(page.getByRole("button", { name: "스탬프 취소" })).toBeVisible();
-  await page.getByRole("button", { name: "스탬프 취소" }).click();
-  await expect(page.getByRole("button", { name: "스탬프 취소" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "놓기 취소" })).toBeVisible();
+  await page.getByRole("button", { name: "놓기 취소" }).click();
+  await expect(page.getByRole("button", { name: "놓기 취소" })).toHaveCount(0);
   await page.waitForTimeout(200);
 
   const after = await inkFrac(page);
@@ -81,7 +81,7 @@ test("떠 있는 스탬프를 왼위로 옮기면 그쪽에 찍힌다", async ({
   const canvas = await openEditor(page);
   await page.getByRole("button", { name: /그림 도장/ }).click();
   await page.getByRole("button", { name: /넣기$/ }).first().click();
-  await expect(page.getByRole("button", { name: "스탬프 놓기 확인" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "놓기 확인" })).toBeVisible();
 
   const box = (await canvas.boundingBox())!;
   // 중심(스탬프 몸통) 잡고 → 왼위 사분면으로 드래그
@@ -90,7 +90,7 @@ test("떠 있는 스탬프를 왼위로 옮기면 그쪽에 찍힌다", async ({
   await page.mouse.move(box.x + box.width * 0.28, box.y + box.height * 0.28, { steps: 8 });
   await page.mouse.up();
 
-  await page.getByRole("button", { name: "스탬프 놓기 확인" }).click();
+  await page.getByRole("button", { name: "놓기 확인" }).click();
   await page.waitForTimeout(200);
 
   const tl = await inkFrac(page, "tl");
