@@ -57,19 +57,30 @@ test("내려받은 그림에는 화면과 같은 흰 종이가 깔려 있다", a
     cx.drawImage(img, 0, 0);
     const d = cx.getImageData(0, 0, c.width, c.height).data;
     let opaque = 0;
+    let ink = 0;
     let n = 0;
-    for (let i = 3; i < d.length; i += 4 * 97) {
+    // 종이(destination-over)만 확인하면 "흰 종이 한 장"도 통과한다 — 획이 저장본에
+    // 살아 있는지 같은 주사에서 함께 센다(합성 순서를 또 뒤집으면 이번엔 획이 사라진다).
+    for (let i = 0; i < d.length; i += 4 * 97) {
       n++;
-      if (d[i] > 250) opaque++;
+      if (d[i + 3] > 250) opaque++;
+      if (Math.min(d[i], d[i + 1], d[i + 2]) < 200) ink++;
     }
     const i = (Math.round(c.height * 0.3) * c.width + Math.round(c.width * 0.5)) * 4;
-    return { opaqueFrac: opaque / n, paper: [d[i], d[i + 1], d[i + 2]], alpha: d[i + 3], ink: 0 };
+    return {
+      opaqueFrac: opaque / n,
+      paper: [d[i], d[i + 1], d[i + 2]],
+      alpha: d[i + 3],
+      inkFrac: ink / n,
+    };
   }, b64);
 
   console.log("EXPORT-PAPER", JSON.stringify({ screenPaper, saved }));
   // 수정 전: 0.013 (거의 전부 투명)
   expect(saved.opaqueFrac, "저장본에서 불투명한 픽셀 비율").toBeGreaterThan(0.99);
   expect(saved.alpha, "종이 자리의 알파").toBeGreaterThan(250);
+  // 폭 40 마커로 캔버스 가로 60%를 그었다 = 화면에서 대략 2%. 종이에 묻혀 사라지면 0.
+  expect(saved.inkFrac, "저장본에서 획이 차지하는 비율").toBeGreaterThan(0.005);
   // 화면 종이와 저장본 종이가 같은 색이어야 한다(예전 크림 #FBF7F0은 눈에 띄게 누렜다)
   const dist = Math.hypot(
     saved.paper[0] - screenPaper[0],
