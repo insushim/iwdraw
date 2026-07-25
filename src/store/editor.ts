@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import type { ArtEngine } from "@/engine/ArtEngine";
-import { STROKE_BRUSHES } from "@/engine/brushes";
+import { BRUSH_META, STROKE_BRUSHES } from "@/engine/brushes";
 import type { ShapeInsertKind } from "@/engine/tools/ShapeInsert";
 import type {
   BlendMode,
@@ -344,7 +344,17 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ textPaletteOpen: false });
   },
   setTextPaletteOpen: (open) => set({ textPaletteOpen: open }),
-  toggleJunior: () => set((s) => ({ juniorMode: !s.juniorMode })),
+  toggleJunior: () =>
+    set((s) => {
+      const junior = !s.juniorMode;
+      // 저학년 모드로 들어갈 때 지금 든 도구가 목록에서 사라지면(유화붓·붓펜 등)
+      // 버튼은 없는데 엔진은 계속 그 붓으로 그린다 = 선택된 도구가 하나도 없어 보이고
+      // 아이는 무엇으로 그리는지 알 수 없다. 안 보이는 도구는 연필로 되돌린다.
+      const hidden = junior && BRUSH_META.some((b) => b.id === s.brush && !b.junior);
+      if (!hidden) return { juniorMode: junior };
+      s.engine?.setBrush("pencil");
+      return { juniorMode: junior, brush: "pencil" as const, prevBrush: null };
+    }),
   undo: () => get().engine?.undo(),
   redo: () => get().engine?.redo(),
   clearActive: () => get().engine?.clearActiveLayer(),

@@ -1,12 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useEditor } from "@/store/editor";
 import { rgbToCss } from "@/engine/types";
-import { BRUSH_SIZE_SCALE } from "@/engine/brushes";
+import { brushStrokePx } from "@/engine/brushes";
 
 const SIZE_MIN = 1;
 const SIZE_MAX = 128;
+
+/*
+ * 굵기 슬라이더는 선형이 아니다.
+ * 실사용 굵기는 1~30에 몰려 있는데 1~128을 선형으로 깔면 그 구간이 트랙의 23%뿐이라
+ * 3과 8을 손가락으로 갈라내기 어렵다(2026-07-25 조작 실측). 제곱 매핑으로 트랙 절반이
+ * 1~33을 담당하게 한다 — 굵은 쪽은 어차피 1~2px 차이를 구분할 일이 없다.
+ *   pos 0 → 1 · 250 → 9 · 500 → 33 · 750 → 72 · 1000 → 128
+ * ⚠️ 접근성·테스트 진입점은 "브러시 굵기"(숫자 입력)다 — 슬라이더 값은 위치라서
+ *    fill("16")이 굵기 16을 뜻하지 않는다. 라벨을 바꾸지 말 것.
+ */
+const POS_MAX = 1000;
+const posOfSize = (size: number): number =>
+  Math.round(POS_MAX * Math.sqrt((size - SIZE_MIN) / (SIZE_MAX - SIZE_MIN)));
+const sizeOfPos = (pos: number): number => {
+  const t = pos / POS_MAX;
+  return Math.round(SIZE_MIN + (SIZE_MAX - SIZE_MIN) * t * t);
+};
 
 /* 브러시 크기(큰 슬라이더+숫자 입력+실시간 미리보기 원) + 모드별 물양/보정 슬라이더 */
 export function BrushControls() {
@@ -24,12 +41,22 @@ export function BrushControls() {
   const pressureOn = useEditor((s) => s.pressureOn);
   const togglePressure = useEditor((s) => s.togglePressure);
 
-  const preview = Math.max(4, Math.min(60, size * (BRUSH_SIZE_SCALE[brush] ?? 1)));
+  // 실제 획 폭 기준 — 브러시마다 최소 선 폭이 달라(붓펜 2.2 vs 마커 2.9) 굵기 1에서도
+  // 미리보기 원이 서로 달라야 "이 펜이 더 가늘다"가 UI에서 먼저 보인다.
+  const preview = Math.max(4, Math.min(60, brushStrokePx(brush, size)));
 
   // 숫자 입력은 타이핑 중 빈 값/미완성 값을 허용해야 해서 로컬 텍스트로 들고,
   // 유효한 값일 때만 즉시 반영. 슬라이더 등 외부 변경은 동기화.
   const [sizeText, setSizeText] = useState(String(Math.round(size)));
-  useEffect(() => setSizeText(String(Math.round(size))), [size]);
+  /* 외부에서 굵기가 바뀌면(도구 전환의 굵기 기억, 슬라이더, ± 버튼) 표시를 즉시 맞춘다.
+   * useEffect로 미루면 한 프레임 동안 옛 값이 남는다 — 도구를 바꾼 직후 굵기 칸이
+   * 이전 붓의 숫자를 보여주다 뒤늦게 바뀐다(2026-07-25 실측: 지우개 전환 직후 12→34).
+   * React 공식 "렌더 중 파생 상태 조정" 패턴. */
+  const [shownSize, setShownSize] = useState(size);
+  if (size !== shownSize) {
+    setShownSize(size);
+    setSizeText(String(Math.round(size)));
+  }
   const commitSize = (raw: string) => {
     if (raw.trim() === "") return; // 지우고 다시 입력하는 중 — Number("")===0이라 1로 튀는 사고 방지
     const n = Math.round(Number(raw));
@@ -60,7 +87,8 @@ export function BrushControls() {
         </div>
         <div className="flex-1 text-sm text-ink-soft">
           <div className="flex items-center gap-1">
-            <span>굵기</span>
+            {/* 좁은 카드(세로형 태블릿 스택 레이아웃)에서 "굵 / 기"로 접히던 것 방지 */}
+            <span className="whitespace-nowrap">굵기</span>
             <button
               onClick={() => nudgeSize(-1)}
               aria-label="굵기 1 줄이기"
@@ -80,7 +108,7 @@ export function BrushControls() {
               }}
               onBlur={() => setSizeText(String(Math.round(size)))}
               onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-              aria-label="브러시 굵기 숫자 입력"
+              aria-label="브러시 굵기"
               className="h-7 w-14 rounded-lg border border-cream-deep bg-paper text-center font-semibold text-ink [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
             <button
@@ -93,11 +121,19 @@ export function BrushControls() {
           </div>
           <input
             type="range"
-            min={SIZE_MIN}
-            max={SIZE_MAX}
-            value={size}
-            onChange={(e) => setSize(+e.target.value)}
-            aria-label="브러시 굵기"
+            min={0}
+            max={POS_MAX}
+            value={posOfSize(size)}
+            onChange={(e) => setSize(sizeOfPos(+e.target.value))}
+            // 화살표 키는 위치 1칸 = 얇은 쪽에서 굵기 변화 0이라 굵기 1칸으로 바꾼다
+            onKeyDown={(e) => {
+              const d = e.key === "ArrowRight" || e.key === "ArrowUp" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -1 : 0;
+              if (!d) return;
+              e.preventDefault();
+              nudgeSize(d);
+            }}
+            aria-label="브러시 굵기 슬라이더"
+            aria-valuetext={`${Math.round(size)}`}
             className="mt-1 h-4 w-full cursor-pointer appearance-none rounded-full bg-cream-deep accent-coral"
           />
         </div>

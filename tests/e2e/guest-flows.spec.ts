@@ -17,8 +17,8 @@ test("바로 그리기: 캔버스와 도구가 뜨고 실제로 획을 그을 �
   const canvas = page.getByLabel("그림 캔버스");
   await expect(canvas).toBeVisible();
   // 도구 막대 존재
-  await expect(page.getByRole("button", { name: "연필" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "수채붓" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "연필", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "수채붓", exact: true })).toBeVisible();
 
   // 캔버스에 드래그로 획 긋기
   const box = await canvas.boundingBox();
@@ -69,12 +69,30 @@ test("저학년 모드: 쉬운 도구만 남는다", async ({ page }) => {
   await expect(page.getByRole("button", { name: "사인펜", exact: true })).toBeVisible();
 });
 
+/* 저학년 모드로 들어갈 때 지금 든 도구가 목록에서 사라지면(유화붓 등) 버튼은 없는데
+ * 엔진은 계속 그 붓으로 그렸다 = 선택된 도구가 하나도 없어 보이고, 아이는 무엇으로
+ * 그리는지 알 수도 되돌릴 수도 없었다(2026-07-25 실측). 연필로 되돌린다. */
+test("저학년 모드: 숨겨지는 도구를 들고 있었으면 연필로 바뀐다", async ({ page }) => {
+  await page.goto("/draw");
+  await page.getByRole("button", { name: "유화붓", exact: true }).click();
+  await expect(page.getByRole("button", { name: "유화붓", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: /저학년/ }).click();
+  await expect(page.getByRole("button", { name: "유화붓" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "연필", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
 test("빈 캔버스: 가로/세로 방향을 바꿀 수 있다", async ({ page }) => {
   await page.goto("/draw");
   const toggle = page.getByRole("button", { name: "캔버스 방향 바꾸기" });
   await expect(toggle).toBeVisible();
   await toggle.click();
-  // 라벨 텍스트는 lg 미만에서 숨겨지므로(hidden lg:inline) 실제 캔버스 방향으로 검증
+  // 라벨 텍스트는 xl 미만에서 숨겨지므로(hidden xl:inline) 실제 캔버스 방향으로 검증
   const canvas = page.getByLabel("그림 캔버스");
   await expect(async () => {
     const box = await canvas.boundingBox();
