@@ -171,6 +171,23 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     return () => clearTimeout(t);
   }, [submits]);
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
+  /* 방향 전환은 캔버스를 새로 만든다 = 그림이 통째로 사라지고 되돌리기도 안 된다.
+   * 경고가 title 툴팁뿐이라 터치 기기(웨일북·태블릿)에선 아예 볼 수 없었다 —
+   * "새 그림"과 같은 2단계 확인으로 통일. 빈 캔버스면 잃을 게 없으니 바로 바꾼다. */
+  const [confirmRotate, setConfirmRotate] = useState(false);
+  const rotateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleRotate = () => {
+    const flip = () => setOrientation((o) => (o === "landscape" ? "portrait" : "landscape"));
+    if (rotateTimer.current) clearTimeout(rotateTimer.current);
+    if (!confirmRotate && engineRef.current?.hasArtwork()) {
+      setConfirmRotate(true);
+      rotateTimer.current = setTimeout(() => setConfirmRotate(false), 3000);
+      return;
+    }
+    setConfirmRotate(false);
+    flip();
+  };
+  useEffect(() => () => void (rotateTimer.current && clearTimeout(rotateTimer.current)), []);
   const [showMovie, setShowMovie] = useState(false);
   const [showCollab, setShowCollab] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -283,23 +300,37 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             aria-label="함께 그리기"
             title="친구들과 한 캔버스에 같이 그려요"
           >
-            👥 <span className="hidden lg:inline">함께 그리기</span>
+            👥 <span className="hidden xl:inline">함께 그리기</span>
           </button>
         )}
 
-        <div className="flex min-w-0 flex-1 justify-center">
+        {/* ⚠️ 이 칸은 절대 줄어들면 안 된다(flex: 1 0 auto) — 줄어들면 모드 탭이 자기 칸
+            밖으로 흘러 좌우 버튼 위를 덮는다. 실측: 협동 방에서 "모둠 나가기"가 연필
+            아이콘에 가려 클릭 자체가 안 됐다(= 방에서 나갈 방법이 없음, 2026-07-25).
+            min-w-0(줄어듦) 도, flex-1 기본값(basis 0 + shrink 1) 도 안 된다.
+            넘치는 건 헤더의 가로 스크롤이 받는다. */}
+        <div className="flex flex-[1_0_auto] justify-center">
           <ModeTabs hasLineart={!!lineartSrc} />
         </div>
 
-        {!lineartSrc && (
+        {/* 도안·이어그리기 원본이 있으면 캔버스 비율이 그 그림에 묶여 있어 방향 전환이
+            아무 일도 하지 않는다(CanvasStage가 이미지 비율을 쓴다) — 라벨만 가로↔세로로
+            바뀌는 죽은 버튼이었다(2026-07-25). 아예 감춘다. */}
+        {!lineartSrc && !baseSrc && (
           <button
-            onClick={() => setOrientation((o) => (o === "landscape" ? "portrait" : "landscape"))}
-            className={iconBtn}
+            onClick={handleRotate}
+            className={
+              confirmRotate
+                ? "pressable touch-target flex items-center gap-1 rounded-full bg-berry px-3 py-2 text-sm font-semibold text-white shadow-soft"
+                : iconBtn
+            }
             title="캔버스 방향 바꾸기 (그림이 지워져요)"
             aria-label="캔버스 방향 바꾸기"
           >
             <Icon name="rotate" className="h-5 w-5" />
-            <span className="hidden lg:inline">{orientation === "landscape" ? "가로" : "세로"}</span>
+            <span className={confirmRotate ? "" : "hidden xl:inline"}>
+              {confirmRotate ? "지워요?" : orientation === "landscape" ? "가로" : "세로"}
+            </span>
           </button>
         )}
         <button

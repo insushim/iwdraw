@@ -2072,6 +2072,21 @@ export class ArtEngine {
   getLayers(): LayerStack {
     return this.layers;
   }
+  /**
+   * 잃을 그림이 있는가. 도안(라인아트)만 제외한다 — 도안은 다시 열면 되지만
+   * "그대로 이어 그리기" 원본(isBase)은 아이가 가져온 그림이라 잃으면 끝이다.
+   * "되돌릴 수 없이 그림을 지우는" 버튼(가로/세로 전환)이 확인을 물을지 판단하는 데 쓴다.
+   * 히스토리 유무로 대신할 수 없다 — 자동저장 복원본은 그림은 있고 히스토리는 비어 있다.
+   */
+  hasArtwork(): boolean {
+    for (const l of this.layers.list) {
+      if (l.isLineart) continue;
+      const d = l.ctx.getImageData(0, 0, this.width, this.height).data;
+      // 전 픽셀 주사(작은 점 하나도 놓치지 않게) — 버튼 클릭 1회짜리라 비용은 무시할 수준
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 8) return true;
+    }
+    return false;
+  }
   get usingWebGL2(): boolean {
     return this.cm.usingWebGL2;
   }
