@@ -1752,7 +1752,7 @@ export class ArtEngine {
          * 탭 전환·기기 슬립 복귀의 단발 gap 하나(×0.15=수십 ms)로도 임계(10ms)를 넘어
          * 정상 기기가 오강등된다(교차검증 발견). 진짜 렉은 gap이 연달아 오므로 창 안 3회로
          * 충분히 빠르게(~1.5초) 잡힌다. */
-        if (this.brush && dt > 120) this.trackLagGap();
+        if (this.brush && dt > 120) this.trackLagGap(dt);
         // 수채/유화 시간 진행 시뮬
         const changed = this.cm.backend.tick(dt);
         if (changed) this.needsComposite = true;
@@ -1785,7 +1785,7 @@ export class ArtEngine {
     if (this.compositeEma > 10) this.downgradeDpr();
   }
 
-  /** 명백한 렉 패스트패스: 획 중 120ms+ rAF gap이 1.2초 슬라이딩 창 안에 3개면 즉시 강등.
+  /** 명백한 렉 패스트패스: 획 중 120ms+ rAF gap이 슬라이딩 창(1.2초 또는 gap×4 중 큰 쪽) 안에 3개면 즉시 강등.
    * EMA 경로는 471ms급 렉에서도 워밍업 20샘플 = 강등까지 ~9초가 걸려 획 첫 9초가
    * 초당 2프레임인 채로 남는다(2026-07-23 실측 p90 484ms). "연속 3회" 대신 시간 창인
    * 이유 = 렉 gap과 정상 JS 샘플이 교대로 들어오면 연속 카운트가 영영 안 쌓인다(실측).
@@ -1793,23 +1793,30 @@ export class ArtEngine {
    * 1.1초 간격 gap이 획 여러 개에 걸쳐 이어져도 발동해 획 시작 1회성 스파이크(레이어
    * 미러 캡처 등)가 3획 연속이면 오강등된다(교차검증 발견). 탭 전환·슬립 복귀의 단발
    * gap, 셰이더 컴파일 스파이크는 창 안 3개를 못 채운다. */
-  private trackLagGap(): void {
+  private trackLagGap(dt: number): void {
     const now = performance.now();
-    this.lagGapTs.push(now);
-    if (this.lagGapTs.length > 3) this.lagGapTs.shift();
-    if (this.lagGapTs.length === 3 && now - this.lagGapTs[0] < 1200) this.downgradeDpr();
+    this.lagGaps.push({ t: now, dt });
+    if (this.lagGaps.length > 3) this.lagGaps.shift();
+    if (this.lagGaps.length < 3) return;
+    /* ⚠️ 창은 gap 크기에 비례해야 한다. 고정 1.2초로 두면 gap이 600ms를 넘는 순간
+     * 세 개가 창 안에 들어올 수가 없어(첫↔셋째 간격 ≥ 2×gap) **느릴수록 강등이 안 되는**
+     * 사각지대가 생긴다 — 2026-07-25 실측: 프레임 간격 중앙값 778ms인데 백킹이 3072인 채
+     * 획 3개가 끝났다(웨일북 실증상 471ms는 942ms라 아슬아슬하게 발동했던 것뿐).
+     * 반대로 gap이 작을 때(130ms → 창 520ms)는 기존보다 엄격해져 단발 gap 오강등도 준다. */
+    const maxDt = Math.max(this.lagGaps[0].dt, this.lagGaps[1].dt, this.lagGaps[2].dt);
+    if (now - this.lagGaps[0].t < Math.max(1200, maxDt * 4)) this.downgradeDpr();
   }
 
   private downgradeDpr(): void {
     if (this.cm.dpr > 1 && this.cm.setDpr(1)) {
       this.compositeEma = 0;
       this.compositeSamples = 0;
-      this.lagGapTs.length = 0;
+      this.lagGaps.length = 0;
       this.requestComposite();
     }
   }
-  /** 최근 120ms+ rAF gap 시각(최대 3개) — 슬라이딩 창 판정용 */
-  private lagGapTs: number[] = [];
+  /** 최근 120ms+ rAF gap의 시각·크기(최대 3개) — 슬라이딩 창 판정용 */
+  private lagGaps: { t: number; dt: number }[] = [];
 
   private compositeNow(): void {
     const ctx = this.cm.displayCtx;

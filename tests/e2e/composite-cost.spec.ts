@@ -66,7 +66,7 @@ test("저사양(CPU 4배 스로틀)·DPR2에서 획 중 프레임 비용", async
     const backing = { w: el.width, h: el.height };
     const sorted = frames.slice(4).sort((a, b) => a - b);
     const p = (q: number) => Math.round(sorted[Math.floor(sorted.length * q)] ?? 0);
-    return { backing, frames: sorted.length, median: p(0.5), p90: p(0.9), p99: p(0.99) };
+    return { backing, frames: sorted.length, median: p(0.5), p75: p(0.75), p90: p(0.9), p99: p(0.99) };
   });
 
   console.log("COMPOSITE", JSON.stringify(r));
@@ -77,5 +77,12 @@ test("저사양(CPU 4배 스로틀)·DPR2에서 획 중 프레임 비용", async
     1536,
   );
   expect(r.median, "획 중 프레임 간격 중앙값(ms)").toBeLessThan(60);
-  expect(r.p90, "상위 10% 프레임 간격(ms)").toBeLessThan(90);
+  /* ⚠️ p90이 아니라 p75다. 셋을 갈라야 하는데 p90으로는 못 가른다(2026-07-25 실측):
+   *     정상(강등 O)      median 21 · p75 22  · p90 27  · slowFrac 0.05
+   *     강등 실패(버그)   median 480 · p75 521 · p90 539 · slowFrac 0.51  ← backing 3072
+   *     개발 머신 부하    median 21~25 · p90 807~981                      ← backing 1536
+   *   부하는 "소수 프레임만 1초씩" 튀어 p90을 강등 실패보다 더 나쁘게 만든다(코드를 전부
+   *   stash한 기준 코드도 p90 807로 실패했다). 반면 강등 실패의 실제 증상은 "전 프레임이
+   *   480ms"라 p75·median에 그대로 드러난다. 그래서 상위 꼬리 대신 p75를 본다. */
+  expect(r.p75, "프레임 간격 상위 25%(ms)").toBeLessThan(90);
 });
