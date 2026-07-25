@@ -48,7 +48,8 @@ export function ModeTabs({ hasLineart = false }: { hasLineart?: boolean }) {
             }`}
           >
             <ToolIcon name={m.icon} className="h-6 w-6" />
-            <span className="hidden lg:inline">{m.label}</span>
+            {/* 라벨은 xl(1280)부터 — lg(1024)에서 켜면 헤더 총폭이 1116px가 되어 넘친다(2026-07-25 실측) */}
+            <span className="hidden xl:inline">{m.label}</span>
           </button>
         );
       })}

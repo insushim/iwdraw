@@ -255,7 +255,11 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     // 갇힌다(2026-07-07 실사용 보고). 에디터 전역에서 핀치줌 제스처 자체를 차단.
     <div ref={editorRef} className="editor-no-pinch flex h-dvh flex-col bg-cream">
       {/* ── 상단바: 모드 탭이 중앙, 저장이 가장 눈에 띄게 ── */}
-      <header className="flex items-center gap-2 px-3 py-2">
+      {/* overflow-x-auto: 버튼은 전부 shrink-0(라벨이 글자 단위로 접히는 걸 막으려고)이라
+          좁은 화면에선 헤더가 넘친다. 그대로 두면 넘치는 게 "페이지"라서 캔버스까지 옆으로
+          밀려 흔들린다 — 넘침은 헤더 안에서만 흡수한다(2026-07-25 실측: 390px에서 저장 버튼이
+          화면 밖 x=406). */}
+      <header className="flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2">
         <Link href={backHref} className="pressable touch-target grid place-items-center rounded-full bg-paper px-3 text-xl shadow-soft" aria-label="나가기">
           ←
         </Link>
@@ -263,7 +267,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           <ArtonLogo className="h-8" />
         </span>
         {who && (
-          <span className="hidden rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft lg:block">
+          <span className="hidden rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft xl:block">
             {who}
           </span>
         )}
@@ -272,7 +276,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             href={galleryHref}
             className="pressable touch-target hidden items-center gap-1 rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft sm:flex"
           >
-            🖼️ <span className="hidden lg:inline">우리 반 갤러리</span>
+            🖼️ <span className="hidden xl:inline">우리 반 갤러리</span>
           </Link>
         )}
         {room ? (
@@ -344,7 +348,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           title="새 그림: 지금 그림을 지우고 처음부터"
         >
           <Icon name="plus" className="h-5 w-5" />
-          <span className={confirmNew ? "" : "hidden lg:inline"}>
+          <span className={confirmNew ? "" : "hidden xl:inline"}>
             {confirmNew ? "정말요?" : "새 그림"}
           </span>
         </button>
@@ -361,7 +365,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
                 title="내 기기에 있는 그림이나 사진을 불러와서 선따기·이어 그리기"
               >
                 📂
-                <span className="hidden lg:inline">{converting ? "변환 중…" : "불러오기"}</span>
+                <span className="hidden xl:inline">{converting ? "변환 중…" : "불러오기"}</span>
               </button>
             )}
           />
@@ -373,7 +377,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           title="그려지는 과정 재생"
         >
           <Icon name="movie" className="h-5 w-5" />
-          <span className="hidden lg:inline">무비</span>
+          <span className="hidden xl:inline">무비</span>
         </button>
         <button
           onClick={toggleJunior}
@@ -385,7 +389,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           }`}
         >
           <Icon name="junior" className="h-5 w-5" />
-          <span className="hidden lg:inline">저학년</span>
+          <span className="hidden xl:inline">저학년</span>
         </button>
         {/* 학급으로 입장했어도 파일 저장은 따로 쓸 수 있어야 한다(사용자 요청 2026-07-13) */}
         {submits && (
@@ -397,7 +401,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             title="그림을 그림 파일(PNG)로 내 기기에 저장해요"
           >
             <Icon name="save" className="h-5 w-5" />
-            <span className="hidden lg:inline">{downloading ? "저장 중…" : "내 기기에 저장"}</span>
+            <span className="hidden xl:inline">{downloading ? "저장 중…" : "내 기기에 저장"}</span>
           </button>
         )}
         <button
@@ -440,13 +444,13 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       )}
 
       {/* ── 본체: 좌 도구 레일 · 캔버스 · 우 패널 ── */}
-      <div className="flex min-h-0 flex-1 gap-2 px-3 pb-3 max-md:flex-col">
-        <div className="order-2 flex min-h-0 shrink-0 md:order-1">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-3 rail:flex-row">
+        <div className="order-2 flex min-h-0 min-w-0 shrink-0 rail:order-1">
           <BrushBar />
         </div>
 
         {/* 중앙: 캔버스 + 플로팅 되돌리기/다시 */}
-        <div className="relative order-1 min-h-0 flex-1 md:order-2">
+        <div className="relative order-1 min-h-0 flex-1 rail:order-2">
           <CanvasStage
             // navKey(진입 고유 토큰)가 있으면 그것으로 key 고정 — 커스텀 이미지는 dataURL 앞부분이
             // 같아(같은 크기) slice(0,64) 충돌 → 2회차 재마운트 실패하던 버그의 근본 수정.
@@ -507,20 +511,20 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         </div>
 
         {/* 우측: 색 → 굵기 → 마법 도구 → 레이어 (접으면 캔버스 풀폭) */}
-        <div className="order-3 flex min-h-0 shrink-0 items-stretch gap-1">
+        <div className="order-3 flex min-h-0 min-w-0 shrink-0 items-stretch gap-1">
           <button
             onClick={() => setPanelOpen((v) => !v)}
             aria-expanded={panelOpen}
             aria-label={panelOpen ? "도구 패널 접기" : "도구 패널 펼치기"}
             title={panelOpen ? "도구 패널 접기 — 캔버스를 더 넓게" : "도구 패널 펼치기"}
-            className="pressable hidden w-5 shrink-0 items-center justify-center self-center rounded-full bg-paper py-6 text-xs text-ink-faint shadow-soft hover:text-ink md:flex"
+            className="pressable hidden w-5 shrink-0 items-center justify-center self-center rounded-full bg-paper py-6 text-xs text-ink-faint shadow-soft hover:text-ink rail:flex"
           >
             {panelOpen ? "▸" : "◂"}
           </button>
           {panelOpen && (
             // 우측 패널은 모든 화면에서 1열 — 2열(xl)은 시선이 갈라져 불편(2026-07-10
             // 사용자 실측). 모바일은 기존대로 가로 스크롤 1줄(contents로 흐름 유지).
-            <div className="flex shrink-0 gap-1.5 overflow-y-auto max-md:overflow-x-auto md:w-[264px] md:flex-col md:overflow-x-hidden">
+            <div className="flex min-w-0 gap-1.5 overflow-x-auto overflow-y-auto rail:w-[264px] rail:shrink-0 rail:flex-col rail:overflow-x-hidden">
               <ColorPalette />
               <BrushControls />
               <ActionRail />

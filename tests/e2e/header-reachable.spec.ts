@@ -1,0 +1,58 @@
+import { test, expect } from "@playwright/test";
+
+test.use({ launchOptions: { args: ["--enable-unsafe-swiftshader"] } });
+
+/*
+ * 헤더 버튼이 서로 겹쳐 "눌리지 않는" 상태가 되면 안 된다.
+ * 2026-07-25 실측(태블릿 712px): 모드 탭 칸이 `min-w-0 flex-1`이라 폭이 0까지 줄고,
+ * 탭 자체는 안 줄어서 칸 밖으로 흘러 좌우 버튼 위를 덮었다. 협동 방에서
+ * "모둠 나가기"가 연필 아이콘에 가려 클릭이 아예 안 됐다 = 방에서 나갈 방법이 없음.
+ *
+ * 각 컨트롤의 중심점에서 elementFromPoint가 자기 자신(또는 자손)인지 본다.
+ */
+const WIDTHS = [712, 820, 1024, 1366];
+
+async function covered(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const header = document.querySelector("header")!;
+    const bad: string[] = [];
+    for (const el of header.querySelectorAll("button, a")) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      const cx = r.x + r.width / 2;
+      const cy = r.y + r.height / 2;
+      if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) continue; // 스크롤 밖은 별개
+      const hit = document.elementFromPoint(cx, cy);
+      if (!hit || !(el === hit || el.contains(hit) || hit.contains(el))) {
+        const name = el.getAttribute("aria-label") || (el.textContent ?? "").trim().slice(0, 12);
+        bad.push(`${name} ← ${hit?.tagName.toLowerCase()}.${(hit?.className ?? "").toString().slice(0, 24)}`);
+      }
+    }
+    return bad;
+  });
+}
+
+for (const width of WIDTHS) {
+  test(`${width}px: 혼자 그리기 헤더의 모든 버튼이 안 가려진다`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/draw?mode=sketch&backend=gl");
+    await page.getByLabel("그림 캔버스").waitFor();
+    await page.waitForTimeout(400);
+    expect(await covered(page), `가려진 컨트롤`).toEqual([]);
+  });
+}
+
+test("712px: 협동 방에서도 '모둠 나가기'를 실제로 누를 수 있다", async ({ page }) => {
+  await page.setViewportSize({ width: 712, height: 800 });
+  await page.goto("/draw?mode=sketch&backend=gl");
+  await page.getByLabel("그림 캔버스").waitFor();
+  await page.getByRole("button", { name: "함께 그리기" }).click();
+  await page.getByRole("button", { name: /새 모둠 방 만들기/ }).click();
+  await page.waitForURL(/room=/);
+  await page.waitForTimeout(500);
+
+  expect(await covered(page), "협동 헤더에서 가려진 컨트롤").toEqual([]);
+  await page.getByRole("link", { name: "모둠 나가기" }).click({ timeout: 8000 });
+  await page.waitForURL((u) => !u.searchParams.has("room"));
+  await expect(page.getByRole("button", { name: "함께 그리기" })).toBeVisible();
+});

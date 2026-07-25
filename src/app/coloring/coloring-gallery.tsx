@@ -88,9 +88,12 @@ export function ColoringGallery() {
               <button
                 onClick={openPicker}
                 disabled={converting}
-                className="pressable touch-target inline-flex h-11 items-center justify-center rounded-card bg-sky px-4 font-display text-white shadow-soft disabled:opacity-60"
+                aria-label="내 사진·그림으로 도안 만들기"
+                className="pressable touch-target inline-flex h-11 items-center justify-center gap-1 rounded-card bg-sky px-4 font-display text-white shadow-soft disabled:opacity-60"
               >
-                {converting ? "변환 중…" : "📷 내 사진·그림으로"}
+                {/* 좁은 화면(390px)에서는 그림말만 — 글까지 두면 헤더가 넘쳐 페이지가
+                    옆으로 밀린다(2026-07-25 실측 +62px). aria-label로 이름은 유지. */}
+                📷<span className="hidden sm:inline">{converting ? "변환 중…" : "내 사진·그림으로"}</span>
               </button>
             )}
           />

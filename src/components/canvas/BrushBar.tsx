@@ -50,7 +50,7 @@ export function BrushBar() {
 
   return (
     <div
-      className="flex shrink-0 gap-1 overflow-x-auto rounded-card bg-paper p-1.5 shadow-soft md:grid md:w-[150px] md:grid-cols-2 md:content-start md:gap-1.5 md:overflow-x-hidden md:overflow-y-auto"
+      className="flex min-w-0 gap-1 overflow-x-auto rounded-card bg-paper p-1.5 shadow-soft rail:grid rail:w-[150px] rail:shrink-0 rail:grid-cols-2 rail:content-start rail:gap-1.5 rail:overflow-x-hidden rail:overflow-y-auto"
       role="toolbar"
       aria-label="그리기 도구"
       aria-orientation="vertical"
@@ -64,7 +64,7 @@ export function BrushBar() {
             aria-pressed={active}
             aria-label={t.label}
             title={t.label}
-            className={`pressable flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl py-1.5 max-md:min-w-[60px] ${
+            className={`pressable flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl py-1.5 min-w-[60px] rail:min-w-0 ${
               active
                 ? "bg-coral-soft shadow-soft ring-2 ring-coral"
                 : "hover:bg-cream"
