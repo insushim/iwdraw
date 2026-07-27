@@ -32,6 +32,8 @@ export class WatercolorBrush extends BrushBase {
         sizePressure: 0.3, // 굵기 변동 크면 획 머리가 볼록해진다 — 워시는 폭이 고른 게 자연스럽다
         alphaPressure: 0.12,
         minSizeRatio: 0.5,
+        // wash는 알파를 획 합성에서 1회 적용해 speedAlpha가 잘 안 먹는다 → 굵기로
+        speedSize: 0.18,
         // 붓결: 팁 스트릭 맵이 획 진행 방향을 따라 이어지도록 회전 추종(유화·붓펜과 동일 원리)
         rotationFollowsStroke: true,
         streaks: 0.32,
@@ -120,7 +122,11 @@ export class WatercolorBrush extends BrushBase {
     // bound하고, 획 내 누적은 over 블렌드라 수렴 강박이 없다.
     // ⚠️ 편차 과대(알파 ±33%·크기 ±42%) + 성긴 간격 = "점점점 사슬"(2026-07-10 실측)
     // — 촘촘한 간격에선 소폭이면 충분(질감 주력은 붓결 streaks·안료고갈 드리프트).
-    dab.alpha = clamp(this.cfg.flow * alphaK * (0.8 + this.rng2() * 0.4), 0.05, 1);
+    dab.alpha = clamp(
+      this.cfg.flow * alphaK * this.speedAlphaK * (0.8 + this.rng2() * 0.4),
+      0.05,
+      1,
+    );
     dab.size *= 0.94 + this.rng2() * 0.12;
     return dab;
   }

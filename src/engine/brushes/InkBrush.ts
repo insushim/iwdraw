@@ -30,6 +30,9 @@ export class InkBrush extends BrushBase {
         fringe: 0.85, // 양끝 마른 붓털 테이퍼
         // 얇은 획에서는 갈필 골(팁 9px+ 필요)이 씻겨 사라진다 — 길이 방향 먹 농담으로 환산
         thinGrain: 0.7,
+        // 붓은 빨리 그을수록 붓끝만 닿아 가늘어진다(갈필) — 캘리그래피의 핵심
+        speedSize: 0.3,
+        speedAlpha: 0.15,
         // 붓은 굵지만 붓끝은 가장 가는 선을 낸다 — sizeScale 유도값(2.98)은 삐침을 뭉갠다
         minLinePx: 2.2,
       },
@@ -44,7 +47,7 @@ export class InkBrush extends BrushBase {
     // 스치면(0.35) 알파 ~1.05 → 골 노출(갈필), 꾹(0.85~1)이면 1.55~1.7 → 골 포화(진한 먹).
     // ⚠️ super가 계산한 알파를 통째로 덮어쓰므로 얇은 획의 길이 방향 농담(thinGrainK)을
     //    여기서 다시 곱해야 한다 — 안 곱하면 가는 붓펜만 갈필 없이 균일해진다.
-    dab.alpha = (0.7 + pr * 1.0) * this.thinGrainK;
+    dab.alpha = (0.7 + pr * 1.0) * this.thinGrainK * this.speedAlphaK;
     // 굵기도 필압(=마우스는 속도)에 한 번 더 반응 — 빠른 삐침이 확실히 가늘어지게.
     // sizePressure만으로는 마우스 필압 스팬(0.35~0.85)에서 변화가 밋밋하다(실측).
     // ⚠️ 하한 재적용 필수: BrushBase가 보장한 크기에 이 배율(0.45~1.15)을 다시 곱하면
@@ -56,7 +59,9 @@ export class InkBrush extends BrushBase {
     //   폭이 이중으로 좁아진다(실측 굵기 4에서 잉크 변동 texCV 0.205→0.118). 원(raw)
     //   크기에서 배율까지 곱한 뒤 한 번만 압축한다.
     const c = this.cfg;
-    const sizeK = Math.max(c.minSizeRatio, 1 - c.sizePressure * (1 - pr));
+    // ⚠️ 크기를 super에서 물려받지 않고 처음부터 다시 계산하므로 속도 반응(speedSize)도
+    //    여기서 직접 넣어야 한다 — 빼먹으면 붓펜만 cfg 값이 죽은 채로 남는다.
+    const sizeK = Math.max(c.minSizeRatio, 1 - c.sizePressure * (1 - pr) - c.speedSize * this.speedK);
     const raw = this.settings.size * c.sizeScale * sizeK * (0.45 + pr * 0.7);
     dab.size = softFloorSize(raw, this.minDabPx);
     return dab;

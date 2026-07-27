@@ -14,6 +14,7 @@ export class Airbrush extends BrushBase {
         sizePressure: 0.3,
         alphaPressure: 0.6,
         minSizeRatio: 0.8,
+        speedAlpha: 0.35, // 실물 에어브러시 그대로 — 빨리 지나가면 얇게 깔린다
         composite: "source-over",
       },
       rng,

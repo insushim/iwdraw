@@ -36,6 +36,9 @@ export class OilBrush extends BrushBase {
         impasto: 0.8, // 실루엣 좌상단 하이라이트/우하단 그림자 — 물감 두께감(프리뷰=최종)
         // 얇은 유화 획은 붓결(streaks)이 폭 안에 못 들어간다 — 길이 방향 물감 농담으로 환산
         thinGrain: 0.45,
+        // 물감이 늘어나며 얇고 옅어진다
+        speedAlpha: 0.25,
+        speedSize: 0.12,
         wetMix: 0.5, // 젖은 물감 섞임 — 지나간 밑색을 붓에 묻혀 와 섞임(i-scream 유화 실측, 2026-07-10 사용자 요청)
       },
       rng,

@@ -17,6 +17,9 @@ export class Pencil extends BrushBase {
         composite: "source-over",
         // 가는 연필선은 종이 결을 타고 옅어졌다 진해진다 — 얇을수록 이게 유일한 정체성
         thinGrain: 0.55,
+        // 흑연은 빨리 그으면 덜 묻는다(필기 실물) — 필압 없는 기기의 주 표현 수단
+        speedAlpha: 0.22,
+        speedSize: 0.1,
       },
       rng,
     );

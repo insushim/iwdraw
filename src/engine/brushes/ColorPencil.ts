@@ -28,6 +28,7 @@ export class ColorPencil extends BrushBase {
         paperGrain: 0.35, // 심이 종이 요철 봉우리에만 묻는 색연필 특유의 흰 틈
         // 얇은 획에서는 그 흰 틈이 획 폭 안에 못 들어간다 → 길이 방향 농담으로 환산
         thinGrain: 0.62,
+        speedAlpha: 0.18, // 연필과 같은 계열이되 심이 무르니 낙폭은 작게
       },
       rng,
     );

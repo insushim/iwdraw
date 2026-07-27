@@ -20,6 +20,8 @@ export class OilPastel extends BrushBase {
         grainLift: true, // 불투명 매체 — 결은 알파 구멍이 아니라 백화(겹침 진해짐 방지, 유화와 동일)
         strokeBlend: "wash", // 크리미한 덩어리 질감이 획 전체에 유지
         thinGrain: 0.6, // 얇게 그으면 기름진 덩어리가 끊긴다(크레용보다는 덜)
+        speedSpacing: 0.22, // 기름진 덩어리가 끊기는 결(크레용보다 약하게)
+        speedAlpha: 0.1,
         washOpacity: 1,
       },
       rng,

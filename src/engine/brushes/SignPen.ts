@@ -24,6 +24,10 @@ export class SignPen extends BrushBase {
         washOpacity: 1,
         paperGrain: 0.05, // 종이 결은 아주 살짝만(펠트펜은 잉크가 결을 메운다)
         thinGrain: 0.05, // 잉크펜 = 가늘어도 끝까지 균일(연필·크레용과의 대비점)
+        // 잉크가 속도를 못 따라온다 — 빨리 그으면 옅고 살짝 끊긴다.
+        // 굵기·질감이 균일한 도구라 속도가 사인펜의 유일한 개성 축이다.
+        speedAlpha: 0.32,
+        speedSpacing: 0.22,
       },
       rng,
     );

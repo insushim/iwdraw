@@ -78,6 +78,31 @@ export const THIN_TEX_PX = 9;
  */
 export const ROT_JITTER_MIN_PX = 8;
 
+/**
+ * 속도 정규화 기준(px/ms) — 이 속도를 speedK 1.0으로 본다.
+ *
+ * 실측(1280×720 캔버스, 데스크톱): 아이가 천천히 선을 따라 그으면 0.2~0.6,
+ * 보통 획 1~2, 크게 휘두르면 3 이상. 1.8을 상한으로 두면 "보통~빠름" 구간에서
+ * 계수가 0.5~1.0으로 움직여 체감이 가장 또렷하다.
+ */
+export const SPEED_REF_PX_MS = 1.8;
+/**
+ * 속도를 재는 **이동 거리 창**(px). 이벤트 1개가 아니라 "최근 이만큼 지나오는 데 걸린 시간".
+ *
+ * ⚠️ 이벤트 단위(Δ거리/Δt)로 재면 안 된다. 포인터 이벤트는 일정 주기로 오지 않는다 —
+ * 실측 77~150ms로 널뛰고, 기기가 바쁘면 여러 개가 한꺼번에 몰려 들어온다(같은 손 속도인데
+ * 어떤 세그먼트는 0.1ms, 어떤 건 150ms). 그걸 그대로 쓰면 **손이 아니라 기기 사정**이
+ * 농도·굵기를 흔들어 획 윗변이 톱니가 된다(2026-07-27 A/B 실측: 3워커 부하에서
+ * min-size-smooth·thin-brush-identity가 기준선은 통과, 이벤트 단위 속도는 실패).
+ * 느린 기기(웨일북)에서 실제로 벌어질 일이라 테스트만의 문제가 아니다.
+ *
+ * 거리 창으로 재면 이벤트가 어떻게 쪼개져 들어오든 같은 거리를 같은 시간에 지나면 같은
+ * 속도가 나온다 — 쪼개짐에 대해 불변. MyPaint의 gross speed와 같은 취지.
+ */
+const SPEED_WIN_PX = 48;
+/** 거리 창 위에 얹는 가벼운 평활 — 창 경계에서 표본이 빠질 때의 계단만 없앤다 */
+const SPEED_EMA = 0.25;
+
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
 export type DabComposite =
   | "source-over"
@@ -166,6 +191,24 @@ export interface BrushConfig {
    * 저주파(파장 15~35px) 사인 합성이라 얼룩이 아니라 "손맛"으로 읽힌다.
    */
   thinGrain: number;
+  /**
+   * 획 속도 → 굵기 감소(0~1). 빨리 그으면 가늘어진다.
+   *
+   * ⚠️ 이 세 값(speedSize·speedAlpha·speedSpacing)이 **필압 없는 기기에서 도구를
+   * 구분하는 거의 유일한 수단**이다. 초등 교실 기기(웨일북·크롬북·마우스·손가락)는
+   * 필압이 오지 않아 PointerHandler가 속도를 필압으로 접어 [0.35,0.85]로 클램프한다
+   * — 그러면 모든 브러시가 sizePressure·alphaPressure 두 손잡이로 **똑같이** 반응해
+   * 얇은 굵기에서 폭이 하한에 눌리는 순간 서로 구별할 근거가 사라진다.
+   * 속도를 독립 입력으로 두면 폭이 같아도 "빨리 그을 때 어떻게 변하느냐"가 남는다
+   * (사인펜은 잉크가 못 따라와 옅고 끊기고, 크레용은 왁스라 거의 그대로).
+   *
+   * 참고: MyPaint의 fine/gross speed 입력, Procreate의 Speed Size/Opacity/Spacing.
+   */
+  speedSize: number;
+  /** 획 속도 → 농도 감소(0~1). 잉크·물감이 못 따라오는 도구용 */
+  speedAlpha: number;
+  /** 획 속도 → dab 간격 증가(0~1). 빨리 그으면 결이 끊기는 도구(크레용·오일파스텔)용 */
+  speedSpacing: number;
   /** 최소 선 폭(px) 직접 지정 — 0이면 sizeScale에서 유도(minDabPxFor).
    * 붓펜처럼 굵은 붓이지만 붓끝은 아주 가는 도구, 지우개처럼 정밀도가 사실성보다 중요한
    * 도구를 위한 예외 창구. */
@@ -197,6 +240,10 @@ const DEFAULTS: Omit<BrushConfig, "id" | "tip"> = {
   streaks: 0,
   wetMix: 0,
   thinGrain: 0,
+  // 기본 0 = 속도 무반응. 값을 넣지 않은 브러시는 거동이 완전히 그대로다.
+  speedSize: 0,
+  speedAlpha: 0,
+  speedSpacing: 0,
   minLinePx: 0,
 };
 
@@ -219,6 +266,20 @@ export class BrushBase {
   private grainSeed = 0;
   /** 직전 makeDab이 적용한 길이 방향 농담 계수 — 알파를 직접 쓰는 서브클래스(붓펜)가 곱한다 */
   protected thinGrainK = 1;
+  /**
+   * 지금 획의 속도 계수 0(느림)~1(빠름).
+   *
+   * ⚠️ **획의 점열(x, y, t)에서만 유도한다** — 포인터 핸들러의 실시간 상태(speedEma)나
+   * 벽시계를 쓰면 무비 재생·협동 재현이 원본과 달라진다. 재생은 기록된 같은 점열을
+   * begin()부터 다시 먹이므로(MovieModal), EMA여도 같은 입력엔 같은 결과가 나온다.
+   * (순서의존 EMA를 "임의 항목 취소 후 재계산"에 쓰면 안 된다는 일반 교훈의 예외 —
+   *  여기선 항상 획 처음부터 전체를 다시 재생한다.)
+   */
+  protected speedK = 0;
+  /** 속도 측정용 이동 거리 창 — {호 길이, 시각} 표본(SPEED_WIN_PX 참조) */
+  private speedWin: { arc: number; t: number }[] = [];
+  /** 직전 makeDab이 적용한 속도 농도 계수 — 알파를 직접 쓰는 서브클래스(붓펜·수채)가 곱한다 */
+  protected speedAlphaK = 1;
   /** 결 방향 스무딩(EMA) — dab별 각도 점프가 만드는 줄무늬(마커/유화) 방지 */
   private smoothedAngle: number | null = null;
   /** rotationFollows 브러시의 첫 dab — 방향을 알 수 없어 첫 move까지 보류(시작 블롭 방지) */
@@ -254,6 +315,11 @@ export class BrushBase {
     this.residual = 0;
     this.traveled = 0;
     this.arc = 0;
+    // 획은 정지 상태에서 시작한다(실제로도 손은 가속한다) — 0에서 출발해야
+    // 앞 획의 속도가 다음 획 머리로 새지 않는다.
+    this.speedK = 0;
+    this.speedAlphaK = 1;
+    this.speedWin = [{ arc: 0, t: p.t }];
     /* 획마다 다른 위상 — Math.random 금지(무비 재생·협동에서 같은 획이 다르게 그려진다).
      * 시각(p.t)도 쓰지 않는다: 위상이 실행마다 달라져 "같은 조작 → 같은 그림"이 깨지고,
      * 얇은 획의 결 굵기가 실행마다 오르내려 회귀 테스트가 무작위로 빨개졌다
@@ -282,10 +348,31 @@ export class BrushBase {
     // 세그먼트(또는 end() 안전망)까지 지연한다 — 의도된 동작
     if (segLen === 0) return [];
 
+    /* 속도 갱신 — "최근 SPEED_WIN_PX를 지나오는 데 걸린 시간". 점열에서만 유도하므로
+     * 재생 정합(speedK 주석 참조). 창이 다 차기 전(획 머리)에는 speedK가 0에서 서서히
+     * 올라간다 — 실제로도 손은 정지에서 가속하므로 자연스럽다. */
+    this.speedWin.push({ arc: this.traveled + segLen, t: p.t });
+    // 창보다 오래된 표본은 버리되 창을 걸치는 것 하나는 남긴다(창 길이를 유지)
+    while (
+      this.speedWin.length > 2 &&
+      this.speedWin[this.speedWin.length - 1].arc - this.speedWin[1].arc >= SPEED_WIN_PX
+    )
+      this.speedWin.shift();
+    const first = this.speedWin[0];
+    const last = this.speedWin[this.speedWin.length - 1];
+    const winDt = last.t - first.t;
+    const winPx = last.arc - first.arc;
+    if (winDt > 0 && winPx > 0) {
+      const v = clamp(winPx / winDt / SPEED_REF_PX_MS, 0, 1);
+      this.speedK += (v - this.speedK) * SPEED_EMA;
+    }
+
     // 간격은 "실제로 찍히는" dab 지름(최소 지름 반영) 기준 — 굵기 1에서 step 1px·dab 1px면
     // 점이 띄엄띄엄 찍혀 끊긴다. 하한 0.6px로 촘촘히 겹쳐 연속선이 되게 한다.
     const dabDia = this.strokePx(this.settings.size);
-    const step = Math.max(0.6, dabDia * this.cfg.spacing);
+    // 빨리 그으면 간격이 벌어진다(크레용 왁스가 끊기는 결) — 하한 0.6px는 그대로라
+    // 얇은 획이 점선으로 끊기지는 않는다.
+    const step = Math.max(0.6, dabDia * this.cfg.spacing * (1 + this.cfg.speedSpacing * this.speedK));
     const dabs: Dab[] = [];
     const angle = this.smoothAngle(Math.atan2(p.y - from.y, p.x - from.x));
     this.updateCarried(p, segLen);
@@ -474,13 +561,21 @@ export class BrushBase {
     const pr = clamp(p.pressure, 0, 1);
     const base = s.size * c.sizeScale;
 
-    const sizeK = 1 - c.sizePressure * (1 - pr);
+    // 필압 감소와 속도 감소는 같은 자리에서 더해 하한(minSizeRatio) 하나로 막는다 —
+    // 따로 곱하면 둘 다 센 브러시에서 굵기가 하한 아래로 빠져 획이 끊긴다.
+    const sizeK = 1 - c.sizePressure * (1 - pr) - c.speedSize * this.speedK;
     const size = softFloorSize(base * Math.max(c.minSizeRatio, sizeK), this.minDabPx);
     const alphaK = 1 - c.alphaPressure * (1 - pr);
+    // 알파를 직접 계산하는 서브클래스(붓펜·수채)도 곱할 수 있게 필드로 남긴다
+    this.speedAlphaK = 1 - c.speedAlpha * this.speedK;
     // wash는 진하기(opacity)를 dab이 아니라 스트로크 합성 시 1회 적용(strokeOpacity)
     const alpha = clamp(
       // 길이 방향 농담은 "실제로 그려지는 폭" 기준 — 2D 결이 들어갈 자리가 없을 때만 켠다
-      c.flow * (c.strokeBlend === "wash" ? 1 : s.opacity) * alphaK * this.thinGrainFactor(size),
+      c.flow *
+        (c.strokeBlend === "wash" ? 1 : s.opacity) *
+        alphaK *
+        this.speedAlphaK *
+        this.thinGrainFactor(size),
       0.01,
       1,
     );

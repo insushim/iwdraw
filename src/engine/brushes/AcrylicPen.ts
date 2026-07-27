@@ -31,6 +31,7 @@ export class AcrylicPen extends BrushBase {
         washOpacity: 1,
         paperGrain: 0.1, // 마른 아크릴의 아주 옅은 결(유화 0.38처럼 캔버스가 드러나지 않게)
         thinGrain: 0.04, // 물감 마카 = 균일한 선
+        speedAlpha: 0.08, // 물감 마카 = 거의 균일
       },
       rng,
     );
