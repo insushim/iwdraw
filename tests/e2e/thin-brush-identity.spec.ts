@@ -16,7 +16,7 @@ test.use({ launchOptions: { args: ["--enable-unsafe-swiftshader"] } });
  * 갈리는가 ③ 굵기 슬라이더에 죽은 구간이 없는가.
  */
 
-type Stat = { peak: number; w10: number; texCV: number; gaps: number };
+type Stat = { peak: number; w10: number; w50: number; texCV: number; gaps: number };
 
 test("굵기를 낮춰도 브러시마다 다른 획이 나온다", async ({ page }) => {
   await page.goto("/draw?mode=sketch&backend=gl");
@@ -42,7 +42,7 @@ test("굵기를 낮춰도 브러시마다 다른 획이 나온다", async ({ pag
 
   /** 각 획의 단면 프로파일 — 폭(w10) · 농도(peak) · 길이 방향 요동(texCV) */
   const measure = (rows: { name: string; yFrac: number }[]) =>
-    page.evaluate((rows) => {
+    page.evaluate((rows: { name: string; yFrac: number }[]) => {
       const el = document.querySelector('canvas[aria-label="그림 캔버스"]') as HTMLCanvasElement;
       const ctx = el.getContext("2d")!;
       const W = el.width;
@@ -57,7 +57,10 @@ test("굵기를 낮춰도 브러시마다 다른 획이 나온다", async ({ pag
           bgN++;
         }
       const bg = bgSum / bgN;
-      const out: Record<string, { peak: number; w10: number; texCV: number; gaps: number }> = {};
+      const out: Record<
+        string,
+        { peak: number; w10: number; w50: number; texCV: number; gaps: number }
+      > = {};
       for (const r of rows) {
         const cy = Math.round(H * r.yFrac);
         const half = Math.round(H * 0.04);
@@ -76,6 +79,17 @@ test("굵기를 낮춰도 브러시마다 다른 획이 나온다", async ({ pag
         out[r.name] = {
           peak: +mean(peak).toFixed(3),
           w10: +mean(cols.map((p) => p.filter((v) => v >= 0.1).length)).toFixed(2),
+          /* 반치폭 — 그 열 자신의 최대 농도의 절반을 넘는 행 수.
+           * ⚠️ 절대 임계(w10)는 "폭"과 "진하기"를 섞어 잰다. 획이 3%만 옅어져도 폭이
+           * 0.1~0.7행 줄어든 것처럼 나온다(2026-07-27 A/B 실측). 굵기 1↔4처럼 실제 dab
+           * 지름 차가 0.5px(2.17→2.68)뿐인 구간에서는 그 혼입이 판정을 뒤집는다.
+           * 자기 농도 기준이면 진하기와 무관하게 발자국만 잰다. */
+          w50: +mean(
+            cols.map((p) => {
+              const mx = Math.max(...p);
+              return mx <= 0 ? 0 : p.filter((v) => v >= mx * 0.5).length;
+            }),
+          ).toFixed(2),
           texCV: +(sd / (m || 1)).toFixed(3),
           gaps: peak.filter((v) => v < 0.04).length,
         };
@@ -146,6 +160,15 @@ test("굵기를 낮춰도 브러시마다 다른 획이 나온다", async ({ pag
   await page.waitForTimeout(300);
   const ramp: Record<string, Stat> = await measure(stepRows);
   console.log("SIZE-RAMP", JSON.stringify(ramp));
-  expect(ramp["s1"].w10, "연필 굵기1 < 굵기4").toBeLessThan(ramp["s4"].w10);
-  expect(ramp["s4"].w10, "연필 굵기4 < 굵기8").toBeLessThan(ramp["s8"].w10);
+  /* ⚠️ 굵기 1→4를 "폭"으로 판정하면 안 된다 — 측정 해상도 아래다.
+   * 연필 sizeScale 0.45, 하한 압축(softFloorSize) 때문에 실제 dab 지름은 2.17 → 2.68px,
+   * 래스터 행 수로는 둘 다 2행이다. 2026-07-27 A/B 실측: 속도 반응을 넣기 전 기준선조차
+   * w50 2.00 vs 2.01(=0.01행, 노이즈)로 겨우 통과하고 있었다. 즉 이 단언은 통과해도
+   * 아무것도 보장하지 못했다.
+   * 이 구간에서 사용자가 실제로 체감하는 변화는 **진하기**다(peak 0.27 → 0.34, 28%).
+   * 폭은 해상되는 1→8에만 건다. 둘을 합치면 "슬라이더를 올리면 획이 달라진다"는
+   * 원래 의도를 그대로, 다만 실제로 잴 수 있는 형태로 지킨다. */
+  expect(ramp["s1"].peak, "연필 굵기1 < 굵기4 (진하기)").toBeLessThan(ramp["s4"].peak);
+  expect(ramp["s4"].peak, "연필 굵기4 < 굵기8 (진하기)").toBeLessThan(ramp["s8"].peak);
+  expect(ramp["s1"].w50, "연필 굵기1 < 굵기8 (폭)").toBeLessThan(ramp["s8"].w50);
 });
