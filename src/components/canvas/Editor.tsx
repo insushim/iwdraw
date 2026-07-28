@@ -259,7 +259,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           좁은 화면에선 헤더가 넘친다. 그대로 두면 넘치는 게 "페이지"라서 캔버스까지 옆으로
           밀려 흔들린다 — 넘침은 헤더 안에서만 흡수한다(2026-07-25 실측: 390px에서 저장 버튼이
           화면 밖 x=406). */}
-      <header className="flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2">
+      <header className="flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2 compact:gap-1 compact:px-2 compact:py-1">
         <Link href={backHref} className="pressable touch-target grid place-items-center rounded-full bg-paper px-3 text-xl shadow-soft" aria-label="나가기">
           ←
         </Link>
@@ -444,13 +444,13 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       )}
 
       {/* ── 본체: 좌 도구 레일 · 캔버스 · 우 패널 ── */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-3 rail:flex-row">
-        <div className="order-2 flex min-h-0 min-w-0 shrink-0 rail:order-1">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pb-3 compact:flex-row compact:gap-1.5 compact:px-2 compact:pb-2 rail:flex-row">
+        <div className="order-2 flex min-h-0 min-w-0 shrink-0 compact:order-1 rail:order-1">
           <BrushBar />
         </div>
 
         {/* 중앙: 캔버스 + 플로팅 되돌리기/다시 */}
-        <div className="relative order-1 min-h-0 flex-1 rail:order-2">
+        <div className="relative order-1 min-h-0 flex-1 compact:order-2 rail:order-2">
           <CanvasStage
             // navKey(진입 고유 토큰)가 있으면 그것으로 key 고정 — 커스텀 이미지는 dataURL 앞부분이
             // 같아(같은 크기) slice(0,64) 충돌 → 2회차 재마운트 실패하던 버그의 근본 수정.
@@ -477,7 +477,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           />
           <SuggestBar />
           <PendingStampBar />
-          <div className="absolute bottom-3 left-3 z-10 flex gap-2">
+          <div className="absolute bottom-3 left-3 z-10 flex gap-2 compact:bottom-1.5 compact:left-1.5 compact:gap-1.5">
             <button
               onClick={undo}
               disabled={!canUndo}
@@ -511,12 +511,19 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         </div>
 
         {/* 우측: 색 → 굵기 → 마법 도구 → 레이어 (접으면 캔버스 풀폭) */}
-        <div className="order-3 flex min-h-0 min-w-0 shrink-0 items-stretch gap-1">
+        {/* ⚠️ max-h-[40dvh]는 **세로 스택에서만** 걸리는 안전장치 — 패널은 shrink-0이라
+            제한이 없으면 자기 내용 높이(≈420px)를 그대로 가져가고 캔버스가 0이 된다
+            (2026-07-28 세로 폰 제보: 되돌리기 버튼만 있는 얇은 띠가 캔버스였다).
+            3열(rail·compact)에서는 세로로 스크롤하면 되므로 제한을 푼다. */}
+        <div className="order-3 flex max-h-[40dvh] min-h-0 min-w-0 shrink-0 items-stretch gap-1 compact:max-h-none rail:max-h-none">
           <button
             onClick={() => setPanelOpen((v) => !v)}
             aria-expanded={panelOpen}
             aria-label={panelOpen ? "도구 패널 접기" : "도구 패널 펼치기"}
             title={panelOpen ? "도구 패널 접기 — 캔버스를 더 넓게" : "도구 패널 펼치기"}
+            /* ⚠️ compact(가로 폰)에는 내보내지 않는다 — 그 화면에서 캔버스는 **높이에 묶여**
+               있어서 패널을 접어도 커지지 않는다(실측 387 → 387). 눌러도 아무 변화가 없는
+               버튼은 아이에게 혼란만 준다. rail(넉넉한 화면)에서만 실제로 넓어진다. */
             className="pressable hidden w-5 shrink-0 items-center justify-center self-center rounded-full bg-paper py-6 text-xs text-ink-faint shadow-soft hover:text-ink rail:flex"
           >
             {panelOpen ? "▸" : "◂"}
@@ -524,7 +531,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           {panelOpen && (
             // 우측 패널은 모든 화면에서 1열 — 2열(xl)은 시선이 갈라져 불편(2026-07-10
             // 사용자 실측). 모바일은 기존대로 가로 스크롤 1줄(contents로 흐름 유지).
-            <div className="flex min-w-0 gap-1.5 overflow-x-auto overflow-y-auto rail:w-[264px] rail:shrink-0 rail:flex-col rail:overflow-x-hidden">
+            <div className="flex min-w-0 gap-1.5 overflow-x-auto overflow-y-auto compact:w-[228px] compact:shrink-0 compact:flex-col compact:overflow-x-hidden rail:w-[264px] rail:shrink-0 rail:flex-col rail:overflow-x-hidden">
               <ColorPalette />
               <BrushControls />
               <ActionRail />
