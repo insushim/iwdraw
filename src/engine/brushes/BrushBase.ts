@@ -99,9 +99,19 @@ export const SPEED_REF_PX_MS = 1.8;
  * 거리 창으로 재면 이벤트가 어떻게 쪼개져 들어오든 같은 거리를 같은 시간에 지나면 같은
  * 속도가 나온다 — 쪼개짐에 대해 불변. MyPaint의 gross speed와 같은 취지.
  */
-const SPEED_WIN_PX = 48;
-/** 거리 창 위에 얹는 가벼운 평활 — 창 경계에서 표본이 빠질 때의 계단만 없앤다 */
-const SPEED_EMA = 0.25;
+const SPEED_WIN_PX = 72;
+/**
+ * 속도 계수 평활의 시정수(px) — **이벤트 개수가 아니라 이동 거리로** 감쇠한다.
+ *
+ * ⚠️ `speedK += (v - speedK) * 상수`처럼 이벤트당 고정 비율로 평활하면, 같은 획도
+ * 이벤트가 몇 개로 쪼개져 들어오느냐에 따라 수렴 속도가 달라진다 — 즉 기기 사정이
+ * 획 모양을 바꾼다. 2026-07-28 실측: 색연필 윗변 고주파 편차가 **같은 코드로 0.07~0.27**
+ * 사이를 오갔다(실행 조건에 따라 게이트 0.2를 넘었다 말았다).
+ * 거리 기반 감쇠 `1 - exp(-Δ거리/τ)`는 "60px 지나오면 목표의 63%까지 따라간다"로
+ * 정의되어 쪼개짐에 불변이다. 변조가 획 길이에 고정되므로 저주파(표현)로만 나타나고
+ * 고주파(톱니)로는 새지 않는다 — thinGrain을 파장으로 정의한 것과 같은 원리.
+ */
+const SPEED_TAU_PX = 60;
 
 /** 백엔드 합성 힌트 (Canvas2D globalCompositeOperation과 호환) */
 export type DabComposite =
@@ -364,7 +374,8 @@ export class BrushBase {
     const winPx = last.arc - first.arc;
     if (winDt > 0 && winPx > 0) {
       const v = clamp(winPx / winDt / SPEED_REF_PX_MS, 0, 1);
-      this.speedK += (v - this.speedK) * SPEED_EMA;
+      // 감쇠는 이벤트 수가 아니라 이동 거리 기준(SPEED_TAU_PX 참조)
+      this.speedK += (v - this.speedK) * (1 - Math.exp(-segLen / SPEED_TAU_PX));
     }
 
     // 간격은 "실제로 찍히는" dab 지름(최소 지름 반영) 기준 — 굵기 1에서 step 1px·dab 1px면
