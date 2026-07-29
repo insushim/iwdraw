@@ -18,7 +18,7 @@ test.setTimeout(120_000);
  *  ③ 그래도 필압 표현력은 남는다(세게 = 확실히 진하게)
  */
 
-type Stat = { peak: number; cv: number; gaps: number };
+type Stat = { peak: number; cv: number; gaps: number; w: number; wcv: number };
 
 test("펜 실필압: 0이 섞여도 획이 흔들리지 않고, 약한 필압도 보인다", async ({ page }) => {
   await page.goto("/draw?mode=sketch&backend=gl");
@@ -84,23 +84,37 @@ test("펜 실필압: 0이 섞여도 획이 흔들리지 않고, 약한 필압도
           n++;
         }
       bg /= n;
-      const out: Record<string, { peak: number; cv: number; gaps: number }> = {};
+      const out: Record<string, { peak: number; cv: number; gaps: number; w: number; wcv: number }> =
+        {};
       for (const r of rows) {
         const cy = Math.round(H * r.yFrac);
         const half = Math.round(H * 0.04);
         const peaks: number[] = [];
+        const widths: number[] = [];
         for (let x = Math.round(W * 0.25); x < Math.round(W * 0.75); x++) {
           let mx = 0;
-          for (let y = cy - half; y <= cy + half; y++)
-            mx = Math.max(mx, Math.max(0, (bg - lum((y * W + x) * 4)) / bg));
+          let w = 0;
+          for (let y = cy - half; y <= cy + half; y++) {
+            const v = Math.max(0, (bg - lum((y * W + x) * 4)) / bg);
+            if (v > mx) mx = v;
+            if (v >= 0.1) w++;
+          }
           peaks.push(mx);
+          widths.push(w);
         }
-        const m = peaks.reduce((s, v) => s + v, 0) / peaks.length;
-        const sd = Math.sqrt(peaks.reduce((s, v) => s + (v - m) ** 2, 0) / peaks.length);
+        const stat = (a: number[]) => {
+          const m = a.reduce((s, v) => s + v, 0) / a.length;
+          const sd = Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / a.length);
+          return { m, cv: sd / Math.max(1e-6, m) };
+        };
+        const p = stat(peaks);
+        const w = stat(widths);
         out[r.name] = {
-          peak: +m.toFixed(3),
-          cv: +(sd / Math.max(1e-6, m)).toFixed(3),
+          peak: +p.m.toFixed(3),
+          cv: +p.cv.toFixed(3),
           gaps: peaks.filter((v) => v < 0.02).length,
+          w: +w.m.toFixed(2),
+          wcv: +w.cv.toFixed(3),
         };
       }
       return out;
@@ -125,9 +139,32 @@ test("펜 실필압: 0이 섞여도 획이 흔들리지 않고, 약한 필압도
   expect(m.B.cv, "필압 0 섞인 획의 열별 농도 변동(점선성)").toBeLessThan(0.13);
   expect(m.A.gaps + m.B.gaps, "끊긴 열").toBe(0);
 
-  // ② 살살 그어도 보이는 선(실필압 하한 사상). 수정 전 0.20 → 후 0.28(폰 백킹 실측)
-  expect(m.A.peak, "약한 실필압 획의 농도").toBeGreaterThan(0.22);
+  // ② 살살 그어도 보이는 선(실필압 하한 사상). 실측: 사상 없을 때 0.178 → 사상 후 0.22
+  expect(m.A.peak, "약한 실필압 획의 농도").toBeGreaterThan(0.20);
 
   // ③ 그래도 필압 표현력은 남는다 — 세게 누르면 확실히 진하다
   expect(m.C.peak / m.A.peak, "센 필압/약한 필압 농도비").toBeGreaterThan(1.25);
+
+  /*
+   * ④ 붓펜(필압에 가장 민감한 도구)으로 dropout을 다시 본다.
+   * 붓펜은 필압이 굵기에 두 번 곱해져(sizePressure 0.85 × (0.45+pr·0.7)), 필압 0을
+   * 그대로 받으면 **획 굵기가 규칙적으로 잘록해진다** — 농도만 보는 위 게이트는 이걸
+   * 못 잡는다(2026-07-29 교차검증 지적). 접촉 중 0은 센서 dropout으로 보고 직전 필압을
+   * 유지하는지 여기서 확인한다.
+   */
+  await page.getByRole("button", { name: "전체 지우기" }).click();
+  await page.getByRole("button", { name: "정말 지울래요" }).click();
+  await page.waitForTimeout(250);
+  await page.getByRole("button", { name: "붓펜", exact: true }).click();
+  await page.getByLabel("브러시 굵기", { exact: true }).fill("25");
+  await stroke(0.3, 0.12, false, 40); // D: dropout 없음
+  await stroke(0.7, 0.12, true, 40); // E: 3번에 1번 필압 0
+  await page.waitForTimeout(200);
+  const ink: Record<string, Stat> = await measure([
+    { name: "D", yFrac: 0.3 },
+    { name: "E", yFrac: 0.7 },
+  ]);
+  console.log("PEN-INKBRUSH", JSON.stringify(ink));
+  expect(Math.abs(ink.E.w - ink.D.w) / ink.D.w, "붓펜 dropout 획의 굵기 차이").toBeLessThan(0.1);
+  expect(ink.E.wcv, "붓펜 dropout 획의 굵기 요동").toBeLessThan(ink.D.wcv + 0.05);
 });

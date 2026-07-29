@@ -50,15 +50,20 @@ function penIsContacting(e: PointerEvent): boolean {
  *    시뮬값이 0.35~0.5로 내려와 실필압과 비슷해져 증상이 사라진다("천천히 그을 때만"의 정체).
  *    실측: 열별 농도 변동계수 cv 0.108(실필압 고정) → 0.17(필압 0 간헐).
  *
- * 그래서 ① 기기가 실필압을 보고하는 펜이면 그 뒤로는 끝까지 실필압 경로를 쓰고
- * (0도 그대로 0으로 받아들인다 — 폴백 금지), ② 하한 0.25·감마 0.7로 사상해 살살 그은
- * 선도 보이게 한다. 표현력은 오히려 넓어진다(시뮬 0.35~0.85 → 실필압 0.25~1.0).
- * ⚠️ 하한을 더 올리면(0.4+) 붓펜 삐침처럼 "아주 가늘게"가 생명인 표현이 죽는다 —
- * 여기서 막으려는 건 "가는 선"이 아니라 "안 보이는 선"이다.
+ * 그래서 ① 기기가 실필압을 보고하는 펜이면 그 뒤로는 끝까지 실필압 경로를 쓰고(폴백 금지),
+ * 접촉 중 들어온 0은 **센서 dropout**으로 보아 직전 유효 필압을 유지하며,
+ * ② 하한 0.15·감마 0.75로 사상해 살살 그은 선도 보이게 한다.
+ *
+ * 사상 값 감각: raw 0.12 → 0.32, 0.3 → 0.49, 0.6 → 0.73, 1 → 1.0.
+ * 즉 실기기의 "약하게"가 시뮬 하한(0.35) 언저리에 오도록 맞춘 것이고, 그보다 더 약한
+ * 접촉(raw<0.1)은 시뮬로는 낼 수 없던 0.15~0.3 구간에 들어간다 — 표현 범위는 넓어진다.
+ * ⚠️ 하한을 0.25로 잡았더니 붓펜(필압이 굵기에 두 번 곱해진다)에서 raw 0.12의 크기 계수가
+ * 0.135 → 0.377(2.8배)로 뛰어 삐침이 죽었다(2026-07-29 교차검증 지적, 두 계열 합의).
+ * 0.15면 2.1배로 줄어든다. 여기서 막으려는 건 "가는 선"이 아니라 "안 보이는 선"이다.
  */
 function penPressure(raw: number): number {
   const p = raw <= 0 ? 0 : raw >= 1 ? 1 : raw;
-  return 0.25 + 0.75 * Math.pow(p, 0.7);
+  return 0.15 + 0.85 * Math.pow(p, 0.75);
 }
 
 export class PointerHandler {
@@ -86,8 +91,13 @@ export class PointerHandler {
   /** 이 기기의 펜이 실필압(>0)을 보고한 적이 있는가 — penPressure 주석 참조.
    * 한 번이라도 봤으면 이후로는 0이 와도 실필압으로 받는다(시뮬로 튀면 진한 점이 찍힌다).
    * 세션 단위인 이유: 필압 지원 여부는 기기 특성이라 획마다 바뀌지 않는다. 획 단위로 재판정하면
-   * "펜을 내려놓는 순간 pressure 0으로 시작하는 획"이 매번 시뮬로 새어 같은 증상이 남는다. */
+   * "펜을 내려놓는 순간 pressure 0으로 시작하는 획"이 매번 시뮬로 새어 같은 증상이 남는다.
+   * ⚠️ 알려진 한계(교차검증에서 두 계열이 같이 지적, 발생 확률 낮다고 판단해 수용): 필압을
+   * 딱 한 번만 오보고하는 펜이면 이후 0들이 계속 실필압으로 해석된다. 반대 방향 오류
+   * (=원래 결함: 진한 점이 찍힘)가 훨씬 눈에 띄므로 이쪽으로 치우치게 둔다. */
   private penPressureSeen = false;
+  /** 접촉 중 마지막으로 들어온 유효(>0) 실필압 — dropout(0) 구간에 이 값을 유지한다 */
+  private lastPenRaw = 0;
   /** 필압 반영(펜 실필압 + 마우스/손가락 속도 시뮬) on/off — off면 균일 획 */
   private pressureEnabled = true;
 
@@ -115,8 +125,16 @@ export class PointerHandler {
     if (!this.pressureEnabled) {
       pressure = 0.7; // 균일 획(필압 끔) — 웨일북처럼 펜 필압이 안 오는 기기 대응
     } else if (e.pointerType === "pen" && (e.pressure > 0 || this.penPressureSeen)) {
-      if (e.pressure > 0) this.penPressureSeen = true;
-      pressure = penPressure(e.pressure);
+      if (e.pressure > 0) {
+        this.penPressureSeen = true;
+        this.lastPenRaw = e.pressure;
+      }
+      /* 접촉 중 0 = 센서 dropout이지 "펜을 뗐다"가 아니다 → 직전 유효 필압을 유지한다.
+       * 0을 그대로 사상하면(=하한 0.15) 획에 규칙적인 잘록함이 남는다 — 원래 결함의
+       * 작은 판본이다. 필압이 굵기에 두 번 곱해지는 붓펜에서만 드러나므로 농도 게이트로는
+       * 안 잡힌다(2026-07-29 교차검증 지적 → A/B 실측: 붓펜 굵기25·필압 0.12·3이벤트마다 0
+       * 에서 평균 획 폭 7.00 → 5.86, 폭 요동 0 → 0.162. 유지하면 7.00/0). */
+      pressure = penPressure(e.pressure > 0 ? e.pressure : this.lastPenRaw);
     } else {
       // 마우스/손가락: 속도 기반 필압 시뮬(EMA) — 느리면 굵고 진하게
       const prev = this.lastMove;
@@ -164,6 +182,8 @@ export class PointerHandler {
     this.drawing = true;
     this.drawingPointerId = e.pointerId;
     this.lastMove = null;
+    // dropout 유지값은 획 단위 — 앞 획의 세기가 다음 획 머리로 새면 안 된다
+    this.lastPenRaw = 0;
     // 0으로 시작하면 첫 dab이 최대 필압(0.85)이라 획 머리에 블롭이 생긴다
     // → 중간 속도로 시작해 느리면 자연스럽게 굵어지게
     this.speedEma = 1.1;

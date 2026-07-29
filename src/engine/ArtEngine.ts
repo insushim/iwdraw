@@ -177,6 +177,7 @@ export class ArtEngine {
       this.displayRo = new ResizeObserver(() => this.fitDisplayDpr());
       this.displayRo.observe(opts.display);
     }
+    this.watchDpr();
     /* 레이어 캔버스의 2D 컨텍스트가 복구되면 내용은 비어 있다 — 마지막 자동저장으로 되살린다.
      * 안 그러면 그림이 사라지고 새 획도 안 보이는 상태가 된다(저사양 기기 메모리 압박). */
     this.layers.onContextRestored(() => {
@@ -1821,12 +1822,32 @@ export class ArtEngine {
   private downgradeDpr(): void {
     if (this.dprCap <= 1) return;
     this.dprCap = 1;
-    if (this.fitDisplayDpr()) {
-      this.compositeEma = 0;
-      this.compositeSamples = 0;
-      this.lagGaps.length = 0;
-    }
+    this.fitDisplayDpr();
+    // 카운터는 백킹이 실제로 바뀌었는지와 무관하게 리셋 — 안 그러면 EMA가 임계 위에 머문 채
+    // 매 프레임 강등을 재시도한다(교차검증 지적)
+    this.compositeEma = 0;
+    this.compositeSamples = 0;
+    this.lagGaps.length = 0;
   }
+
+  /**
+   * devicePixelRatio 변화 감시 — 브라우저 확대/축소(Ctrl +/-)나 다른 배율의 모니터로 창을
+   * 옮기면 **CSS 크기는 그대로인데** 물리 픽셀만 바뀐다. ResizeObserver는 CSS 크기만 보므로
+   * 이 경우를 놓친다(2026-07-29 교차검증에서 두 계열이 같이 지적).
+   * matchMedia는 "현재 배율"에만 매칭되므로 발화할 때마다 새 배율로 다시 건다.
+   * ⚠️ 렉으로 강등된 뒤(dprCap 1)에는 배율이 올라가도 복구하지 않는다 — 강등은 단방향이다.
+   */
+  private dprMql: MediaQueryList | null = null;
+  private watchDpr(): void {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    this.dprMql?.removeEventListener?.("change", this.onDprChange);
+    this.dprMql = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    this.dprMql.addEventListener?.("change", this.onDprChange);
+  }
+  private onDprChange = (): void => {
+    this.fitDisplayDpr();
+    this.watchDpr();
+  };
 
   /** 표시 백킹 배율 상한(기기 사양 기준) — 렉이 감지되면 1로 내린다 */
   private dprCap = initialDpr();
@@ -2151,6 +2172,8 @@ export class ArtEngine {
     cancelAnimationFrame(this.rafId);
     this.displayRo?.disconnect();
     this.displayRo = null;
+    this.dprMql?.removeEventListener?.("change", this.onDprChange);
+    this.dprMql = null;
     this.clearHold();
     if (this.suggestTimer) {
       clearTimeout(this.suggestTimer);
