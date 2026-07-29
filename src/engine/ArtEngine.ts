@@ -155,13 +155,14 @@ export class ArtEngine {
   constructor(opts: EngineOptions) {
     this.width = opts.width;
     this.height = opts.height;
+    this.dprCap = initialDpr();
     this.cm = new CanvasManager(
       opts.width,
       opts.height,
       opts.display,
       opts.forceCanvas2D || opts.backendOverride === "2d",
       opts.backendOverride === "gl",
-      initialDpr(),
+      this.dprCap,
     );
     this.layers = new LayerStack(opts.width, opts.height);
     this.history = new History(50);
@@ -1849,8 +1850,9 @@ export class ArtEngine {
     this.watchDpr();
   };
 
-  /** 표시 백킹 배율 상한(기기 사양 기준) — 렉이 감지되면 1로 내린다 */
-  private dprCap = initialDpr();
+  /** 표시 백킹 배율 상한(기기 사양 기준) — 렉이 감지되면 1로 내린다.
+   * CanvasManager에 넘긴 초기값과 같은 출처를 쓴다(생성자에서 대입) */
+  private dprCap = 1;
   private displayRo: ResizeObserver | null = null;
   /**
    * 표시 캔버스 백킹을 **화면이 실제로 가진 물리 픽셀**에 맞춘다.

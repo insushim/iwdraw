@@ -167,4 +167,29 @@ test("펜 실필압: 0이 섞여도 획이 흔들리지 않고, 약한 필압도
   console.log("PEN-INKBRUSH", JSON.stringify(ink));
   expect(Math.abs(ink.E.w - ink.D.w) / ink.D.w, "붓펜 dropout 획의 굵기 차이").toBeLessThan(0.1);
   expect(ink.E.wcv, "붓펜 dropout 획의 굵기 요동").toBeLessThan(ink.D.wcv + 0.05);
+
+  /*
+   * ⑤ 붓펜의 **필압 폭 범위**를 잠근다.
+   * 실필압 하한 사상(penPressure)은 "안 보이는 선"을 막는 대신 가장 약한 접촉의 선을
+   * 굵게 만든다 — 교차검증에서 두 계열이 "붓펜 삐침이 죽는다"고 지적한 트레이드오프다.
+   * 하한을 0.25 → 0.15로 낮춰 수용했지만, 누군가 다시 올리면 여기서 걸린다.
+   * 재는 것 = "살짝 댄 획"과 "꾹 누른 획"의 폭이 충분히 벌어지는가.
+   *
+   * 실측한 트레이드오프(2026-07-29 A/B, 붓펜 굵기25):
+   *   사상 없음: 약필압 폭 3.00 · 센필압 28.05 → 폭비 9.4배 (대신 연필 약필압 획이 안 보임)
+   *   사상 적용: 4.90 · 29.0 → 폭비 5.9배 (연필 약필압 농도 0.18 → 0.22)
+   * 즉 가장 가는 갈필이 63% 굵어진 대신 표현 범위는 6배가 남았다. 게이트 2.2는 그 절반 아래.
+   */
+  await page.getByRole("button", { name: "전체 지우기" }).click();
+  await page.getByRole("button", { name: "정말 지울래요" }).click();
+  await page.waitForTimeout(250);
+  await stroke(0.3, 0.04, false, 20); // F: 붓끝만 스친 갈필
+  await stroke(0.7, 0.95, false, 20); // G: 꾹 누른 획
+  await page.waitForTimeout(200);
+  const range: Record<string, Stat> = await measure([
+    { name: "F", yFrac: 0.3 },
+    { name: "G", yFrac: 0.7 },
+  ]);
+  console.log("PEN-INK-RANGE", JSON.stringify(range));
+  expect(range.G.w / range.F.w, "붓펜 센필압/약필압 폭비").toBeGreaterThan(2.2);
 });

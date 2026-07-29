@@ -140,7 +140,13 @@ export class PointerHandler {
       const prev = this.lastMove;
       if (prev && e.timeStamp > prev.t) {
         const d = Math.hypot(e.clientX - prev.x, e.clientY - prev.y);
-        const v = d / (e.timeStamp - prev.t); // px/ms
+        /* dt 하한 4ms — coalesced 하위 이벤트는 한 프레임 안에 여러 개가 몰려 들어오고
+         * 타임스탬프가 거의 붙어 있을 수 있다. 그대로 나누면 v가 순간 폭증해 필압이
+         * 하한(0.35)까지 떨어졌다 돌아오는 "옅은 자국"이 생긴다. 정상 간격(8~16ms)에서는
+         * 이 하한이 걸리지 않으므로 거동 변화 없음.
+         * ⚠️ 실기기 재현은 못 했다(합성 이벤트로는 이 조건이 안 만들어진다) — 교차검증에서
+         * 나온 가설에 대한 **방어적 하한**이지 확인된 결함의 수정이 아니다. */
+        const v = d / Math.max(4, e.timeStamp - prev.t); // px/ms
         this.speedEma += (v - this.speedEma) * 0.3;
       }
       pressure = Math.min(0.85, Math.max(0.35, 0.85 - this.speedEma * 0.22));
