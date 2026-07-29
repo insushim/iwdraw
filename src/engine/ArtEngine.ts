@@ -171,6 +171,12 @@ export class ArtEngine {
     loadTipOverrides(); // AI 팁 알파맵 비동기 로드(실패 시 프로시저럴 폴백)
 
     this.cm.onDowngradeToCanvas2D(() => this.requestComposite());
+    this.fitDisplayDpr();
+    /* 표시 요소가 실제로 차지하는 물리 픽셀이 바뀌면(회전·창 크기·패널 접기) 백킹을 다시 맞춘다 */
+    if (typeof ResizeObserver !== "undefined") {
+      this.displayRo = new ResizeObserver(() => this.fitDisplayDpr());
+      this.displayRo.observe(opts.display);
+    }
     /* 레이어 캔버스의 2D 컨텍스트가 복구되면 내용은 비어 있다 — 마지막 자동저장으로 되살린다.
      * 안 그러면 그림이 사라지고 새 획도 안 보이는 상태가 된다(저사양 기기 메모리 압박). */
     this.layers.onContextRestored(() => {
@@ -424,6 +430,11 @@ export class ArtEngine {
     // 종이 결 침식·wet edge는 획 폭에 비례하는 "질감"인데, 획이 1~3px이면 골 하나가
     // 획 전체를 관통해 알파를 0으로 만든다(= 끊김). 8px 미만은 강도를 폭에 비례 감쇠.
     const thin = Math.min(1, pxSize / 8);
+    /* ⚠️ 백화 모드(grainLift: 유화·오일파스텔)만 감쇠에서 빼 보았으나 **효과 0**이었다
+     * (2026-07-29 A/B: 굵기 3 유화붓 내부 결 0.034 → 0.034, 오일파스텔 0.219 → 0.221).
+     * 이유 = 백화 기여분이 셰이더의 합산 캡(어두운 색 lift ≤0.2, 밝은 색 ≤0.34)에 이미
+     * 눌려 있어 결 강도를 올려도 화면에 안 나온다. 되살리려면 캡 구조부터 손대야 하는데
+     * 그 캡은 "검정이 회색빛으로 바래는" 회귀를 막으려고 넣은 것이다 — 건드리지 말 것. */
     return {
       layerCanvas: this.layers.active.canvas,
       tip,
@@ -1808,12 +1819,50 @@ export class ArtEngine {
   }
 
   private downgradeDpr(): void {
-    if (this.cm.dpr > 1 && this.cm.setDpr(1)) {
+    if (this.dprCap <= 1) return;
+    this.dprCap = 1;
+    if (this.fitDisplayDpr()) {
       this.compositeEma = 0;
       this.compositeSamples = 0;
       this.lagGaps.length = 0;
-      this.requestComposite();
     }
+  }
+
+  /** 표시 백킹 배율 상한(기기 사양 기준) — 렉이 감지되면 1로 내린다 */
+  private dprCap = initialDpr();
+  private displayRo: ResizeObserver | null = null;
+  /**
+   * 표시 캔버스 백킹을 **화면이 실제로 가진 물리 픽셀**에 맞춘다.
+   *
+   * 예전엔 논리 캔버스 크기 × initialDpr(최대 2)를 그대로 백킹으로 썼다. 폰에서는
+   * 캔버스 요소가 CSS 387px(물리 1160px)인데 백킹이 3072px이었다(2026-07-29 실측) —
+   * ① 합성 비용은 백킹 **면적**에 비례하므로 필요량의 7배를 매 프레임 clear+blit+
+   *    흰 배경 fill+종이결 multiply 했다(폰 렉의 큰 몫), ② 화면에 못 보여주는 해상도라
+   *    선명도 이득은 0인데 브라우저가 2.65배로 되축소하면서 얇은 획을 갉아먹는다.
+   * 물리 픽셀에 맞추면 둘 다 사라진다. 하한 1(논리 해상도 미만으로는 내리지 않는다 —
+   * 그 아래는 그림 자체가 화면보다 커서 축소 표시되는 정상 상황이고, 백킹을 더 줄이면
+   * 우리 쪽 축소 필터가 한 번 더 들어가 손해다).
+   * 0.25 단위로 양자화 — 레이아웃이 1px 흔들릴 때마다 캔버스를 재할당하지 않게.
+   *
+   * ⚠️ 무한 리사이즈 루프가 안 나는 이유(백킹을 바꾸면 요소의 고유 크기가 바뀌므로
+   * 보통은 위험하다): 표시 캔버스의 CSS 상한이 **논리 크기** 기준으로 고정돼 있고
+   * (CanvasStage의 `max-width: min(100%, ${logicalW}px)`), 백킹은 논리 크기 미만으로
+   * 내려가지 않으므로 레이아웃 폭은 언제나 min(컨테이너, 논리폭) — 백킹과 무관하다.
+   * 즉 setDpr가 clientWidth를 바꾸지 못해 ResizeObserver가 자기 자신을 다시 부르지 않는다.
+   */
+  private fitDisplayDpr(): boolean {
+    if (typeof window === "undefined") return false;
+    const el = this.cm.display;
+    const cssW = el.clientWidth || el.getBoundingClientRect().width;
+    if (!cssW) return false;
+    const want = clamp(
+      Math.round(((cssW * (window.devicePixelRatio || 1)) / this.width) * 4) / 4,
+      1,
+      this.dprCap,
+    );
+    if (!this.cm.setDpr(want)) return false;
+    this.requestComposite();
+    return true;
   }
   /** 최근 120ms+ rAF gap의 시각·크기(최대 3개) — 슬라이딩 창 판정용 */
   private lagGaps: { t: number; dt: number }[] = [];
@@ -2100,6 +2149,8 @@ export class ArtEngine {
 
   destroy(): void {
     cancelAnimationFrame(this.rafId);
+    this.displayRo?.disconnect();
+    this.displayRo = null;
     this.clearHold();
     if (this.suggestTimer) {
       clearTimeout(this.suggestTimer);
