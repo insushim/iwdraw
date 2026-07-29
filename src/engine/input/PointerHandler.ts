@@ -35,6 +35,32 @@ function penIsContacting(e: PointerEvent): boolean {
   return e.pointerType === "pen" && (e.buttons & 1) !== 0;
 }
 
+/**
+ * 스타일러스 실필압(0~1) → 브러시가 기대하는 필압 범위로 사상.
+ *
+ * ⚠️ 실기기 필압의 **약한 쪽**이 문제였다(2026-07-29 폰 실사용 제보: "천천히 그으면 점선").
+ * ① 아이가 살살 그으면 S펜·애플펜슬은 0.05~0.2를 보고한다. 브러시 값들은 마우스·손가락
+ *    시뮬 필압(0.35~0.85)을 기준으로 튜닝돼 있어서, 실필압 0.12면 연필 알파가 0.49배로
+ *    떨어진다 — 백킹 실측 peak 0.36(시뮬) vs **0.20**(실필압 0.12). 폰 화면에서 폭 2px
+ *    선의 농도가 절반이 되면 종이 결·길이 방향 농담의 골이 시각 임계 아래로 내려가
+ *    "끊긴 선"으로 보인다.
+ * ② 게다가 펜은 접촉이 약하면 **pressure 0을 간헐적으로 보고**한다. 옛 조건
+ *    `e.pressure > 0`은 그 순간만 속도 시뮬로 폴백했는데, 시뮬값은 **느릴수록 커져서
+ *    최대 0.85** — 즉 옅은 획 위에 진한 점이 규칙적으로 찍힌다(= 점선). 빠르게 그으면
+ *    시뮬값이 0.35~0.5로 내려와 실필압과 비슷해져 증상이 사라진다("천천히 그을 때만"의 정체).
+ *    실측: 열별 농도 변동계수 cv 0.108(실필압 고정) → 0.17(필압 0 간헐).
+ *
+ * 그래서 ① 기기가 실필압을 보고하는 펜이면 그 뒤로는 끝까지 실필압 경로를 쓰고
+ * (0도 그대로 0으로 받아들인다 — 폴백 금지), ② 하한 0.25·감마 0.7로 사상해 살살 그은
+ * 선도 보이게 한다. 표현력은 오히려 넓어진다(시뮬 0.35~0.85 → 실필압 0.25~1.0).
+ * ⚠️ 하한을 더 올리면(0.4+) 붓펜 삐침처럼 "아주 가늘게"가 생명인 표현이 죽는다 —
+ * 여기서 막으려는 건 "가는 선"이 아니라 "안 보이는 선"이다.
+ */
+function penPressure(raw: number): number {
+  const p = raw <= 0 ? 0 : raw >= 1 ? 1 : raw;
+  return 0.25 + 0.75 * Math.pow(p, 0.7);
+}
+
 export class PointerHandler {
   private active = new Map<number, PointerEvent>();
   /** 마지막 펜 입력 시각(e.timeStamp 기준) */
@@ -57,6 +83,11 @@ export class PointerHandler {
   /** 속도 기반 필압 시뮬 상태(마우스·손가락) */
   private lastMove: { x: number; y: number; t: number } | null = null;
   private speedEma = 0;
+  /** 이 기기의 펜이 실필압(>0)을 보고한 적이 있는가 — penPressure 주석 참조.
+   * 한 번이라도 봤으면 이후로는 0이 와도 실필압으로 받는다(시뮬로 튀면 진한 점이 찍힌다).
+   * 세션 단위인 이유: 필압 지원 여부는 기기 특성이라 획마다 바뀌지 않는다. 획 단위로 재판정하면
+   * "펜을 내려놓는 순간 pressure 0으로 시작하는 획"이 매번 시뮬로 새어 같은 증상이 남는다. */
+  private penPressureSeen = false;
   /** 필압 반영(펜 실필압 + 마우스/손가락 속도 시뮬) on/off — off면 균일 획 */
   private pressureEnabled = true;
 
@@ -83,8 +114,9 @@ export class PointerHandler {
     let pressure: number;
     if (!this.pressureEnabled) {
       pressure = 0.7; // 균일 획(필압 끔) — 웨일북처럼 펜 필압이 안 오는 기기 대응
-    } else if (e.pointerType === "pen" && e.pressure > 0) {
-      pressure = e.pressure; // 스타일러스: 실제 필압
+    } else if (e.pointerType === "pen" && (e.pressure > 0 || this.penPressureSeen)) {
+      if (e.pressure > 0) this.penPressureSeen = true;
+      pressure = penPressure(e.pressure);
     } else {
       // 마우스/손가락: 속도 기반 필압 시뮬(EMA) — 느리면 굵고 진하게
       const prev = this.lastMove;
