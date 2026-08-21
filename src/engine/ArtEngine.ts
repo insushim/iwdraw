@@ -61,6 +61,9 @@ export interface EngineOptions {
   width: number;
   height: number;
   display: HTMLCanvasElement;
+  /** 캔버스를 감싸는 작업대(여백 포함). 두 손가락 중 하나가 종이 밖에 닿아도 핀치가
+   * 성립하도록 포인터 이벤트를 여기서 받는다 — 생략하면 캔버스 자신 */
+  surface?: HTMLElement;
   forceCanvas2D?: boolean;
   /** QA용 백엔드 강제(?backend=2d|gl) — gl은 소프트웨어 렌더러도 허용 */
   backendOverride?: "2d" | "gl";
@@ -210,6 +213,7 @@ export class ArtEngine {
             performance.now(),
           ),
       },
+      opts.surface,
     );
 
     // 탭 숨김/닫힘 시 디바운스 대기 중인 자동저장 즉시 플러시 — 마지막 획 후 5초 안에

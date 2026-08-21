@@ -45,6 +45,7 @@ export function CanvasStage({
   onEngineReady,
 }: CanvasStageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ArtEngine | null>(null);
   const attach = useEditor((s) => s.attach);
   const detach = useEditor((s) => s.detach);
@@ -76,6 +77,10 @@ export function CanvasStage({
       width: size.width,
       height: size.height,
       display: el,
+      // 작업대(캔버스 + 여백)에서 포인터를 받는다 — 캔버스는 도안 비율에 맞춰 fit돼서
+      // 사방에 여백이 남고, 두 손가락 중 하나가 그 여백에 닿으면 핀치가 통째로 무산됐다
+      // (2026-08-21 실측: 확대 배율 1.00 · 대신 남은 손가락이 획을 그림)
+      surface: stageRef.current ?? undefined,
       backendOverride,
     });
     engineRef.current = engine;
@@ -116,7 +121,10 @@ export function CanvasStage({
   }, [size]);
 
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-card bg-cream-deep/60 p-2 md:p-4">
+    <div
+      ref={stageRef}
+      className="canvas-stage flex h-full w-full items-center justify-center overflow-hidden rounded-card bg-cream-deep/60 p-2 md:p-4"
+    >
       {size && (
         <canvas
           ref={canvasRef}

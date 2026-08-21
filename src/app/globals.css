@@ -137,8 +137,11 @@ button,
 .editor-no-pinch * {
   touch-action: inherit;
 }
-.editor-no-pinch .canvas-surface {
-  touch-action: none; /* 캔버스는 엔진이 전부 처리 */
+.editor-no-pinch .canvas-surface,
+.editor-no-pinch .canvas-stage {
+  /* 캔버스와 그 여백(작업대)은 엔진이 전부 처리한다. 여백을 pan-x pan-y로 두면 거기 닿은
+   * 손가락을 브라우저가 스크롤 제스처로 가져가 핀치의 절반이 사라진다(2026-08-21). */
+  touch-action: none;
 }
 
 /* 스크롤바 (교실 크롬북) */

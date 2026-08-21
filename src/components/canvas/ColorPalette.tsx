@@ -151,6 +151,9 @@ function HsvPicker({ value, onChange }: { value: RGB; onChange: (c: RGB) => void
           width={WHEEL_PX}
           height={WHEEL_PX}
           className="h-full w-full cursor-crosshair rounded-full shadow-soft"
+          // 포인터로 값을 고르는 위젯이다 — 입력 계층이 "조작 요소"로 알아보게 role을 준다
+          // (없으면 그리는 도중 다른 손으로 색을 고를 때 그리던 획이 제스처로 오인돼 취소된다)
+          role="slider"
           aria-label="컬러휠 — 돌려서 색깔, 바깥쪽일수록 쨍하게"
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
