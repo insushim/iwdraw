@@ -35,6 +35,22 @@
  */
 @custom-variant compact (@media (min-aspect-ratio: 1/1) and (max-height: 559px));
 
+/*
+ * 에디터 헤더의 글자 라벨 — 켜고 끄는 판정은 Editor의 useAutoHeaderLabels가 **실측**으로 한다.
+ * (뷰포트 폭으로 정하면 안 된다: 학급 코드로 입장하면 헤더에 닉네임 칩·학급 갤러리 링크가
+ *  더 붙어 같은 폭에서도 안 맞는다. 2026-08-25 실측 — 1366px에서 필요 폭 1541px, 남는
+ *  항목이 눌려 한글이 글자 단위로 접히며 칩이 세로로 길쭉해졌다.)
+ */
+/* 1단계 축소: 장식(로고)과 부가정보(닉네임·학급 칩)를 먼저 버린다 */
+header[data-labels="mid"] .hdr-extra,
+header[data-labels="off"] .hdr-extra {
+  display: none;
+}
+/* 2단계 축소: 버튼 글자 라벨까지 버리고 아이콘만 남긴다 */
+header[data-labels="off"] .hdr-label {
+  display: none;
+}
+
 /* ── ArtON 디자인 토큰: "따뜻한 미술실" ─────────────────────────── */
 @theme {
   /* 색 */

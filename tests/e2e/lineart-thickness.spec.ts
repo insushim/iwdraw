@@ -19,7 +19,7 @@ test("선따기 선: 얇지만 잘 보이고 끊기지 않는다", async ({ page
   // 사진 가져오기 → 자동 선따기.
   // 입력 = 아이가 찍을 법한 합성 사진(색면 + 부드러운 그라데이션 + 가는 선). 저장소 이미지(og.png)는
   // 검은 면적이 커서 "선 폭" 측정이 오염된다.
-  await page.getByRole("button", { name: /불러오기/ }).click();
+  await page.getByRole("button", { name: "내 사진·그림으로 그리기" }).click();
   await page.evaluate(async () => {
     const c = document.createElement("canvas");
     c.width = 900;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ArtEngine } from "@/engine/ArtEngine";
 import { useEditor } from "@/store/editor";
@@ -89,9 +89,62 @@ function recallDraft(): string | null {
   }
 }
 
+
+/*
+ * 헤더 라벨(글자)을 켤지 끌지를 **뷰포트 폭이 아니라 실측**으로 정한다.
+ *
+ * 예전엔 `hidden xl:inline`(1280px) 하나로 켰다. 그 값은 게스트 헤더 기준으로 잰 것이라,
+ * 학급 코드로 입장하면(닉네임·학급 칩 + 우리 반 갤러리 링크가 더 붙는다) 같은 1366px에서도
+ * 필요 폭이 1541px이 되어 헤더가 넘쳤다. 넘치면 flex가 남은 항목을 눌러 한글 라벨이
+ * **글자 단위로 접히면서** 칩이 세로로 길쭉해진다("초 록 거 북 · 3 학 년 2 반",
+ * 2026-08-25 사용자 제보 + 실측 36×208px).
+ *
+ * 그래서 매 렌더·리사이즈마다 "라벨을 켠 상태의 scrollWidth"를 재고, 안 들어가면 끈다.
+ * 페인트 전(useLayoutEffect)에 확정되므로 깜빡임이 없고, 항목 구성이 바뀌어도(학급/협동/
+ * 도안 유무) 손으로 잰 브레이크포인트를 다시 고칠 필요가 없다.
+ *
+ * 루프가 안 나는 이유: 헤더는 폭 100% 블록이라 라벨을 껐다 켜도 clientWidth가 안 변한다
+ * → ResizeObserver가 자기 자신을 다시 부르지 않는다.
+ */
+function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
+  const measureRef = useRef<() => void>(() => {});
+  measureRef.current = () => {
+    const el = ref.current;
+    if (!el) return;
+    // +1px 여유: 소수점 폭 반올림으로 1px 넘쳐 라벨이 깜빡이며 꺼지는 걸 막는다
+    const overflows = () => el.scrollWidth > el.clientWidth + 1;
+    // 넓은 쪽부터 좁혀 간다: 전부(on) → 부가 항목만 버림(mid) → 글자 라벨 전부 버림(off).
+    // 중간 단계를 둔 건 웨일북(1366px) + 학급 입장 조합 때문이다. 그 조합은 전부 켜면
+    // 1757px가 필요해 못 맞추는데, 장식(로고)·부가정보(닉네임 칩)·긴 보조 라벨
+    // ("우리 반 갤러리"·"내 기기에 저장" — 둘 다 아이콘과 aria-label로 뜻이 남는다)만
+    // 버리면 아이에게 실제로 필요한 버튼 글자("스케치"·"새 그림"·"무비"…)는 살아남는다.
+    el.dataset.labels = "on";
+    if (!overflows()) return;
+    el.dataset.labels = "mid";
+    if (!overflows()) return;
+    el.dataset.labels = "off";
+  };
+
+  // 렌더마다(=헤더 항목이 바뀔 때마다) 페인트 전에 다시 잰다 — 깜빡임 없음
+  useLayoutEffect(() => {
+    measureRef.current();
+  });
+
+  // 창 크기 변화는 리렌더 없이도 온다 — 관찰자는 한 번만 만든다
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => measureRef.current());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+}
+
 export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave, who, backHref = "/", galleryHref }: EditorProps) {
   useKeyboard();
   const editorRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  useAutoHeaderLabels(headerRef);
   // 캔버스 밖(툴바·여백)에서 시작한 ctrl+wheel(트랙패드 핀치/마우스 줌)은 브라우저 페이지
   // 줌을 걸어 새로고침해도 확대가 안 풀린다(JS로 페이지 줌 리셋 불가) — 에디터 전역 차단.
   // 캔버스 위 줌은 CanvasStage가 앱 뷰 줌으로 처리(새로고침 시 리셋). 여기선 막기만 한다.
@@ -259,29 +312,33 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           좁은 화면에선 헤더가 넘친다. 그대로 두면 넘치는 게 "페이지"라서 캔버스까지 옆으로
           밀려 흔들린다 — 넘침은 헤더 안에서만 흡수한다(2026-07-25 실측: 390px에서 저장 버튼이
           화면 밖 x=406). */}
-      <header className="flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2 compact:gap-1 compact:px-2 compact:py-1">
+      <header
+        ref={headerRef}
+        data-labels="off"
+        className="flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2 compact:gap-1 compact:px-2 compact:py-1"
+      >
         <Link href={backHref} className="pressable touch-target grid place-items-center rounded-full bg-paper px-3 text-xl shadow-soft" aria-label="나가기">
           ←
         </Link>
-        <span className="hidden xl:block">
+        <span className="hdr-extra block shrink-0">
           <ArtonLogo className="h-8" />
         </span>
         {who && (
-          <span className="hidden rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft xl:block">
+          <span className="hdr-extra block shrink-0 whitespace-nowrap rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft">
             {who}
           </span>
         )}
         {galleryHref && (
           <Link
             href={galleryHref}
-            className="pressable touch-target hidden items-center gap-1 rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft sm:flex"
+            className="pressable touch-target hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft sm:flex"
           >
-            🖼️ <span className="hidden xl:inline">우리 반 갤러리</span>
+            🖼️ <span className="hdr-extra">우리 반 갤러리</span>
           </Link>
         )}
         {room ? (
           <span
-            className="flex items-center gap-1.5 rounded-full bg-berry-soft px-3 py-1 text-sm font-semibold text-berry"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-berry-soft px-3 py-1 text-sm font-semibold text-berry"
             title="이 코드를 친구에게 알려주면 같이 그릴 수 있어요"
           >
             👥 {collab.connected ? `${collab.peers.length + 1}명` : "연결 중…"}
@@ -300,11 +357,11 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         ) : (
           <button
             onClick={() => setShowCollab(true)}
-            className="pressable flex items-center gap-1 rounded-full bg-berry-soft px-3 py-1 text-sm font-semibold text-berry hover:bg-berry-soft/80"
+            className="pressable flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-berry-soft px-3 py-1 text-sm font-semibold text-berry hover:bg-berry-soft/80"
             aria-label="함께 그리기"
             title="친구들과 한 캔버스에 같이 그려요"
           >
-            👥 <span className="hidden xl:inline">함께 그리기</span>
+            👥 <span className="hdr-label">함께 그리기</span>
           </button>
         )}
 
@@ -332,7 +389,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             aria-label="캔버스 방향 바꾸기"
           >
             <Icon name="rotate" className="h-5 w-5" />
-            <span className={confirmRotate ? "" : "hidden xl:inline"}>
+            <span className={confirmRotate ? "" : "hdr-label"}>
               {confirmRotate ? "지워요?" : orientation === "landscape" ? "가로" : "세로"}
             </span>
           </button>
@@ -348,7 +405,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           title="새 그림: 지금 그림을 지우고 처음부터"
         >
           <Icon name="plus" className="h-5 w-5" />
-          <span className={confirmNew ? "" : "hidden xl:inline"}>
+          <span className={confirmNew ? "" : "hdr-label"}>
             {confirmNew ? "정말요?" : "새 그림"}
           </span>
         </button>
@@ -361,11 +418,11 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
                 onClick={openPicker}
                 disabled={converting}
                 className={iconBtn}
-                aria-label="그림·사진 불러오기"
-                title="내 기기에 있는 그림이나 사진을 불러와서 선따기·이어 그리기"
+                aria-label="내 사진·그림으로 그리기"
+                title="내 사진·그림을 도안으로 만들거나(선따기) 밑그림으로 깔고 이어 그려요"
               >
-                📂
-                <span className="hidden xl:inline">{converting ? "변환 중…" : "불러오기"}</span>
+                📷
+                <span className="hdr-label">{converting ? "변환 중…" : "내 사진·그림"}</span>
               </button>
             )}
           />
@@ -377,7 +434,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           title="그려지는 과정 재생"
         >
           <Icon name="movie" className="h-5 w-5" />
-          <span className="hidden xl:inline">무비</span>
+          <span className="hdr-label">무비</span>
         </button>
         <button
           onClick={toggleJunior}
@@ -389,7 +446,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           }`}
         >
           <Icon name="junior" className="h-5 w-5" />
-          <span className="hidden xl:inline">저학년</span>
+          <span className="hdr-label">저학년</span>
         </button>
         {/* 학급으로 입장했어도 파일 저장은 따로 쓸 수 있어야 한다(사용자 요청 2026-07-13) */}
         {submits && (
@@ -401,7 +458,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             title="그림을 그림 파일(PNG)로 내 기기에 저장해요"
           >
             <Icon name="save" className="h-5 w-5" />
-            <span className="hidden xl:inline">{downloading ? "저장 중…" : "내 기기에 저장"}</span>
+            <span className="hdr-extra">{downloading ? "저장 중…" : "내 기기에 저장"}</span>
           </button>
         )}
         <button
@@ -507,7 +564,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
               </button>
             )}
           </div>
-          {room && <CollabOverlay cursors={collab.cursors} engine={engine} />}
+          {room && <CollabOverlay cursorStore={collab.cursorStore} engine={engine} />}
         </div>
 
         {/* 우측: 색 → 굵기 → 마법 도구 → 레이어 (접으면 캔버스 풀폭) */}

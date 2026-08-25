@@ -48,8 +48,9 @@ export function ModeTabs({ hasLineart = false }: { hasLineart?: boolean }) {
             }`}
           >
             <ToolIcon name={m.icon} className="h-6 w-6" />
-            {/* 라벨은 xl(1280)부터 — lg(1024)에서 켜면 헤더 총폭이 1116px가 되어 넘친다(2026-07-25 실측) */}
-            <span className="hidden xl:inline">{m.label}</span>
+            {/* 라벨 on/off는 헤더가 실측으로 정한다(Editor의 useAutoHeaderLabels).
+                뷰포트 폭으로 못 정한다 — 학급/협동 여부에 따라 헤더 항목 수가 달라진다. */}
+            <span className="hdr-label">{m.label}</span>
           </button>
         );
       })}
