@@ -156,7 +156,8 @@ test("이어그리기: 두 번 연속 진입해도 매번 새 캔버스로 열�
   expect(c1.r).toBeGreaterThan(150); // 빨강 A
 
   await page.goBack();
-  await expect(page.getByRole("button", { name: /내 사진·그림으로/ })).toBeVisible();
+  // 헤더 버튼으로 특정한다 — 도안 그리드 안에도 같은 이름의 카드가 생겼다(2026-08-25)
+  await expect(page.getByRole("button", { name: "내 사진·그림으로 도안 만들기" })).toBeVisible();
 
   const v2 = await continueWith(b);
   const c2 = await bgColor();

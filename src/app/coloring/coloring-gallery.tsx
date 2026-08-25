@@ -143,8 +143,24 @@ export function ColoringGallery() {
 
         {manifest && (
           <>
-            <p className="mt-5 text-sm text-ink-faint">{items.length}장</p>
+            <p className="mt-5 text-sm text-ink-faint">{items.length}장 + 내 사진</p>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {/* 도안 카드와 같은 자리에서 "내 사진"도 고를 수 있게 — 헤더 버튼만 있으면
+                  아이들이 못 찾는다(2026-08-25 사용자 요청). 누르면 헤더의 PhotoImport를 연다. */}
+              <button
+                type="button"
+                onClick={() => photoRef.current?.openPicker()}
+                className="pressable group flex flex-col overflow-hidden rounded-card bg-sky-soft text-left shadow-soft ring-2 ring-sky/40"
+              >
+                <div className="grid aspect-square place-items-center">
+                  <span className="text-5xl transition-transform group-hover:scale-110">📷</span>
+                </div>
+                <div className="px-3 py-2">
+                  <span className="block truncate text-sm font-semibold text-sky-deep">
+                    내 사진·그림으로
+                  </span>
+                </div>
+              </button>
               {items.map((it) => (
                 <div
                   key={`${it.theme}/${it.id}`}

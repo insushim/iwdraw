@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Chip } from "@/components/ui";
 import { JoinCodeForm } from "@/components/join-code-form";
 import { ArtonLogo } from "@/components/arton-logo";
+import { PhotoStartButton } from "@/components/photo-start-button";
 
 const FEATURES = [
   {
@@ -77,8 +78,8 @@ export default function LandingPage() {
             <span className="text-coral">디지털 미술 놀이터</span>
           </h1>
           <p className="mt-5 max-w-md text-lg text-ink-soft">
-            설치도 로그인도 필요 없어요. 지금 바로 그리거나 색칠하고, 우리 반은 학급 코드로 함께
-            모여요.
+            설치도 로그인도 필요 없어요. 지금 바로 그리거나 색칠하고, 내 사진을 도안으로
+            바꿔서 색칠할 수도 있어요. 우리 반은 학급 코드로 함께 모여요.
           </p>
 
           {/* 게스트 우선: 바로 그리기 / 색칠하기 */}
@@ -95,6 +96,9 @@ export default function LandingPage() {
             >
               🖍️ 색칠하기
             </Link>
+            {/* 내 사진·그림으로 시작 — 색칠 도안 고르기 화면에만 있던 걸 첫 화면에도 꺼냈다
+                (자동 선따기 / 밑그림 / 그대로 이어 그리기 셋 다 여기서 고른다) */}
+            <PhotoStartButton />
           </div>
 
           {/* 학급 코드 입장(선택) */}
