@@ -7,6 +7,8 @@
 //  - cursor  : payload {userId, nickname, x, y}   — 커서 위치(throttle). relay.
 //  - control : payload {type:"kick"|"lock", target?, locked?} — relay.
 //  - peers   : payload PeerInfo[]  (서버→클라, join/leave 시 갱신)
+//              ⚠️ **방 전체 명단(수신자 자신 포함)**. 클라(collab.ts)가 자기 id를 걸러
+//              "나 말고 몇 명"으로 쓴다 — 서버에서 수신자별로 빼주지 않는다.
 import type { Env } from "./types";
 
 interface Attachment {

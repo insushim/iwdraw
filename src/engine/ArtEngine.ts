@@ -983,16 +983,16 @@ export class ArtEngine {
   }
 
   /**
-   * 원격 스트로크를 전용 레이어에 렌더(협동). History/Recorder에 안 쌓임 → 내 undo가
+   * 원격 스트로크를 친구 공용 레이어에 렌더(협동). History/Recorder에 안 쌓임 → 내 undo가
    * 남의 스트로크를 지우지 않음(DESIGN-REVIEW: 협동 undo = 자기 스트로크만).
    */
   applyRemoteStroke(
     meta: { brush: BrushId; color: RGB; size: number; opacity: number; water: number; symmetry: SymmetryMode },
     points: StrokePoint[],
-    userId: string,
+    _userId: string,
   ): void {
     if (points.length === 0) return;
-    const layer = this.remoteLayer(userId);
+    const layer = this.remoteLayer();
     const brush = createBrush(meta.brush);
     // 원격 payload는 신뢰 불가 — 범위를 로컬 UI와 동일하게 클램프(음수 알파/거대 dab 방어)
     const settings: BrushSettings = {
@@ -1031,14 +1031,24 @@ export class ArtEngine {
     this.requestComposite();
   }
 
-  private remoteLayers = new Map<string, Layer>();
-  private remoteLayer(userId: string): Layer {
-    let l = this.remoteLayers.get(userId);
-    if (!l) {
-      l = this.layers.addLayer(`협동:${userId.slice(0, 4)}`) ?? this.layers.active;
-      this.remoteLayers.set(userId, l);
-      this.emitLayers();
-    }
+  /*
+   * 원격 스트로크는 **친구 전원이 한 레이어를 같이 쓴다**(예전엔 사람마다 한 장).
+   *  · 성능: 합성은 보이는 레이어마다 전체 캔버스를 한 번씩 그린다 — 사람 수만큼 레이어가
+   *    늘면 매 프레임 비용이 그대로 선형 증가했다(웨일북 협동 렉, 2026-08-25).
+   *  · 정합: 레이어 상한(MAX_LAYERS=8)에 걸리면 addLayer가 null을 돌려주고 원격 획이
+   *    **내 활성 레이어**로 떨어졌다 — 그러면 내 되돌리기가 친구 그림을 지운다.
+   *    한 장만 쓰면 상한에 걸릴 일이 사실상 없다.
+   * 사람별 분리가 필요 없는 이유: 원격 획은 History/Recorder에 안 쌓여 어차피 개별
+   * 되돌리기 대상이 아니다(applyRemoteStroke 주석 참고).
+   */
+  private remoteLayerRef: Layer | null = null;
+  private remoteLayer(): Layer {
+    const cur = this.remoteLayerRef;
+    // 사용자가 그 레이어를 지웠을 수도 있다 — 스택에 남아 있을 때만 재사용(고아 캔버스 방지)
+    if (cur && this.layers.list.includes(cur)) return cur;
+    const l = this.layers.addLayer("친구들 그림") ?? this.layers.active;
+    this.remoteLayerRef = l;
+    this.emitLayers();
     return l;
   }
 

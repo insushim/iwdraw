@@ -10,7 +10,8 @@ import type { BrushId, RGB, StrokePoint, SymmetryMode } from "@/engine/types";
  *  - 스트로크는 종료 시 배치 전송(포인트 단위 X), Float32 delta + base64(stroke-codec)
  *  - presence: 서버가 peer 목록(닉네임/색)을 join/leave 시 브로드캐스트
  *  - 수신측은 좌표 범위·이벤트율 검증 후 렌더(악성 스트림 방어)
- *  - self 제외는 서버(broadcast except sender)가 담당
+ *  - stroke/cursor의 self 제외는 서버(broadcast except sender)가 담당.
+ *    반면 peers 는 **방 전체 명단(나 포함)** 이라 수신 측에서 자기 자신을 걸러 쓴다.
  * 프로토콜(양방향 JSON {event,payload}): hello / stroke / cursor / control / peers
  */
 
@@ -28,11 +29,27 @@ export interface RemoteStrokeMeta {
 
 export interface CollabCallbacks {
   onRemoteStroke: (meta: RemoteStrokeMeta, points: StrokePoint[]) => void;
-  onPeersChange: (peers: { id: string; nickname: string; color: string }[]) => void;
+  /** 나를 **제외한** 참가자 목록(서버 명단에서 자기 자신을 걸러 전달한다) */
+  onPeersChange: (peers: PeerInfo[]) => void;
   onCursor: (userId: string, nickname: string, x: number, y: number) => void;
   /** 방장(교사)이 강퇴/잠금 */
   onKicked: () => void;
   onLocked: (locked: boolean) => void;
+}
+
+export interface PeerInfo {
+  id: string;
+  nickname: string;
+  color: string;
+}
+
+/**
+ * 서버가 보내는 peers 는 **방 전체 명단(나 포함)** 이다. 화면은 "나 + 친구들"로 인원을 세므로
+ * (`peers.length + 1`) 여기서 자기 자신을 걸러야 한다 — 안 그러면 나를 두 번 세서 혼자
+ * 있어도 "2명"이 된다(2026-08-25 사용자 제보). 서버 dedup(userId 단위)과는 별개의 문제.
+ */
+export function othersFromRoster(roster: PeerInfo[], selfId: string): PeerInfo[] {
+  return roster.filter((p) => p && p.id && p.id !== selfId);
 }
 
 const MAX_EVENTS_PER_SEC = 40; // 수신측 악성 스트림 상한
@@ -137,8 +154,8 @@ export class CollabSession {
         break;
       }
       case "peers": {
-        const peers = (payload as { id: string; nickname: string; color: string }[]) ?? [];
-        this.cb.onPeersChange(peers);
+        const roster = (payload as PeerInfo[]) ?? [];
+        this.cb.onPeersChange(othersFromRoster(roster, this.userId));
         break;
       }
     }
