@@ -14,6 +14,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "tests/e2e",
+  /* 실서버에 쓰기를 시도하는 스펙은 제외한다(위 ⚠️ 규약).
+   * artwork-title: 가짜 학생 세션으로 [갤러리에 보내기]를 누른다 — 토큰이 가짜라 401로 막혀
+   * 실제로 쓰이지는 않지만, "라이브에 제출을 시도하는 스펙"을 여기 두지 않는다는 규약이 우선이다. */
+  testIgnore: ["**/artwork-title.spec.ts"],
   timeout: 90_000,
   retries: 1,
   reporter: [["list"]],
