@@ -208,6 +208,10 @@ export const useEditor = create<EditorState>((set, get) => ({
       // 앞 엔진의 값이 남아 되돌리기/다시 버튼이 켜진 채로 아무 반응이 없다(2026-07-25 실측).
       canUndo: engine.canUndo,
       canRedo: engine.canRedo,
+      /* 복구 배너도 엔진에 딸린 상태다 — 리셋하지 않으면 앞 엔진의 배너가 새 캔버스 위에
+       * 옛 타임스탬프를 단 채 남아, [새 그림] 직후에도 "이어 그리기"를 권한다(교차검증 지적).
+       * 아래 checkRestore()가 실제로 저장본이 있을 때만 다시 켠다. */
+      restoreAvailable: null,
     });
     // UI(스토어)에 남아있는 설정을 새 엔진에 전부 푸시 — 페이지 이동 후 재마운트 시
     // 엔진이 기본값(검정 연필 18)으로 그리던 버그(UI 표시와 실제 그리기 불일치)

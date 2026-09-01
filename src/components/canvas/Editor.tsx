@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import type { ArtEngine } from "@/engine/ArtEngine";
 import { useEditor } from "@/store/editor";
 import { exportPng, exportWebp, exportThumb } from "@/engine/export/PngExporter";
@@ -25,6 +27,9 @@ import { TextPalette } from "./TextPalette";
 import { PhotoImport } from "@/components/photo-import";
 import { ArtonLogo } from "@/components/arton-logo";
 import { Icon } from "./icons";
+
+/* 성능 눈금은 ?perf=1 일 때만 내려받는다 — 평상시엔 번들 평가 비용도 0(교차검증 지적) */
+const PerfHud = dynamic(() => import("./PerfHud").then((m) => m.PerfHud), { ssr: false });
 
 export interface EditorProps {
   lineartSrc?: string;
@@ -157,6 +162,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     el.addEventListener("wheel", block, { passive: false });
     return () => el.removeEventListener("wheel", block);
   }, []);
+  const router = useRouter();
   const engineRef = useRef<ArtEngine | null>(null);
   const [engine, setEngine] = useState<ArtEngine | null>(null);
   // dedup: 같은 그림을 여러 번 저장하면(중간 저장→완성 저장) 갤러리에 최신본만 남긴다.
@@ -175,6 +181,26 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
   // 새 그림 2단계 확인(아동 오조작 방지): 첫 클릭 → "정말요?" 3초, 그 안에 재클릭 시 실행
   const [confirmNew, setConfirmNew] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /* 도안·이어그리기 원본을 떼어낸 "진짜 빈 종이".
+   * 엔진의 newDrawing()은 **그리기 레이어만** 비우고 도안(라인아트)·원본(isBase) 잠금
+   * 레이어는 그대로 둔다. 그래서 도안으로 들어왔거나 사진을 깔고 그리던 아이가 "새 그림 →
+   * 정말요?"를 눌러도 화면은 하나도 안 바뀐다 = "새로운 그림판이 안 나온다"(2026-09-01 제보).
+   * 도안을 유지한 채 색칠만 지우는 건 이미 [전체 지우기]가 한다 — 새 그림은 빈 종이를 준다. */
+  /* ⚠️ 단순 카운터로 두면 안 된다 — [새 그림] 뒤에 Editor 가 살아 있는 채로 다른 도안·사진으로
+   * 들어오면(같은 /draw 경로라 언마운트 없이 prop 만 바뀐다) 그 **새 도안까지 계속 걷어낸다**
+   * (2026-09-01 교차검증 지적). "어느 진입분을 걷어냈는지"를 같이 들고 다녀 저절로 무효화한다. */
+  const entryId = `${navKey ?? ""}|${lineartSrc ?? ""}|${baseSrc ?? ""}`;
+  const [blank, setBlank] = useState<{ n: number; entry: string } | null>(null);
+  const blankKey = blank && blank.entry === entryId ? blank.n : 0;
+  /* 성능 눈금(?perf=1) — 웨일북 같은 저사양 기기에서 "지금 몇 ms인지"를 기기에서 직접 읽으려고.
+   * 개발 머신에서는 그 렉이 재현되지 않는다(2026-09-01 조사). 평상시엔 렌더되지 않는다. */
+  const [perfHud, setPerfHud] = useState(false);
+  useEffect(() => {
+    setPerfHud(new URLSearchParams(window.location.search).get("perf") === "1");
+  }, []);
+  const templateDropped = blankKey > 0;
+  const lineart = templateDropped ? undefined : lineartSrc;
+  const base = templateDropped ? undefined : baseSrc;
   const handleNewDrawing = () => {
     if (!confirmNew) {
       setConfirmNew(true);
@@ -187,7 +213,27 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     // 새 그림 = 새 그리기 세션 → 다음 저장은 별개 작품(이어그리기 짝도 끊는다)
     draftIdRef.current = genDraftId();
     rememberDraft(null);
-    newDrawing();
+    newDrawing(); // 픽셀·히스토리·무비 로그·자동저장 초기화(잠금 레이어는 남는다)
+    if (!lineart && !base) return;
+    /* 도안·원본이 깔려 있으면 레이어를 비워도 화면이 그대로다 → 캔버스를 통째로 새로 만든다.
+     * 자동저장을 먼저 지우고(purge) 마운트해야 새 엔진이 방금 지운 그림으로 "이어그리기"를
+     * 다시 권하지 않는다. 주소의 도안 파라미터도 떼서 새로고침해도 빈 종이로 돌아온다. */
+    dismissRestore(); // 떠 있던 [이어 그리기] 배너도 같이 접는다(옛 저장본을 가리키는 죽은 UI)
+    /* 주소 정리는 **지금** 한다 — purge 를 기다렸다 하면 그 사이 다른 그림으로 옮겨 갔을 때
+     * 남의 주소에서 도안 파라미터를 지운다. 그리고 raw history API 대신 Next 라우터로 —
+     * useSearchParams 로 파생되는 값(뒤로가기 링크·과제 배너)이 옛 도안을 붙들지 않게 한다. */
+    try {
+      const url = new URL(window.location.href);
+      ["template", "base", "v"].forEach((k) => url.searchParams.delete(k));
+      router.replace(url.pathname + url.search, { scroll: false });
+    } catch {
+      /* 주소 정리는 부가 기능 — 실패해도 캔버스는 이미 비었다 */
+    }
+    /* purge 가 실패해도 캔버스 교체는 반드시 일어나야 한다 — 실패가 "새 그림이 아무 일도
+     * 안 하는" 원래 증상으로 되돌아가면 안 된다(그래서 then 의 두 갈래 모두 swap). */
+    const eng = engineRef.current;
+    const swap = () => setBlank({ n: Date.now(), entry: entryId });
+    void Promise.resolve(eng?.discardRestore()).then(swap, swap);
   };
   const setSuggestSuppressed = useEditor((s) => s.setSuggestSuppressed);
   // 협동 방: 뚝딱그림 수락(undo×k+스탬프)이 원격에 전파되지 않아 캔버스가 갈라진다 — 방에선 잠금
@@ -377,7 +423,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         {/* 도안·이어그리기 원본이 있으면 캔버스 비율이 그 그림에 묶여 있어 방향 전환이
             아무 일도 하지 않는다(CanvasStage가 이미지 비율을 쓴다) — 라벨만 가로↔세로로
             바뀌는 죽은 버튼이었다(2026-07-25). 아예 감춘다. */}
-        {!lineartSrc && !baseSrc && (
+        {!lineart && !base && (
           <button
             onClick={handleRotate}
             className={
@@ -512,16 +558,21 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             // navKey(진입 고유 토큰)가 있으면 그것으로 key 고정 — 커스텀 이미지는 dataURL 앞부분이
             // 같아(같은 크기) slice(0,64) 충돌 → 2회차 재마운트 실패하던 버그의 근본 수정.
             key={
-              navKey
-                ? `v:${navKey}`
-                : lineartSrc
-                  ? `t:${lineartSrc}`
-                  : baseSrc
-                    ? `b:${baseSrc.slice(0, 64)}`
-                    : `o:${orientation}`
+              blankKey > 0
+                ? // 새 그림 = 도안·원본을 뗀 새 캔버스. ⚠️ orientation 을 반드시 섞는다 —
+                  // 도안을 떼면 가로/세로 버튼이 다시 살아나는데, key 에 방향이 없으면
+                  // 눌러도 재마운트가 안 돼 죽은 버튼이 된다(2026-09-01 교차검증 지적).
+                  `n:${blankKey}:${orientation}`
+                : navKey
+                  ? `v:${navKey}`
+                  : lineartSrc
+                    ? `t:${lineartSrc}`
+                    : baseSrc
+                      ? `b:${baseSrc.slice(0, 64)}`
+                      : `o:${orientation}`
             }
-            lineartSrc={lineartSrc}
-            baseSrc={baseSrc}
+            lineartSrc={lineart}
+            baseSrc={base}
             initialMode={initialMode}
             orientation={orientation}
             onEngineReady={(e) => {
@@ -532,6 +583,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
               draftIdRef.current = genDraftId();
             }}
           />
+          {perfHud && <PerfHud />}
           <SuggestBar />
           <PendingStampBar />
           <div className="absolute bottom-3 left-3 z-10 flex gap-2 compact:bottom-1.5 compact:left-1.5 compact:gap-1.5">

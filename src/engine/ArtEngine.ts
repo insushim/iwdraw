@@ -1029,6 +1029,9 @@ export class ArtEngine {
     this.cm.backend.drawDabs(dabs);
     this.cm.backend.endStroke();
     this.requestComposite();
+    /* 친구 획도 캔버스의 일부다 — 예약하지 않으면 자동저장에 안 들어가서, 새로고침 후
+     * [이어그리기]로 돌아오면 친구들 그림만 통째로 사라진다(2026-09-01 코드 점검). */
+    this.scheduleAutoSave();
   }
 
   /*
@@ -1544,6 +1547,12 @@ export class ArtEngine {
     if (this.history.undo()) {
       this.recorder.undo(); // 무비 로그 정합 — 되돌린 획은 재생에서도 제외
       this.requestComposite();
+      /* 되돌리기도 그림이 바뀐 것이다 — 예약하지 않으면 자동저장은 **되돌리기 전** 상태에
+       * 머문다. 획 하나 긋고 되돌린 뒤 탭을 닫으면(또는 화면이 꺼지면) 돌아왔을 때
+       * [이어그리기]가 지운 획을 되살려 준다(2026-09-01 코드 점검에서 발견).
+       * ⚠️ emitHistory(UI 알림)보다 **먼저** 예약한다 — 구독자 예외가 저장 예약을 삼키면
+       * 같은 결함이 조용히 돌아온다(교차검증 지적). */
+      this.scheduleAutoSave();
       this.emitHistory();
     }
   }
@@ -1553,6 +1562,7 @@ export class ArtEngine {
     if (this.history.redo()) {
       this.recorder.redo();
       this.requestComposite();
+      this.scheduleAutoSave(); // undo와 같은 이유(알림보다 먼저)
       this.emitHistory();
     }
   }
@@ -1583,6 +1593,7 @@ export class ArtEngine {
       extra: { clear: true },
     });
     this.requestComposite();
+    this.scheduleAutoSave(); // 지운 상태도 저장돼야 한다(undo와 같은 이유)
   }
 
   /** 새 그림: 그리기 레이어를 1장으로 줄여 비우고 히스토리·기록·자동저장 초기화(도안·원본은 유지) */
@@ -1599,6 +1610,7 @@ export class ArtEngine {
     }
     this.history.clear();
     this.recorder.clear();
+    this.autosave.cancel(); // 예약을 먼저 버린다 — purge 뒤에 발화하면 지운 상태가 되살아난다
     void this.autosave.purge();
     this.emitLayers();
     this.emitHistory();

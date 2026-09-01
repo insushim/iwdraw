@@ -120,6 +120,19 @@ export class AutoSave {
     }
   }
 
+  /** 대기 중인 저장 예약을 버린다 — "이전 상태를 저장할 이유가 사라진" 경우(새 그림)에만.
+   * ⚠️ 이게 없으면 새 그림 직후 언마운트(캔버스 재마운트)의 flush 가 방금 지운 상태를 다시
+   * 써 넣어, 새로 뜬 캔버스가 **빈 그림으로 [이어 그리기]를 권한다**(2026-09-01 교차검증). */
+  cancel(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.pending = null;
+    this.queued = false;
+    this.pendingSince = 0;
+  }
+
   async purge(): Promise<void> {
     try {
       const db = await openDb();
