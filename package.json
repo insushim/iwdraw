@@ -12,11 +12,11 @@
     "typecheck": "tsc --noEmit",
     "cf:dev": "NEXT_PUBLIC_HAS_BACKEND=1 wrangler dev",
     "cf:build": "export NEXT_PUBLIC_BUILD_ID=$(date +%s) && node scripts/gen-version.mjs && NEXT_PUBLIC_HAS_BACKEND=1 next build",
-    "cf:deploy": "export NEXT_PUBLIC_BUILD_ID=$(date +%s) && node scripts/gen-version.mjs && NEXT_PUBLIC_HAS_BACKEND=1 next build && wrangler deploy",
+    "cf:deploy": "export NEXT_PUBLIC_BUILD_ID=$(date +%s) && node scripts/gen-version.mjs && NEXT_PUBLIC_HAS_BACKEND=1 next build && node scripts/migrate-remote.mjs && wrangler deploy",
     "cf:migrate:local": "wrangler d1 execute arton --local --file=worker/schema.sql",
     "cf:migrate:remote": "wrangler d1 execute arton --remote --file=worker/schema.sql",
-    "//cf:migrate:title": "작품 제목 컬럼 추가(2026-09-01). ⚠️ 반드시 cf:deploy 보다 먼저 — 새 워커의 조회·삽입이 title 열을 참조한다",
-    "cf:migrate:title": "wrangler d1 execute arton --remote --file=worker/migrations/2026-09-01-artwork-title.sql"
+    "//cf:migrate": "미적용 마이그레이션을 원격 D1에 적용(중복 컬럼은 통과). cf:deploy 가 자동 호출하므로 보통 직접 부를 일은 없다",
+    "cf:migrate": "node scripts/migrate-remote.mjs"
   },
   "dependencies": {
     "hono": "^4.12.27",

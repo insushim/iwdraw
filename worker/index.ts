@@ -71,6 +71,12 @@ function fileOrNull(v: File | string | null): File | null {
   return v && typeof v !== "string" ? v : null;
 }
 
+/** 2026-09-01 title 마이그레이션이 아직 안 돌아간 DB인가 — 그 경우에만 제목을 포기하고 재시도한다.
+ * (다른 DB 오류까지 삼키면 진짜 장애가 조용히 묻힌다.) */
+function isMissingTitleColumn(e: unknown): boolean {
+  return /no such column:?\s*(main\.)?(artworks\.)?title/i.test(String(e));
+}
+
 function clientIp(c: AppContext): string {
   return (
     c.req.header("cf-connecting-ip") ??
@@ -483,13 +489,20 @@ app.get("/api/classes/:id/artworks", requireTeacher, async (c) => {
     .bind(id, teacherId)
     .first();
   if (!owned) return c.json({ error: "not_found" }, 404);
-  const { results } = await c.env.DB.prepare(
-    `SELECT a.id, a.student_id, a.mode, a.thumb_path, a.image_path, a.is_approved, a.like_count, a.created_at, a.title, s.nickname
+  /* title 컬럼이 없는(마이그레이션 미적용) DB에서도 교사 갤러리는 열려야 한다 — 제목만 빠진다 */
+  const listArtworks = (withTitle: boolean) =>
+    c.env.DB.prepare(
+      `SELECT a.id, a.student_id, a.mode, a.thumb_path, a.image_path, a.is_approved, a.like_count, a.created_at,
+              ${withTitle ? "a.title," : "NULL AS title,"} s.nickname
      FROM artworks a JOIN students s ON s.id = a.student_id
      WHERE a.class_id = ? ORDER BY a.created_at DESC`,
-  )
-    .bind(id)
-    .all<{ is_approved: number; created_at: number; [k: string]: unknown }>();
+    )
+      .bind(id)
+      .all<{ is_approved: number; created_at: number; [k: string]: unknown }>();
+  const { results } = await listArtworks(true).catch((e) => {
+    if (!isMissingTitleColumn(e)) throw e;
+    return listArtworks(false);
+  });
   return c.json(
     (results ?? []).map((r) => ({
       ...r,
@@ -670,16 +683,22 @@ app.get("/api/student/gallery", requireStudent, async (c) => {
   const classId = c.get("studentClassId");
   const studentId = c.get("studentId");
   // 승인작 전체 + 본인 미승인작(승인 대기 표시용) — /api/student/file의 접근 규칙과 동일 정책
-  const { results } = await c.env.DB.prepare(
-    `SELECT a.id, a.mode, a.thumb_path, a.image_path, a.like_count, a.created_at, a.is_approved, a.title, s.nickname,
+  /* title 컬럼이 없는(마이그레이션 미적용) DB에서도 갤러리는 열려야 한다 — 제목만 빠진다 */
+  const listGallery = (withTitle: boolean) =>
+    c.env.DB.prepare(
+    `SELECT a.id, a.mode, a.thumb_path, a.image_path, a.like_count, a.created_at, a.is_approved, ${withTitle ? "a.title," : "NULL AS title,"} s.nickname,
             EXISTS(SELECT 1 FROM artwork_likes al WHERE al.artwork_id = a.id AND al.voter_key = ?) AS liked,
             (a.student_id = ?) AS mine
      FROM artworks a JOIN students s ON s.id = a.student_id
      WHERE a.class_id = ? AND (a.is_approved = 1 OR a.student_id = ?)
      ORDER BY a.created_at DESC LIMIT 200`,
-  )
-    .bind(studentId, studentId, classId, studentId)
-    .all<{ liked: number; mine: number; is_approved: number; [k: string]: unknown }>();
+    )
+      .bind(studentId, studentId, classId, studentId)
+      .all<{ liked: number; mine: number; is_approved: number; [k: string]: unknown }>();
+  const { results } = await listGallery(true).catch((e) => {
+    if (!isMissingTitleColumn(e)) throw e;
+    return listGallery(false);
+  });
   return c.json(
     (results ?? []).map((r) => ({ ...r, liked: !!r.liked, mine: !!r.mine, is_approved: !!r.is_approved })),
   );
@@ -962,37 +981,73 @@ app.post("/api/artwork", async (c) => {
   // 걸려 두 번째는 새 행 대신 기존 행을 갱신한다(dedup을 DB 레벨에서 원자적으로 보장).
   // 승인 게이트 비활성(2026-07-09 사용자 결정): 제출 즉시 전시(is_approved=1).
   // 되살리려면 아래 1을 0으로 — 조회(is_approved=1 필터)·PATCH 승인 엔드포인트·교사 UI는 보존됨.
-  const insertRow = () =>
+  /* ⚠️ title 컬럼은 2026-09-01 마이그레이션에서 추가됐다. 마이그레이션보다 워커가 먼저 배포되면
+   * 이 문장이 "no such column: title"로 실패하는데, 그건 **제목이 안 붙는 정도가 아니라 학급 전체의
+   * 그림 저장이 통째로 막히는 전면 장애**다(교차검증 CRITICAL). 배포 스크립트가 순서를 강제하지만,
+   * 이미 어긋난 상태를 구제할 안전망을 코드에도 둔다 — 제목만 포기하고 그림은 반드시 저장한다. */
+  const insertRow = (withTitle = true) =>
     c.env.DB.prepare(
-      `INSERT INTO artworks (id, class_id, student_id, mode, image_path, thumb_path, timelapse_path, draft_id, title, is_approved, created_at)
+      withTitle
+        ? `INSERT INTO artworks (id, class_id, student_id, mode, image_path, thumb_path, timelapse_path, draft_id, title, is_approved, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
        ON CONFLICT(student_id, draft_id) DO UPDATE SET
          mode = excluded.mode, image_path = excluded.image_path, thumb_path = excluded.thumb_path,
          timelapse_path = excluded.timelapse_path, created_at = excluded.created_at,
          -- 제목은 보낸 경우에만 갈아끼운다 — 제목 없이 재저장했다고 붙여 둔 제목이 사라지면 안 된다
          title = COALESCE(excluded.title, artworks.title)
+       RETURNING id`
+        : `INSERT INTO artworks (id, class_id, student_id, mode, image_path, thumb_path, timelapse_path, draft_id, is_approved, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT(student_id, draft_id) DO UPDATE SET
+         mode = excluded.mode, image_path = excluded.image_path, thumb_path = excluded.thumb_path,
+         timelapse_path = excluded.timelapse_path, created_at = excluded.created_at
        RETURNING id`,
     )
-      .bind(artId, claims.class_id, claims.student_id, mode, imagePath, thumbPath, timelapsePath, draftId, title, now)
+      .bind(
+        ...(withTitle
+          ? [artId, claims.class_id, claims.student_id, mode, imagePath, thumbPath, timelapsePath, draftId, title, now]
+          : [artId, claims.class_id, claims.student_id, mode, imagePath, thumbPath, timelapsePath, draftId, now]),
+      )
       .first<{ id: string }>();
+
+  const insertWithFallback = () =>
+    insertRow().catch((e) => {
+      if (!isMissingTitleColumn(e)) throw e;
+      console.warn("[artwork] title 컬럼 없음 — 제목 없이 저장(마이그레이션 미적용)");
+      return insertRow(false);
+    });
+
+  const updateRow = (withTitle = true) =>
+    c.env.DB.prepare(
+      withTitle
+        ? `UPDATE artworks SET mode = ?, image_path = ?, thumb_path = ?, timelapse_path = ?, created_at = ?,
+                             title = COALESCE(?, title)
+         WHERE id = ? AND student_id = ?`
+        : `UPDATE artworks SET mode = ?, image_path = ?, thumb_path = ?, timelapse_path = ?, created_at = ?
+         WHERE id = ? AND student_id = ?`,
+    )
+      .bind(
+        ...(withTitle
+          ? [mode, imagePath, thumbPath, timelapsePath, now, title, artId, claims.student_id]
+          : [mode, imagePath, thumbPath, timelapsePath, now, artId, claims.student_id]),
+      )
+      .run();
 
   let rowId = artId;
   try {
     if (existing) {
       // 덮어쓰기: 새 행을 만들지 않고 자기 행을 갱신(삭제 없음). created_at를 올려 최신 저장 기준으로
       // 정렬·리텐션(180일) 재산정. student_id 조건으로 자기 행만 갱신됨을 이중 보장.
-      const res = await c.env.DB.prepare(
-        `UPDATE artworks SET mode = ?, image_path = ?, thumb_path = ?, timelapse_path = ?, created_at = ?,
-                             title = COALESCE(?, title)
-         WHERE id = ? AND student_id = ?`,
-      )
-        .bind(mode, imagePath, thumbPath, timelapsePath, now, title, artId, claims.student_id)
-        .run();
+      const res = await updateRow().catch((e) => {
+        if (!isMissingTitleColumn(e)) throw e;
+        console.warn("[artwork] title 컬럼 없음 — 제목 없이 저장(마이그레이션 미적용)");
+        return updateRow(false);
+      });
       // 조회와 갱신 사이에 교사가 그 작품을 지웠으면 갱신 대상이 없다(changes=0). 그대로 200을 주면
       // 방금 올린 R2 파일이 어떤 행에도 안 붙은 영구 고아가 되므로, 새 행으로 되살린다.
-      if ((res.meta?.changes ?? 0) === 0) rowId = (await insertRow())?.id ?? artId;
+      if ((res.meta?.changes ?? 0) === 0) rowId = (await insertWithFallback())?.id ?? artId;
     } else {
-      rowId = (await insertRow())?.id ?? artId;
+      rowId = (await insertWithFallback())?.id ?? artId;
     }
   } catch (e) {
     // 신규 INSERT 실패 → 방금 올린 R2 객체를 best-effort 정리(orphan 방지).

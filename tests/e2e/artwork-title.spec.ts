@@ -50,6 +50,21 @@ test("학급 제출은 저장 전에 제목을 묻고, 건너뛸 수도 있다",
   // [그냥 저장]도 항상 있어야 한다 — 제목을 강제하면 저장이 막히는 아이가 생긴다
   await page.getByRole("button", { name: "그냥 저장" }).click();
   await expect(page.getByRole("dialog", { name: "그림 제목 정하기" })).toBeHidden();
+
+  /* [그냥 저장]이 기억해 둔 제목을 지우면 안 된다 — 서버는 COALESCE로 기존 제목을 지키는데
+   * UI만 비면 실제 상태를 오도한다(교차검증 지적). */
+  await page.getByRole("button", { name: "우리 반 갤러리에 보내기" }).click();
+  await expect(page.getByLabel("그림 제목", { exact: true })).toHaveValue("우리 강아지");
+
+  // 실수로 배경을 탭해 닫아도 쓰던 제목은 남는다(태블릿 오탭)
+  await page.getByLabel("그림 제목", { exact: true }).fill("봄 소풍");
+  await page.mouse.click(5, 5);
+  await expect(page.getByRole("dialog", { name: "그림 제목 정하기" })).toBeHidden();
+  await page.getByRole("button", { name: "우리 반 갤러리에 보내기" }).click();
+  await expect(
+    page.getByLabel("그림 제목", { exact: true }),
+    "실수 탭으로 닫아도 쓰던 제목이 살아 있다",
+  ).toHaveValue("봄 소풍");
 });
 
 test("혼자 그리기(학급 아님)에서는 제목을 묻지 않는다", async ({ page }) => {

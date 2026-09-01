@@ -358,7 +358,9 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
   const [title, setTitle] = useState("");
   const submitWithTitle = (t: string) => {
     setAskTitle(false);
-    setTitle(t);
+    /* [그냥 저장](t === "")은 기억해 둔 제목을 **지우지 않는다** — 서버도 COALESCE 로
+     * 기존 제목을 지키므로, 여기서 비우면 UI만 서버와 어긋난다(교차검증 지적). */
+    if (t) setTitle(t);
     void handleExport("submit", t);
   };
 
@@ -681,7 +683,14 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       )}
       {downloaded && <Toast tone="leaf">✅ 내 기기에 그림 파일로 저장했어요</Toast>}
       {askTitle && (
-        <TitleAsk initial={title} onCancel={() => setAskTitle(false)} onDone={submitWithTitle} />
+        <TitleAsk
+          initial={title}
+          onCancel={(draft) => {
+            setTitle(draft); // 실수로 닫아도 쓰던 제목은 남는다
+            setAskTitle(false);
+          }}
+          onDone={submitWithTitle}
+        />
       )}
       {showMovie && engineRef.current && (
         <MovieModal engine={engineRef.current} onClose={() => setShowMovie(false)} />
@@ -715,7 +724,8 @@ function TitleAsk({
 }: {
   initial: string;
   onDone: (title: string) => void;
-  onCancel: () => void;
+  /** 닫기 — 쓰던 제목을 초안으로 넘긴다(실수로 배경을 탭해도 다시 열면 그대로 있다) */
+  onCancel: (draft: string) => void;
 }) {
   const [v, setV] = useState(initial);
   return (
@@ -724,7 +734,7 @@ function TitleAsk({
       role="dialog"
       aria-modal="true"
       aria-label="그림 제목 정하기"
-      onClick={onCancel}
+      onClick={() => onCancel(v)}
     >
       <div
         className="w-[min(92vw,420px)] rounded-bubble bg-paper p-5 shadow-lift"
@@ -737,10 +747,12 @@ function TitleAsk({
           value={v}
           onChange={(e) => setV(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") onDone(v);
-            if (e.key === "Escape") onCancel();
+            /* ⚠️ isComposing 가드 — 한글 조합을 확정하는 Enter 가 그대로 제출로 새면
+             * 마지막 음절이 빠진 제목("우리 강아")이 저장된다(교차검증 지적). */
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) onDone(v);
+            if (e.key === "Escape") onCancel(v);
           }}
-          maxLength={30}
+          maxLength={30} // ⚠️ worker/lib/title.ts 의 TITLE_MAX 와 같은 값이어야 한다
           placeholder="예) 우리 강아지"
           aria-label="그림 제목"
           className="mt-4 w-full rounded-card border border-cream-deep bg-white px-4 py-3 text-lg text-ink outline-none focus:border-sky"
