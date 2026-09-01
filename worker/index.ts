@@ -14,6 +14,7 @@ import {
   serializeCookie,
   SESSION_COOKIE,
 } from "./lib/util";
+import { sanitizeTitle } from "./lib/title";
 
 export { CollabRoom } from "./collab";
 
@@ -483,7 +484,7 @@ app.get("/api/classes/:id/artworks", requireTeacher, async (c) => {
     .first();
   if (!owned) return c.json({ error: "not_found" }, 404);
   const { results } = await c.env.DB.prepare(
-    `SELECT a.id, a.student_id, a.mode, a.thumb_path, a.image_path, a.is_approved, a.like_count, a.created_at, s.nickname
+    `SELECT a.id, a.student_id, a.mode, a.thumb_path, a.image_path, a.is_approved, a.like_count, a.created_at, a.title, s.nickname
      FROM artworks a JOIN students s ON s.id = a.student_id
      WHERE a.class_id = ? ORDER BY a.created_at DESC`,
   )
@@ -670,7 +671,7 @@ app.get("/api/student/gallery", requireStudent, async (c) => {
   const studentId = c.get("studentId");
   // 승인작 전체 + 본인 미승인작(승인 대기 표시용) — /api/student/file의 접근 규칙과 동일 정책
   const { results } = await c.env.DB.prepare(
-    `SELECT a.id, a.mode, a.thumb_path, a.image_path, a.like_count, a.created_at, a.is_approved, s.nickname,
+    `SELECT a.id, a.mode, a.thumb_path, a.image_path, a.like_count, a.created_at, a.is_approved, a.title, s.nickname,
             EXISTS(SELECT 1 FROM artwork_likes al WHERE al.artwork_id = a.id AND al.voter_key = ?) AS liked,
             (a.student_id = ?) AS mine
      FROM artworks a JOIN students s ON s.id = a.student_id
@@ -846,6 +847,11 @@ app.post("/api/artwork", async (c) => {
   // 새 행을 만들지 않고 (student_id, draft_id)로 자기 행을 덮어쓴다(upsert) → 갤러리에 최신본만.
   // 삭제 능력을 노출하지 않으므로(자기 행 덮어쓰기뿐) 닉네임 도용으로도 남의 작품을 못 지운다.
   // 길이 상한으로 비정상 입력 차단.
+  /* 제목 — 아이가 직접 쓰는 자유 문자열이라 서버에서 정규화한다(클라 신뢰 금지):
+   * 제어문자·줄바꿈 제거 → 앞뒤 공백 제거 → 30자 컷. 빈 문자열이면 NULL(제목 없음).
+   * 표시는 전부 React 텍스트 노드라 이스케이프는 프레임워크가 하고, 여기선 길이·문자만 본다. */
+  const titleRaw = form.get("title");
+  const title = typeof titleRaw === "string" ? sanitizeTitle(titleRaw) : null;
   const draftRaw = form.get("draft_id");
   const draftId =
     typeof draftRaw === "string" && draftRaw.length > 0 && draftRaw.length <= 64 ? draftRaw : null;
@@ -958,14 +964,16 @@ app.post("/api/artwork", async (c) => {
   // 되살리려면 아래 1을 0으로 — 조회(is_approved=1 필터)·PATCH 승인 엔드포인트·교사 UI는 보존됨.
   const insertRow = () =>
     c.env.DB.prepare(
-      `INSERT INTO artworks (id, class_id, student_id, mode, image_path, thumb_path, timelapse_path, draft_id, is_approved, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      `INSERT INTO artworks (id, class_id, student_id, mode, image_path, thumb_path, timelapse_path, draft_id, title, is_approved, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
        ON CONFLICT(student_id, draft_id) DO UPDATE SET
          mode = excluded.mode, image_path = excluded.image_path, thumb_path = excluded.thumb_path,
-         timelapse_path = excluded.timelapse_path, created_at = excluded.created_at
+         timelapse_path = excluded.timelapse_path, created_at = excluded.created_at,
+         -- 제목은 보낸 경우에만 갈아끼운다 — 제목 없이 재저장했다고 붙여 둔 제목이 사라지면 안 된다
+         title = COALESCE(excluded.title, artworks.title)
        RETURNING id`,
     )
-      .bind(artId, claims.class_id, claims.student_id, mode, imagePath, thumbPath, timelapsePath, draftId, now)
+      .bind(artId, claims.class_id, claims.student_id, mode, imagePath, thumbPath, timelapsePath, draftId, title, now)
       .first<{ id: string }>();
 
   let rowId = artId;
@@ -974,10 +982,11 @@ app.post("/api/artwork", async (c) => {
       // 덮어쓰기: 새 행을 만들지 않고 자기 행을 갱신(삭제 없음). created_at를 올려 최신 저장 기준으로
       // 정렬·리텐션(180일) 재산정. student_id 조건으로 자기 행만 갱신됨을 이중 보장.
       const res = await c.env.DB.prepare(
-        `UPDATE artworks SET mode = ?, image_path = ?, thumb_path = ?, timelapse_path = ?, created_at = ?
+        `UPDATE artworks SET mode = ?, image_path = ?, thumb_path = ?, timelapse_path = ?, created_at = ?,
+                             title = COALESCE(?, title)
          WHERE id = ? AND student_id = ?`,
       )
-        .bind(mode, imagePath, thumbPath, timelapsePath, now, artId, claims.student_id)
+        .bind(mode, imagePath, thumbPath, timelapsePath, now, title, artId, claims.student_id)
         .run();
       // 조회와 갱신 사이에 교사가 그 작품을 지웠으면 갱신 대상이 없다(changes=0). 그대로 200을 주면
       // 방금 올린 R2 파일이 어떤 행에도 안 붙은 영구 고아가 되므로, 새 행으로 되살린다.

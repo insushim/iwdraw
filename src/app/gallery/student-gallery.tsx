@@ -172,6 +172,12 @@ export function StudentGallery() {
                     <div className="h-full w-full animate-pulse bg-cream-deep" />
                   )}
                 </button>
+                {/* 제목이 있으면 그림 바로 아래에 — 아이들이 가장 먼저 보는 줄이다 */}
+                {a.title && (
+                  <p className="truncate px-3 pt-2 font-display text-sm text-ink" title={a.title}>
+                    {a.title}
+                  </p>
+                )}
                 <div className="flex items-center justify-between px-3 py-2">
                   <span className="truncate text-sm font-semibold text-ink">
                     {a.nickname}
@@ -225,7 +231,15 @@ export function StudentGallery() {
               </div>
             )}
             <div className="mt-3 flex items-center justify-between gap-2 px-1">
-              <span className="truncate font-display text-lg text-ink">{big.nickname}</span>
+              <span className="min-w-0 truncate font-display text-lg text-ink">
+                {big.title ? (
+                  <>
+                    {big.title} <span className="text-base text-ink-soft">· {big.nickname}</span>
+                  </>
+                ) : (
+                  big.nickname
+                )}
+              </span>
               <button
                 onClick={() => setBig(null)}
                 className="pressable shrink-0 rounded-card bg-ink px-5 py-2 font-display text-white"

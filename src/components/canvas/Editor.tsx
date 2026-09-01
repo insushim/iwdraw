@@ -44,7 +44,13 @@ export interface EditorProps {
    * 저장 콜백(학생 작품 제출) — 없으면 로컬 다운로드.
    * draftId = 이 그리기 세션의 익명 토큰. 서버가 같은 토큰의 자기 행을 덮어써 갤러리에 최신본만 남긴다.
    */
-  onSave?: (image: Blob, thumb: Blob, draftId?: string) => Promise<{ id: string } | null | void> | void;
+  onSave?: (
+    image: Blob,
+    thumb: Blob,
+    draftId?: string,
+    /** 학생이 붙인 제목(빈 문자열/미지정이면 제목 없음 — 서버는 기존 제목을 지우지 않는다) */
+    title?: string,
+  ) => Promise<{ id: string } | null | void> | void;
   /** 상단에 표시할 닉네임/학급 */
   who?: string;
   backHref?: string;
@@ -294,7 +300,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
   /* 저장은 두 갈래 — 학급으로 입장했어도 "내 컴퓨터에 저장"은 늘 쓸 수 있어야 한다
    * (2026-07-13 사용자 요청: 갤러리 제출과 파일 저장은 별개의 일). */
   const handleExport = useCallback(
-    async (mode: "submit" | "download") => {
+    async (mode: "submit" | "download", title?: string) => {
       const engine = engineRef.current;
       if (!engine || saving || downloading) return;
       const submit = mode === "submit" && !!onSave;
@@ -311,7 +317,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           const image = await exportWebp(layers, engine.width, engine.height);
           const thumb = await exportThumb(layers, engine.width, engine.height);
           // 같은 그림 재저장이면 같은 draft 토큰으로 → 서버가 자기 행을 덮어써 최신본만 남김.
-          await onSave!(image, thumb, draftId);
+          await onSave!(image, thumb, draftId, title);
           // 이 그림 = 갤러리의 그 행. 이어그리기로 돌아오면 되살린다. 저장 도중 새 그림으로
           // 갈렸다면 자동저장은 이미 다른 그림이므로 짝을 갱신하지 않는다.
           if (draftIdRef.current === draftId) rememberDraft(draftId);
@@ -343,6 +349,18 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     },
     [onSave, saving, downloading],
   );
+
+  /* 제목 달기(학급 제출 전용) — 저장 버튼을 누르면 먼저 "제목을 지어 줄래요?"를 띄운다.
+   * [그냥 저장]은 반드시 남긴다: 제목을 강제하면 글씨가 느린 아이가 저장 자체를 못 한다.
+   * 붙인 제목은 이 그리기 세션 동안 기억해 재저장 때 그대로 채워 준다(서버도 제목 없이 온
+   * 재저장에서는 기존 제목을 지우지 않는다 — COALESCE). */
+  const [askTitle, setAskTitle] = useState(false);
+  const [title, setTitle] = useState("");
+  const submitWithTitle = (t: string) => {
+    setAskTitle(false);
+    setTitle(t);
+    void handleExport("submit", t);
+  };
 
   // shrink-0: 헤더가 좁아지면 flex가 버튼을 눌러 라벨이 접힌다(웨일북에서 버튼이 세로로 길쭉)
   const iconBtn =
@@ -508,7 +526,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           </button>
         )}
         <button
-          onClick={() => handleExport(submits ? "submit" : "download")}
+          onClick={() => (submits ? setAskTitle(true) : handleExport("download"))}
           disabled={saving || (!submits && downloading)}
           className="pressable touch-target flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-coral px-5 py-2.5 font-display text-white shadow-soft disabled:opacity-60"
           aria-label={submits ? "우리 반 갤러리에 보내기" : "저장하기"}
@@ -662,6 +680,9 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         </Toast>
       )}
       {downloaded && <Toast tone="leaf">✅ 내 기기에 그림 파일로 저장했어요</Toast>}
+      {askTitle && (
+        <TitleAsk initial={title} onCancel={() => setAskTitle(false)} onDone={submitWithTitle} />
+      )}
       {showMovie && engineRef.current && (
         <MovieModal engine={engineRef.current} onClose={() => setShowMovie(false)} />
       )}
@@ -682,6 +703,64 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       )}
       <StampPalette />
       <TextPalette />
+    </div>
+  );
+}
+
+/* 제목 묻기 — 저장(제출) 직전 1회. 아이 손에 맞춰 큼직한 입력 한 칸과 버튼 두 개만. */
+function TitleAsk({
+  initial,
+  onDone,
+  onCancel,
+}: {
+  initial: string;
+  onDone: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const [v, setV] = useState(initial);
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="그림 제목 정하기"
+      onClick={onCancel}
+    >
+      <div
+        className="w-[min(92vw,420px)] rounded-bubble bg-paper p-5 shadow-lift"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="font-display text-xl text-ink">그림에 제목을 지어 줄래요? ✏️</h2>
+        <p className="mt-1 text-sm text-ink-soft">갤러리에서 친구들이 제목과 함께 봐요.</p>
+        <input
+          autoFocus
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onDone(v);
+            if (e.key === "Escape") onCancel();
+          }}
+          maxLength={30}
+          placeholder="예) 우리 강아지"
+          aria-label="그림 제목"
+          className="mt-4 w-full rounded-card border border-cream-deep bg-white px-4 py-3 text-lg text-ink outline-none focus:border-sky"
+        />
+        <div className="mt-2 text-right text-xs text-ink-faint">{v.length}/30</div>
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => onDone("")}
+            className="pressable flex-1 rounded-card bg-cream-deep px-4 py-3 font-display text-ink-soft"
+          >
+            그냥 저장
+          </button>
+          <button
+            onClick={() => onDone(v)}
+            className="pressable flex-[2] rounded-card bg-coral px-4 py-3 font-display text-white shadow-soft"
+          >
+            이 제목으로 저장
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

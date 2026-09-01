@@ -25,6 +25,8 @@ export interface ArtworkRow {
   like_count: number;
   created_at: number;
   nickname?: string;
+  /** 학생이 붙인 제목(없으면 null) */
+  title?: string | null;
   expires_at?: number; // 이 시각 이후 자동 삭제(보관 180일). 30일 이내면 갤러리에 배지
 }
 

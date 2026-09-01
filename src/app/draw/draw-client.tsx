@@ -49,7 +49,7 @@ export function DrawClient() {
   const showBanner = !!assignment && !dismissed && templateParam !== assignment.image;
 
   const handleSave = useCallback(
-    async (image: Blob, thumb: Blob, draftId?: string) => {
+    async (image: Blob, thumb: Blob, draftId?: string, title?: string) => {
       if (!session) {
         // 학생 세션 없음 → 로컬 다운로드로 폴백(원본 확장자에 맞춰 저장)
         const ext = image.type === "image/webp" ? "webp" : "png";
@@ -66,6 +66,7 @@ export function DrawClient() {
         thumb,
         mode: (params.get("mode") as string) ?? "sketch",
         draftId,
+        title,
       });
     },
     [session, params],

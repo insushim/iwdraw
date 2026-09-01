@@ -18,6 +18,8 @@ export interface GalleryItem {
   like_count: number;
   created_at: number;
   nickname: string;
+  /** 학생이 붙인 제목(없으면 null) */
+  title: string | null;
   liked: boolean;
   mine: boolean;
   /** false = 본인 작품이지만 아직 선생님 승인 대기 */

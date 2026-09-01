@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS artworks (
   -- (student_id, draft_id)로 자기 행을 덮어쓴다(삭제 능력 노출 0 — 남의 작품 못 지움). NULL=구버전/단발.
   -- ⚠️ 이미 배포된 DB엔 `ALTER TABLE artworks ADD COLUMN draft_id TEXT` 1회 필요(cf:deploy는 미실행).
   draft_id       TEXT,
+  -- 학생이 붙인 그림 제목(선택). 서버가 제어문자 제거 + 30자로 자른다. NULL/빈문자 = 제목 없음.
+  -- ⚠️ 이미 배포된 DB엔 `ALTER TABLE artworks ADD COLUMN title TEXT` 1회 필요(cf:deploy는 미실행).
+  title          TEXT,
   created_at     INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 CREATE INDEX IF NOT EXISTS artworks_class_idx ON artworks(class_id);

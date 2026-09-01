@@ -280,6 +280,12 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
                 </button>
               </div>
               <div className="p-2">
+                {/* 학생이 붙인 제목 — 인쇄·전시 때 이름만큼 중요하다 */}
+                {a.title && (
+                  <p className="truncate font-display text-sm text-ink" title={a.title}>
+                    {a.title}
+                  </p>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="truncate text-sm font-semibold text-ink">{a.nickname ?? "학생"}</span>
                   <span className="text-xs text-ink-faint">❤ {a.like_count}</span>
@@ -331,7 +337,16 @@ export function ClassGallery({ klass, onBack }: { klass: ClassRow; onBack: () =>
               </div>
             )}
             <div className="mt-3 flex items-center justify-between gap-2 px-1">
-              <span className="truncate font-display text-lg text-ink">{big.nickname ?? "학생"}</span>
+              <span className="min-w-0 truncate font-display text-lg text-ink">
+                {big.title ? (
+                  <>
+                    {big.title}{" "}
+                    <span className="text-base text-ink-soft">· {big.nickname ?? "학생"}</span>
+                  </>
+                ) : (
+                  (big.nickname ?? "학생")
+                )}
+              </span>
               <button
                 onClick={() => setBig(null)}
                 className="pressable shrink-0 rounded-card bg-ink px-5 py-2 font-display text-white"
