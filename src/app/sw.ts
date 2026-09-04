@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { defaultCache } from "@serwist/next/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
-import { Serwist, NetworkFirst, ExpirationPlugin } from "serwist";
+import { Serwist, NetworkFirst, NetworkOnly, StaleWhileRevalidate, ExpirationPlugin } from "serwist";
 
 /*
  * Serwist 서비스 워커(next-pwa 후계). App Router 호환.
@@ -22,9 +22,28 @@ const VERSION_URL = "/version.json";
 // "그대로"(사용자 실측: 명화 82종 배포했는데 안 보임) ② version.json이 옛 빌드ID를 줘서
 // 낡은 코드 자가치유(layout 인라인)가 영영 안 터짐. 아래 NetworkFirst로 온라인=항상 최신,
 // 오프라인=마지막 캐시 폴백.
+/* ⚠️ 웹폰트 조각도 제외한다(2026-09-02 실측). 한글 서브셋이 546개 woff2 = 4.49MB 로,
+ * 프리캐시 6.09MB 의 74%를 혼자 차지했다. 프리캐시는 SW 설치 때 **전부** 받으므로 첫 방문이
+ * 그만큼 느려지는데, 실제로 쓰이는 조각은 화면에 뜬 글자에 해당하는 몇 개뿐이다.
+ * 아래 static-font-assets(SWR, maxEntries 64) 로 내려 "쓴 것만" 캐시한다.
+ * 확장자로만 거른다 — media/ 디렉터리를 통째로 빼면 나중에 비폰트 자산이 들어왔을 때
+ * 오프라인 복구가 조용히 깨진다(교차검증 codex). */
+const FONT_RE = /\.(?:woff2?|ttf|otf)$/i;
+
+/* ⚠️ 색칠 도안(1346장)도 제외한다 — 여기가 진짜 폭탄이었다(2026-09-02 실측).
+ * 프리캐시 매니페스트가 137.6MB 였고 그중 도안이 130.7MB 다. 프리캐시는 SW 설치 때
+ * **전부** 받으므로, 처음 들어온 아이의 웨일북이 배경에서 130MB 를 빨아들이고 있었다는 뜻이다
+ * (학교 공유망에선 한 반이 동시에 이걸 한다). 실제로 필요한 건 아이가 고른 도안 한 장뿐이다.
+ * 아래 template-thumbs / template-images 런타임 규칙(SWR)이 "연 것만" 캐시한다. */
 const precacheEntries = (self.__SW_MANIFEST ?? []).filter((e) => {
   const url = typeof e === "string" ? e : e.url;
-  return !url.includes(TEMPLATE_MANIFEST_URL) && !url.includes(VERSION_URL);
+  const path = url.split("?")[0];
+  return (
+    !url.includes(TEMPLATE_MANIFEST_URL) &&
+    !url.includes(VERSION_URL) &&
+    !FONT_RE.test(path) &&
+    !path.startsWith("/templates/")
+  );
 });
 
 const serwist = new Serwist({
@@ -50,6 +69,49 @@ const serwist = new Serwist({
         cacheName: "app-version",
         networkTimeoutSeconds: 4,
         plugins: [new ExpirationPlugin({ maxEntries: 2, maxAgeSeconds: 86400 })],
+      }),
+    },
+    /* ⚠️ 아래 커스텀 규칙은 **전부 defaultCache 앞**에 있어야 한다 — 순서가 곧 우선순위라
+     * defaultCache 의 넓은 규칙(apis·static-image-assets·static-font-assets)이 먼저
+     * 잡으면 여기 규칙들이 그대로 휴면한다(교차검증 Grok). */
+    {
+      // 학생 작품 파일은 절대 캐시하지 않는다 — 공유 웨일북에서 다음 아이가 앞 아이의
+      // 그림을 오프라인으로 다시 꺼내 볼 수 있게 된다. defaultCache 의 `apis` 규칙
+      // (NetworkFirst)이 먼저 잡으면 그렇게 된다.
+      matcher: ({ url, sameOrigin }) => sameOrigin && url.pathname === "/api/student/file",
+      handler: new NetworkOnly(),
+    },
+    {
+      // 색칠 도안 썸네일 — 갤러리 격자에 1000장 넘게 뜬다. 원본과 버킷을 나눠야
+      // 서로를 밀어내지 않는다(한 버킷이면 원본 몇 장이 썸네일 전부를 축출한다).
+      matcher: ({ url, sameOrigin }) =>
+        sameOrigin && url.pathname.startsWith("/templates/_thumbs/"),
+      handler: new StaleWhileRevalidate({
+        cacheName: "template-thumbs",
+        plugins: [new ExpirationPlugin({ maxEntries: 1500, maxAgeSeconds: 30 * 86400 })],
+      }),
+    },
+    {
+      // 도안 원본(색칠하러 실제로 연 것만) — 크고 수가 적다
+      matcher: ({ url, sameOrigin }) =>
+        sameOrigin &&
+        url.pathname.startsWith("/templates/") &&
+        !url.pathname.startsWith("/templates/_thumbs/") &&
+        url.pathname !== TEMPLATE_MANIFEST_URL,
+      handler: new StaleWhileRevalidate({
+        cacheName: "template-images",
+        plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * 86400 })],
+      }),
+    },
+    {
+      // 폰트: 프리캐시에서 뺀 대신 쓴 조각만 캐시한다. 기본값 maxEntries 4 로는
+      // 한글 서브셋(한 화면에 여러 조각)이 서로를 계속 밀어내 매번 다시 받는다.
+      matcher: ({ url }) => FONT_RE.test(url.pathname),
+      handler: new StaleWhileRevalidate({
+        cacheName: "static-font-assets",
+        plugins: [
+          new ExpirationPlugin({ maxEntries: 64, maxAgeSeconds: 30 * 86400, maxAgeFrom: "last-used" }),
+        ],
       }),
     },
     ...defaultCache,
