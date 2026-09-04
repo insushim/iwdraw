@@ -1144,10 +1144,28 @@ async function purgeExpiredArtworks(env: Env): Promise<{ deleted: number }> {
 // join_attempts(IP 해시 rate-limit 로그)는 무기한 쌓이면 안 된다 — rate 윈도우는 5분이라
 // 7일 지난 행은 감사 가치도 없다. 개인정보(IP 파생) 보관 최소화 원칙으로 매일 정리.
 const JOIN_ATTEMPT_RETENTION_MS = 7 * DAY_MS;
+/* 한 번에 지우는 행 수. 처음 도는 날이나 정리가 며칠 밀린 뒤엔 대상이 수십만 행일 수 있는데,
+ * 한 문장으로 지우면 그 트랜잭션 하나가 워커 CPU 한도에 걸려 통째로 롤백된다 —
+ * 그러면 영영 아무것도 못 지운다. 나눠 지우면 중간까지는 확실히 줄어든다. */
+const JOIN_PURGE_BATCH = 500;
+const JOIN_PURGE_MAX_BATCHES = 40; // 한 번의 cron 에서 최대 2만 행 — 나머지는 다음 날
+
 async function purgeOldJoinAttempts(env: Env): Promise<{ deleted: number }> {
+  // ⚠️ created_at 은 정수 밀리초 컬럼이다(schema.sql: unixepoch() * 1000).
+  //    SQL 의 날짜 함수(now-1d 류)를 쓰면 단위가 어긋나 아무것도 안 지워지거나 전부 지운다.
   const cutoff = Date.now() - JOIN_ATTEMPT_RETENTION_MS;
-  const res = await env.DB.prepare("DELETE FROM join_attempts WHERE created_at < ?").bind(cutoff).run();
-  return { deleted: res.meta?.changes ?? 0 };
+  let deleted = 0;
+  for (let i = 0; i < JOIN_PURGE_MAX_BATCHES; i++) {
+    const res = await env.DB.prepare(
+      "DELETE FROM join_attempts WHERE id IN (SELECT id FROM join_attempts WHERE created_at < ? LIMIT ?)",
+    )
+      .bind(cutoff, JOIN_PURGE_BATCH)
+      .run();
+    const n = res.meta?.changes ?? 0;
+    deleted += n;
+    if (n < JOIN_PURGE_BATCH) break; // 더 지울 게 없다
+  }
+  return { deleted };
 }
 
 export default {

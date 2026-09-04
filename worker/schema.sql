@@ -126,6 +126,8 @@ CREATE TABLE IF NOT EXISTS join_attempts (
   created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 CREATE INDEX IF NOT EXISTS join_attempts_ip_idx ON join_attempts(ip_hash, created_at DESC);
+-- 정리 cron(created_at 단독 범위 삭제)용 — 위 복합 인덱스는 선행 컬럼이 ip_hash 라 못 쓴다
+CREATE INDEX IF NOT EXISTS join_attempts_created_idx ON join_attempts(created_at);
 
 -- ── 구독/결제(빌링키 자동결제 골격, 기본 비활성) ──
 CREATE TABLE IF NOT EXISTS subscriptions (
