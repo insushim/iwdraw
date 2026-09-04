@@ -221,7 +221,19 @@ function useAutoHeaderLabels(
     const ro = new ResizeObserver(() => measureRef.current(true));
     ro.observe(el);
     if (probeRef.current) ro.observe(probeRef.current);
-    return () => ro.disconnect();
+
+    /* 헤더 항목이 **리렌더 없이** 늘어나는 경로가 있다: 지연 로딩한 컴포넌트가 청크를 받고
+     * 스스로 마운트할 때다(사진 가져오기 버튼 — C3). 부모가 다시 그리지 않으니
+     * useLayoutEffect 는 안 돌고, 헤더 폭도 그대로라 ResizeObserver 도 안 운다. 그 사이
+     * 항목만 114px 늘어 헤더가 넘치고 [저장하기]가 화면 밖으로 밀린 채 굳었다
+     * (2026-09-04 라이브 실측: 항목 11 → 13, scrollWidth 1366 → 1425, 재측정 0회). */
+    const mo = new MutationObserver(() => measureRef.current(true));
+    mo.observe(el, { childList: true, subtree: true });
+
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
   }, [ref, probeRef]);
 
   /* 웹폰트가 늦게 도착하면 같은 글자의 폭이 달라진다 — 지문은 그대로라 강제로 다시 잰다.

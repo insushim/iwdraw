@@ -53,7 +53,32 @@ export function MovieModal({ engine, onClose }: { engine: ArtEngine; onClose: ()
   };
 
   /* 무비는 글씨 획을 drawTextOnCtx 로 다시 그린다 — 글씨 도구를 안 연 세션(복구 후 바로
-   * 무비)에서는 글꼴 CSS 가 없어 고딕으로 그려진다. 재생·녹화 직전에 확보한다. */
+   * 무비)에서는 글꼴 CSS 가 없어 고딕으로 그려진다.
+   *
+   * ⚠️ 확보는 **모달을 열 때** 한다. 재생 버튼을 누른 뒤에 기다리면, 눌렸는데 아직 아무것도
+   * 안 그려진 빈 창이 생긴다 — 그 사이에 화면을 보면 "재생이 끝났는데 빈 화면"으로 보인다
+   * (2026-09-04 프로덕션 빌드 실측: 무비가 통째로 비어 있었다. 모달을 지연 로딩으로 돌리면서
+   * 그 틈이 눈에 띄게 벌어졌다). 사람이 버튼을 누를 때쯤이면 이미 끝나 있다. */
+  const fontsReadyRef = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    void ensureTextFontsLoaded()
+      .then(() => document.fonts?.ready)
+      .catch(() => undefined)
+      .then(() => {
+        if (alive) fontsReadyRef.current = true;
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const ensureFonts = async () => {
+    if (fontsReadyRef.current) return; // 이미 확보 — 여기서 한 틱도 쉬지 않는다
+    await ensureTextFontsLoaded();
+    await document.fonts?.ready.catch(() => {});
+    fontsReadyRef.current = true;
+  };
+
   const play = async () => {
     const handle = makeHandle();
     if (!handle) return;
@@ -62,8 +87,7 @@ export function MovieModal({ engine, onClose }: { engine: ArtEngine; onClose: ()
     // ⚠️ 재생 중 표시를 글꼴 대기 **앞에** 세운다 — 뒤에 두면 버튼이 "▶ 재생" 인 채로
     //    한 틱 남아, 밖에서 보면 "재생이 벌써 끝났다"로 읽힌다(무비 스펙이 그걸로 판정한다).
     setPlaying(true);
-    await ensureTextFontsLoaded();
-    await document.fonts?.ready.catch(() => {});
+    await ensureFonts();
     await playMovie(strokes, handle, speed, setProgress, abortRef.current.signal);
     setPlaying(false);
   };
@@ -72,8 +96,7 @@ export function MovieModal({ engine, onClose }: { engine: ArtEngine; onClose: ()
     const handle = makeHandle();
     if (!handle) return;
     setRecording(true);
-    await ensureTextFontsLoaded();
-    await document.fonts?.ready.catch(() => {});
+    await ensureFonts();
     try {
       const blob = await recordMovie(strokes, handle, speed, setProgress);
       const url = URL.createObjectURL(blob);
