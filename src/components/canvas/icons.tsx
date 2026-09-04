@@ -416,7 +416,7 @@ export function Icon({
   );
 }
 
-/** AI 생성 일러스트 PNG가 있는 도구 아이콘(/public/icons/tools/) — 없거나 로드 실패 시 SVG 폴백 */
+/** AI 생성 일러스트(WebP)가 있는 도구 아이콘(/public/icons/tools/) — 없거나 로드 실패 시 SVG 폴백 */
 const PNG_ICONS = new Set<IconName>([
   "pencil",
   "crayon",
@@ -446,7 +446,9 @@ export function ToolIcon({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/icons/tools/${name}.png`}
+      // 96px WebP(총 45KB) — 원본 256px PNG 는 14장에 634KB 였는데 화면에선 20~24px 로만
+      // 그린다. 생성 스크립트 = scripts/gen-tool-icons.mjs. 로드 실패 시 SVG 로 폴백.
+      src={`/icons/tools/${name}.webp`}
       alt=""
       aria-hidden="true"
       draggable={false}
