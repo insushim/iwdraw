@@ -122,3 +122,36 @@ for (const width of [1024, 1280, 1366]) {
     expect(tall, `세로로 늘어난 버튼: ${JSON.stringify(tall)}`).toEqual([]);
   });
 }
+
+/*
+ * 토스트는 캔버스 위(하단 중앙)에 뜬다 — 클릭을 통과시키지 않으면 떠 있는 6초 동안
+ * 그 자리의 탭·획이 통째로 먹힌다(2026-09-04 실측: 페인트통 스펙이 이걸로 깨졌다).
+ */
+test("학급 안내 토스트가 떠 있어도 캔버스 탭이 먹히지 않는다", async ({ page }) => {
+  test.skip(!(await backendOn(page)), "백엔드 없는 빌드 — 학급 안내가 꺼져 있다");
+
+  await page.goto("/draw?mode=sketch");
+  await page.getByLabel("그림 캔버스").waitFor();
+  await expect(page.getByTestId("class-join-toast-link")).toBeVisible({ timeout: 8000 });
+
+  const box = (await page.getByLabel("그림 캔버스").boundingBox())!;
+  // 토스트가 뜨는 하단 중앙 지점
+  const x = box.x + box.width * 0.5;
+  const y = box.y + box.height * 0.95;
+  const top = await page.evaluate(
+    ([px, py]) => (document.elementFromPoint(px, py) as HTMLElement)?.tagName ?? "none",
+    [x, y],
+  );
+  expect(top, "토스트가 캔버스를 덮고 있다").toBe("CANVAS");
+
+  // 실제로 획이 그어진다
+  await page.mouse.move(x - 40, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 40, y, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.getByRole("button", { name: "되돌리기" })).toBeEnabled();
+
+  // 안내 링크 자체는 여전히 눌린다
+  await page.getByTestId("class-join-toast-link").click();
+  await page.waitForURL(/\/join/);
+});

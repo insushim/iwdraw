@@ -905,10 +905,14 @@ function RestoreBanner({
   );
 }
 
+/* ⚠️ pointer-events-none 필수. 토스트는 캔버스 위(bottom-6 중앙)에 떠서, 그대로 두면
+ * 떠 있는 동안 그 자리의 탭·획을 통째로 삼킨다 — 아이가 캔버스 아래쪽을 누르는데 아무 일도
+ * 안 일어난다(2026-09-04 실측: 페인트통 스펙이 이걸로 깨졌다. 안내가 없던 시절에도 저장
+ * 토스트가 같은 자리를 막고 있었다). 안내 안의 링크만 pointer-events-auto 로 되살린다. */
 function Toast({ children, tone = "ink" }: { children: React.ReactNode; tone?: "ink" | "leaf" }) {
   return (
     <div
-      className={`fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full px-6 py-3 font-display text-white shadow-lift ${
+      className={`pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full px-6 py-3 font-display text-white shadow-lift [&_a]:pointer-events-auto [&_button]:pointer-events-auto ${
         tone === "leaf" ? "bg-leaf" : "bg-ink"
       }`}
       role="status"
