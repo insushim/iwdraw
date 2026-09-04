@@ -27,6 +27,8 @@ import { TextPalette } from "./TextPalette";
 import { PhotoImport } from "@/components/photo-import";
 import { ArtonLogo } from "@/components/arton-logo";
 import { Icon } from "./icons";
+import { hasBackend } from "@/lib/backend";
+import { takeEntryHint, takeSaveHint } from "@/lib/class-hint";
 
 /* 성능 눈금은 ?perf=1 일 때만 내려받는다 — 평상시엔 번들 평가 비용도 0(교차검증 지적) */
 const PerfHud = dynamic(() => import("./PerfHud").then((m) => m.PerfHud), { ssr: false });
@@ -275,6 +277,22 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     const t = setTimeout(() => setShowSubmitHint(false), 6000);
     return () => clearTimeout(t);
   }, [submits]);
+  /* 학급 안내 — 혼자 그리는 게스트에게만.
+   * onSave 가 있으면 이미 학급 학생이고, 협동방(room)은 모둠 캔버스라 갤러리 제출 흐름이
+   * 다른 데다 헤더가 이미 가득 차 있다(2026-09-02 교차검증 Claude 렌즈). 백엔드가 없는
+   * 게스트 빌드에선 학급 자체가 없으니 문구가 거짓이 된다. */
+  const classHintable = hasBackend() && !submits && !room;
+  const [classHint, setClassHint] = useState(false);
+  // 지금 화면으로 되돌아오기 위한 경로 — location 은 서버에 없어 마운트 후에 읽는다
+  const [joinHref, setJoinHref] = useState("/join");
+  useEffect(() => {
+    if (!classHintable) return;
+    setJoinHref(`/join?next=${encodeURIComponent(location.pathname + location.search)}`);
+    if (!takeEntryHint()) return;
+    setClassHint(true);
+    const t = setTimeout(() => setClassHint(false), 6000);
+    return () => clearTimeout(t);
+  }, [classHintable]);
   const [orientation, setOrientation] = useState<"landscape" | "portrait">("landscape");
   /* 방향 전환은 캔버스를 새로 만든다 = 그림이 통째로 사라지고 되돌리기도 안 된다.
    * 경고가 title 툴팁뿐이라 터치 기기(웨일북·태블릿)에선 아예 볼 수 없었다 —
@@ -337,6 +355,13 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
           URL.revokeObjectURL(url);
           setDownloaded(true);
           setTimeout(() => setDownloaded(false), 2500);
+          // 저장 뒤 한 번 더: 파일로 갖는 것과 학급 갤러리 전시는 별개라는 걸 알려 준다
+          if (classHintable && takeSaveHint()) {
+            setTimeout(() => {
+              setClassHint(true);
+              setTimeout(() => setClassHint(false), 6000);
+            }, 2500);
+          }
         }
       } catch {
         // 제출 실패(네트워크·잠긴 학급 403·과속 429) — 아이에게도 알려야 재시도한다
@@ -347,7 +372,7 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         setDownloading(false);
       }
     },
-    [onSave, saving, downloading],
+    [onSave, saving, downloading, classHintable],
   );
 
   /* 제목 달기(학급 제출 전용) — 저장 버튼을 누르면 먼저 "제목을 지어 줄래요?"를 띄운다.
@@ -400,6 +425,16 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             className="pressable touch-target hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-paper px-3 py-1 text-sm font-semibold text-ink-soft shadow-soft sm:flex"
           >
             🖼️ <span className="hdr-extra">우리 반 갤러리</span>
+          </Link>
+        )}
+        {classHintable && (
+          <Link
+            href={joinHref}
+            className="pressable touch-target hidden shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-sun-soft px-3 py-1 text-sm font-semibold text-ink shadow-soft sm:flex"
+            title="학급 코드로 들어오면 그림을 우리 반 갤러리에 전시할 수 있어요"
+            data-testid="class-join-chip"
+          >
+            🏫 <span className="hdr-label">학급 입장</span>
           </Link>
         )}
         {room ? (
@@ -672,6 +707,23 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
 
       {showSubmitHint && !saving && !saved && (
         <Toast>🖼️ 다 그리면 &ldquo;갤러리로 보내기&rdquo; — 파일로 갖고 싶으면 &ldquo;내 기기에 저장&rdquo;</Toast>
+      )}
+      {classHint && !saving && !downloading && (
+        <Toast tone="ink">
+          <span className="flex items-center gap-3">
+            <span>
+              🏫 학급 코드로 입장하면 그림을 <b>우리 반 갤러리</b>에 전시할 수 있어요
+            </span>
+            <Link
+              href={joinHref}
+              onClick={() => setClassHint(false)}
+              className="pressable shrink-0 rounded-full bg-white px-3 py-1 text-sm font-bold text-ink"
+              data-testid="class-join-toast-link"
+            >
+              입장하기
+            </Link>
+          </span>
+        </Toast>
       )}
       {saveError && <Toast>😢 저장하지 못했어요 — 잠시 후 다시 눌러 주세요</Toast>}
       {saving && <Toast>우리 반 갤러리로 보내는 중…</Toast>}

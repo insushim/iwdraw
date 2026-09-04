@@ -9,6 +9,8 @@ import { suggestNickname, validateNickname } from "@/lib/nickname";
 import { joinClass } from "@/lib/join-client";
 import { getRememberedClassCode, getRememberedNickname } from "@/lib/student-session";
 import { hasBackend } from "@/lib/backend";
+import { safeNextPath } from "@/lib/next-path";
+import { clearClassHints } from "@/lib/class-hint";
 
 type Step = "code" | "nickname";
 
@@ -52,15 +54,22 @@ export function JoinClient() {
     }
     setError(null);
     setBusy(true);
+    // 그리다가 "학급 입장"으로 넘어온 아이는 그리던 화면으로 돌려보낸다(그림은 자동저장
+    // 복구 배너가 되살린다). 오픈 리다이렉트가 되지 않도록 safeNextPath 로 거른다.
+    const back = safeNextPath(params.get("next"));
     if (!hasBackend()) {
       // 오프라인/데모 모드: 백엔드 없이 캔버스 체험(작품 저장은 로컬 다운로드)
-      router.push("/draw");
+      router.push(back);
       return;
     }
     const res = await joinClass(code, nickname.trim());
     setBusy(false);
-    if (res.ok) router.push("/draw");
-    else setError(res.error ?? "입장에 실패했어요");
+    if (res.ok) {
+      // 입장했으면 학급 안내는 더 볼 일이 없다. 공유 웨일북에서 다음 아이가 같은 탭을
+      // 쓰면 세션이 없어져 다시 뜬다(키를 지우는 쪽이 맞다 — 2026-09-02 교차검증 codex).
+      clearClassHints();
+      router.push(back);
+    } else setError(res.error ?? "입장에 실패했어요");
   };
 
   return (
