@@ -15,15 +15,11 @@ import { BrushControls } from "./BrushControls";
 import { LayerPanel } from "./LayerPanel";
 import { ActionRail } from "./ActionRail";
 import { useKeyboard } from "./useKeyboard";
-import { MovieModal } from "./MovieModal";
-import { CollabStartModal } from "./CollabStartModal";
 import { shortCodeFromRoom } from "@/lib/collab-room";
 import { useCollab } from "./useCollab";
 import { CollabOverlay } from "./CollabOverlay";
 import { SuggestBar } from "./SuggestBar";
 import { PendingStampBar } from "./PendingStampBar";
-import { StampPalette } from "./StampPalette";
-import { PhotoImport } from "@/components/photo-import";
 import { ArtonLogo } from "@/components/arton-logo";
 import { Icon } from "./icons";
 import { hasBackend } from "@/lib/backend";
@@ -39,6 +35,23 @@ const PerfHud = dynamic(() => import("./PerfHud").then((m) => m.PerfHud), { ssr:
 const TextPalette = dynamic(() => import("./TextPalette").then((m) => m.TextPalette), {
   ssr: false,
 });
+
+/* 아래 넷도 첫 화면에 필요 없다 — 열 때 비로소 받는다.
+ * MovieModal 은 타임랩스 인코더(TimelapseExporter)까지, PhotoImport 는 선따기 변환기
+ * (photo-to-lineart, 42KB)까지 끌고 온다. StampPalette 는 스탬프 132종의 카탈로그.
+ * ⚠️ 엔진이 직접 쓰는 StampTool/SketchMatch 는 그대로 둔다(획 처리 핫패스). */
+const MovieModal = dynamic(() => import("./MovieModal").then((m) => m.MovieModal), { ssr: false });
+const CollabStartModal = dynamic(
+  () => import("./CollabStartModal").then((m) => m.CollabStartModal),
+  { ssr: false },
+);
+const StampPalette = dynamic(() => import("./StampPalette").then((m) => m.StampPalette), {
+  ssr: false,
+});
+const PhotoImport = dynamic(
+  () => import("@/components/photo-import").then((m) => m.PhotoImport),
+  { ssr: false },
+);
 
 export interface EditorProps {
   lineartSrc?: string;
@@ -345,6 +358,8 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
     flip();
   };
   useEffect(() => () => void (rotateTimer.current && clearTimeout(rotateTimer.current)), []);
+  const stampPaletteOpen = useEditor((s) => s.stampPaletteOpen);
+  const textPaletteOpen = useEditor((s) => s.textPaletteOpen);
   const [showMovie, setShowMovie] = useState(false);
   const [showCollab, setShowCollab] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -796,8 +811,10 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
       {room && collab.locked && (
         <Toast tone="ink">🔒 선생님이 캔버스를 잠갔어요</Toast>
       )}
-      <StampPalette />
-      <TextPalette />
+      {/* 스탬프·글씨 팔레트는 스스로 열림 여부를 보고 null 을 돌려주지만, 여기서 마운트하는
+          순간 청크는 이미 받는다. 스토어 상태로 감싸 "열 때 받도록" 한다. */}
+      {stampPaletteOpen && <StampPalette />}
+      {textPaletteOpen && <TextPalette />}
     </div>
   );
 }
