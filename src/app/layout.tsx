@@ -49,6 +49,9 @@ export const viewport: Viewport = {
 // 아래 인라인 스크립트에 그대로 박히고, /version.json(네트워크)과 비교해 낡은 코드를 감지한다.
 const BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID ?? "";
 
+const PRETENDARD_CSS =
+  "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -57,11 +60,35 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
+        {/* Pretendard(본문 글꼴)는 **렌더를 막지 않게** 불러온다.
+            그냥 stylesheet 로 두면 첫 페인트가 이 CDN 응답을 기다린다 — 학교망에서 jsDelivr
+            가 막히면 브라우저 타임아웃(수십 초)까지 화면이 통째로 정지한다(2026-09-02
+            교차검증 codex). media="print" 로 받으면 렌더 블로킹이 아니고, 도착하면 onload 가
+            media 를 all 로 바꿔 적용한다. 폰트 스택에 시스템 한글 폴백이 있어 그 사이에는
+            FOUT(글꼴만 바뀜)만 생긴다. noscript 는 JS 없는 환경용 원래 경로. */}
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
         <link
+          id="pretendard-css"
           rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+          href={PRETENDARD_CSS}
+          media="print"
           crossOrigin="anonymous"
         />
+        {/* ⚠️ 속성으로 쓴 onload 는 React 가 SSR HTML 에서 떨어뜨린다(실측: out/draw.html 에
+            안 나온다) — 그러면 media 가 print 인 채로 굳어 글꼴이 영영 안 붙는다.
+            링크 바로 뒤 인라인 스크립트로 직접 건다. 캐시에서 즉시 와 load 가 이미 지나간
+            경우를 위해 sheet 유무도 함께 본다. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var l=document.getElementById("pretendard-css");if(!l)return;
+var f=function(){l.media="all"};
+try{l.addEventListener("load",f,{once:true});if(l.sheet)f()}catch(e){l.media="all"}})();`,
+          }}
+        />
+        <noscript>
+          {/* eslint-disable-next-line @next/next/no-css-tags */}
+          <link rel="stylesheet" href={PRETENDARD_CSS} crossOrigin="anonymous" />
+        </noscript>
         {/* 부트 워치독(React 밖) — 배포로 구버전 청크가 404 나면 React가 아예 못 떠서
             에러 바운더리도 실행되지 않고 흰 화면만 남는다(2026-07-10·07-13 실측: 그리다
             새로고침 = 흰 화면). 방어를 3중으로:
