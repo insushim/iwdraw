@@ -128,12 +128,25 @@ const serwist = new Serwist({
  * 흰 화면이 된다(2026-07-13 사용자 실측: 그리다 새로고침 = 흰 화면).
  * 오프라인 캐시는 새 버전으로 다시 쌓이므로 손해는 없다.
  */
+/* 배포를 넘겨도 살려 두는 캐시 — 내용이 경로에 묶여 있어 낡아도 위험하지 않고(SWR 이
+ * 배경에서 갱신한다), 지우면 한 반이 동시에 다시 받는다.
+ *   · static-font-assets — 파일명에 해시가 박혀 있어 애초에 낡을 수가 없다
+ *   · template-thumbs / template-images — 도안 그림. 같은 경로의 그림이 바뀌어도
+ *     한 번은 옛 그림, 그다음엔 새 그림(SWR). 흰 화면 같은 사고와 무관하다.
+ * 반대로 HTML·JS 계열(defaultCache 의 pages·static-js…)은 계속 지운다 — 낡은 HTML 이
+ * 이미 없는 청크를 가리키면 React 가 아예 못 뜨고 흰 화면이 된다(위 주석의 사고). */
+const KEEP_ACROSS_DEPLOY = ["precache", "static-font-assets", "template-thumbs", "template-images"];
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => !k.includes("precache")).map((k) => caches.delete(k))),
+        Promise.all(
+          keys
+            .filter((k) => !KEEP_ACROSS_DEPLOY.some((keep) => k.includes(keep)))
+            .map((k) => caches.delete(k)),
+        ),
       )
       .catch(() => undefined),
   );
