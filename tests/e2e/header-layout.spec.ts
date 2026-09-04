@@ -71,3 +71,36 @@ for (const width of [1024, 1280, 1366, 1920]) {
     expect(r.scrollW, "헤더 가로 넘침").toBeLessThanOrEqual(r.clientW + 1);
   });
 }
+
+/*
+ * 측정 가드(2026-09-02)가 리사이즈를 삼키지 않는지.
+ * 헤더 측정은 "dataset 쓰기 → scrollWidth 읽기"를 최대 3번 반복하는 강제 리플로라
+ * 매 렌더 돌면 비싸다. 그래서 직전과 같은 상태(폭·항목수·텍스트)면 건너뛰게 했는데,
+ * **창을 줄이는 것**은 텍스트도 항목 수도 그대로라 가드에 걸려 라벨이 펼쳐진 채 굳을 수 있다.
+ * ResizeObserver 경로는 가드를 우회해야 한다.
+ */
+test("창을 좁히면 헤더 라벨이 그때그때 다시 접힌다", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 800 });
+  await page.goto("/draw?mode=sketch");
+  await page.getByLabel("그림 캔버스").waitFor();
+  await page.waitForTimeout(300);
+
+  const labels = () => page.locator("header").getAttribute("data-labels");
+  expect(await labels()).toBe("on"); // 넓으면 전부 켬
+
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.waitForTimeout(400);
+  expect(await labels(), "좁혔는데 라벨이 켜진 채로 굳었다 = 가드가 리사이즈를 삼켰다").not.toBe("on");
+
+  // 다시 넓히면 되돌아온다
+  await page.setViewportSize({ width: 1920, height: 800 });
+  await page.waitForTimeout(400);
+  expect(await labels()).toBe("on");
+
+  // 어느 단계에서도 세로로 늘어난 항목이 없어야 한다
+  const tall = await page.evaluate(() =>
+    [...document.querySelector("header")!.querySelectorAll("button, a")]
+      .filter((el) => el.getBoundingClientRect().height > 56).length,
+  );
+  expect(tall).toBe(0);
+});

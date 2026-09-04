@@ -120,10 +120,25 @@ function recallDraft(): string | null {
  * → ResizeObserver가 자기 자신을 다시 부르지 않는다.
  */
 function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
-  const measureRef = useRef<() => void>(() => {});
-  measureRef.current = () => {
+  /* 마지막으로 측정한 상태의 지문. 이게 같으면 결과도 같으므로 다시 재지 않는다.
+   *
+   * 왜 필요한가: 측정은 dataset 쓰기 → scrollWidth 읽기를 최대 3번 반복하는데, 그 짝마다
+   * 브라우저가 레이아웃을 강제로 다시 계산한다(강제 동기 리플로). useLayoutEffect 에
+   * 의존성이 없어 **매 렌더** 돌았고, /draw CPU 프로파일(4x 스로틀)에서 JS self 0.8s 중
+   * 330ms 를 이 함수 혼자 썼다 — 단일 최대 항목이었다(2026-09-02 실측).
+   *
+   * ⚠️ 리사이즈와 웹폰트 도착은 이 가드를 **우회해야 한다**. 둘 다 텍스트도 항목 수도
+   * 그대로인데 필요 폭만 변하므로, 지문으로는 구별되지 않아 라벨이 접힌 채 굳는다
+   * (2026-09-02 교차검증 3계열 공통 지적). clientWidth 를 지문에 넣어도 헤더는 폭 100%
+   * 블록이라 창이 줄면 같이 줄어 대개 잡히지만, 폰트 도착은 그마저도 안 변한다. */
+  const lastRef = useRef<string>("");
+  const measureRef = useRef<(force?: boolean) => void>(() => {});
+  measureRef.current = (force = false) => {
     const el = ref.current;
     if (!el) return;
+    const sig = `${el.clientWidth}|${el.childElementCount}|${el.textContent ?? ""}`;
+    if (!force && sig === lastRef.current) return;
+    lastRef.current = sig;
     // +1px 여유: 소수점 폭 반올림으로 1px 넘쳐 라벨이 깜빡이며 꺼지는 걸 막는다
     const overflows = () => el.scrollWidth > el.clientWidth + 1;
     // 넓은 쪽부터 좁혀 간다: 전부(on) → 부가 항목만 버림(mid) → 글자 라벨 전부 버림(off).
@@ -138,7 +153,8 @@ function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
     el.dataset.labels = "off";
   };
 
-  // 렌더마다(=헤더 항목이 바뀔 때마다) 페인트 전에 다시 잰다 — 깜빡임 없음
+  // 렌더마다(=헤더 항목이 바뀔 때마다) 페인트 전에 다시 잰다 — 깜빡임 없음.
+  // 실제 측정은 지문이 달라졌을 때만 일어난다.
   useLayoutEffect(() => {
     measureRef.current();
   });
@@ -147,10 +163,21 @@ function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => measureRef.current());
+    const ro = new ResizeObserver(() => measureRef.current(true));
     ro.observe(el);
     return () => ro.disconnect();
   }, [ref]);
+
+  // 웹폰트가 늦게 도착하면 같은 글자의 폭이 달라진다 — 지문은 그대로라 강제로 다시 잰다
+  useEffect(() => {
+    let alive = true;
+    void document.fonts?.ready.then(() => {
+      if (alive) measureRef.current(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 }
 
 export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave, who, backHref = "/", galleryHref }: EditorProps) {
