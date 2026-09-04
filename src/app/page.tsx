@@ -57,8 +57,11 @@ export default function LandingPage() {
         <ArtonLogo className="h-10" />
         <nav className="flex items-center gap-3">
           {/* 요금제 링크는 유료화 보류로 숨김(라우트 = src/app/_pricing) — 복원 시 여기부터 */}
+          {/* prefetch 끔 — /teacher 청크는 35KB 인데 랜딩에 들어오는 기기의 대부분은
+              학생 웨일북이라 영영 안 쓴다. /draw·/coloring 프리페치는 그대로 둔다. */}
           <Link
             href="/teacher"
+            prefetch={false}
             className="pressable touch-target inline-flex items-center rounded-card bg-ink px-5 py-2.5 font-display text-white shadow-soft"
           >
             교사 시작하기
@@ -179,6 +182,7 @@ export default function LandingPage() {
           <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
             <Link
               href="/teacher"
+              prefetch={false}
               className="pressable touch-target inline-flex items-center rounded-card bg-coral px-8 py-4 font-display text-lg text-white shadow-soft"
             >
               교사로 시작하기
