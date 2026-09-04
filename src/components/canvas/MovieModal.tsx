@@ -88,9 +88,13 @@ export function MovieModal({ engine, onClose }: { engine: ArtEngine; onClose: ()
   };
 
   useEffect(() => {
-    // 초기 캔버스 배치: 엔진 비율 맞춤
+    /* 초기 캔버스 배치: 엔진 비율 맞춤.
+     * ⚠️ 크기가 이미 맞으면 손대지 않는다 — `canvas.width = x` 는 **같은 값을 넣어도**
+     * 캔버스를 통째로 지운다. 모달을 지연 로딩으로 돌린 뒤(C3) 이 effect 가 재생이 시작된
+     * 다음에 도는 경우가 생겨, 다 그려진 무비를 이 줄이 지우고 있었다
+     * (2026-09-04 라이브 실측: 재생이 끝났는데 세 획 모두 0). */
     const canvas = canvasRef.current;
-    if (canvas) {
+    if (canvas && (canvas.width !== engine.width || canvas.height !== engine.height)) {
       canvas.width = engine.width;
       canvas.height = engine.height;
       const ctx = canvas.getContext("2d")!;

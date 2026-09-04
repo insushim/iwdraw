@@ -139,7 +139,10 @@ function recallDraft(): string | null {
  * 루프가 안 나는 이유: 헤더는 폭 100% 블록이라 라벨을 껐다 켜도 clientWidth가 안 변한다
  * → ResizeObserver가 자기 자신을 다시 부르지 않는다.
  */
-function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
+function useAutoHeaderLabels(
+  ref: React.RefObject<HTMLElement | null>,
+  probeRef: React.RefObject<HTMLElement | null>,
+): void {
   /* 마지막으로 측정한 상태의 지문. 이게 같으면 결과도 같으므로 다시 재지 않는다.
    *
    * 왜 필요한가: 측정은 dataset 쓰기 → scrollWidth 읽기를 최대 3번 반복하는데, 그 짝마다
@@ -201,14 +204,25 @@ function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
     scheduleRecheck();
   });
 
-  // 창 크기 변화는 리렌더 없이도 온다 — 관찰자는 한 번만 만든다
+  /* 창 크기 변화는 리렌더 없이도 온다 — 관찰자는 한 번만 만든다.
+   *
+   * ⚠️ 헤더 자신만 보면 **글꼴 변화를 영영 못 잡는다**: 헤더는 폭 100% 블록이라 글자가
+   * 넓어져도 자기 크기는 그대로다(ResizeObserver 가 안 운다). 그래서 글자 폭을 그대로
+   * 따라가는 작은 탐침(probe)을 하나 같이 관찰한다.
+   *
+   * 왜 폰트 이벤트로는 안 되는가(2026-09-04 라이브 실측): Pretendard 는 CDN CSS 를
+   * 비차단으로 받아 늦게 적용되는데, 그 시점엔 이미 `document.fonts.status === "loaded"`
+   * 이고 `fonts.size` 도 안 변한다 — ready 도 loadingdone 도 안 온다. 0ms 에 1366 이던
+   * 헤더가 300ms 에 1425 로 커져 [저장하기]가 화면 밖으로 밀린 채 굳었다. 탐침은 원인이
+   * 무엇이든(글꼴 교체·CSS 늦은 적용·확대) 폭이 변하면 운다. */
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => measureRef.current(true));
     ro.observe(el);
+    if (probeRef.current) ro.observe(probeRef.current);
     return () => ro.disconnect();
-  }, [ref]);
+  }, [ref, probeRef]);
 
   /* 웹폰트가 늦게 도착하면 같은 글자의 폭이 달라진다 — 지문은 그대로라 강제로 다시 잰다.
    *
@@ -241,7 +255,8 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
   useKeyboard();
   const editorRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
-  useAutoHeaderLabels(headerRef);
+  const fontProbeRef = useRef<HTMLSpanElement>(null);
+  useAutoHeaderLabels(headerRef, fontProbeRef);
   // 캔버스 밖(툴바·여백)에서 시작한 ctrl+wheel(트랙패드 핀치/마우스 줌)은 브라우저 페이지
   // 줌을 걸어 새로고침해도 확대가 안 풀린다(JS로 페이지 줌 리셋 불가) — 에디터 전역 차단.
   // 캔버스 위 줌은 CanvasStage가 앱 뷰 줌으로 처리(새로고침 시 리셋). 여기선 막기만 한다.
@@ -494,6 +509,15 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
         data-labels="off"
         className="flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2 compact:gap-1 compact:px-2 compact:py-1"
       >
+        {/* 글자 폭 탐침 — 보이지 않고 흐름 밖(absolute)이라 배치에 영향이 없다.
+            글꼴이 바뀌면 이 폭이 변하고, 그걸 ResizeObserver 가 잡아 헤더를 다시 잰다. */}
+        <span
+          ref={fontProbeRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute -z-10 whitespace-nowrap opacity-0"
+        >
+          내 기기에 저장
+        </span>
         <Link href={backHref} className="pressable touch-target grid place-items-center rounded-full bg-paper px-3 text-xl shadow-soft" aria-label="나가기">
           ←
         </Link>
