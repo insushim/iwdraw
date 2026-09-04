@@ -5,7 +5,7 @@ import type { ArtEngine } from "@/engine/ArtEngine";
 import { createBrush } from "@/engine/brushes";
 import { smearSegment } from "@/engine/tools/SmudgeTool";
 import { drawStampOnCtx, getStamp } from "@/engine/tools/StampTool";
-import { drawTextOnCtx } from "@/engine/tools/TextInsert";
+import { drawTextOnCtx, ensureTextFontsLoaded } from "@/engine/tools/TextInsert";
 import { floodFill } from "@/engine/brushes/FillTool";
 import { mulberry32 } from "@/engine/types";
 import { playMovie, recordMovie, type MovieSpeed, type ReplayHandle } from "@/engine/export/TimelapseExporter";
@@ -41,12 +41,18 @@ export function MovieModal({ engine, onClose }: { engine: ArtEngine; onClose: ()
     };
   };
 
+  /* 무비는 글씨 획을 drawTextOnCtx 로 다시 그린다 — 글씨 도구를 안 연 세션(복구 후 바로
+   * 무비)에서는 글꼴 CSS 가 없어 고딕으로 그려진다. 재생·녹화 직전에 확보한다. */
   const play = async () => {
     const handle = makeHandle();
     if (!handle) return;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
+    // ⚠️ 재생 중 표시를 글꼴 대기 **앞에** 세운다 — 뒤에 두면 버튼이 "▶ 재생" 인 채로
+    //    한 틱 남아, 밖에서 보면 "재생이 벌써 끝났다"로 읽힌다(무비 스펙이 그걸로 판정한다).
     setPlaying(true);
+    await ensureTextFontsLoaded();
+    await document.fonts?.ready.catch(() => {});
     await playMovie(strokes, handle, speed, setProgress, abortRef.current.signal);
     setPlaying(false);
   };
@@ -55,6 +61,8 @@ export function MovieModal({ engine, onClose }: { engine: ArtEngine; onClose: ()
     const handle = makeHandle();
     if (!handle) return;
     setRecording(true);
+    await ensureTextFontsLoaded();
+    await document.fonts?.ready.catch(() => {});
     try {
       const blob = await recordMovie(strokes, handle, speed, setProgress);
       const url = URL.createObjectURL(blob);

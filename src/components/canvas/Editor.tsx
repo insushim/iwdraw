@@ -23,7 +23,6 @@ import { CollabOverlay } from "./CollabOverlay";
 import { SuggestBar } from "./SuggestBar";
 import { PendingStampBar } from "./PendingStampBar";
 import { StampPalette } from "./StampPalette";
-import { TextPalette } from "./TextPalette";
 import { PhotoImport } from "@/components/photo-import";
 import { ArtonLogo } from "@/components/arton-logo";
 import { Icon } from "./icons";
@@ -32,6 +31,14 @@ import { takeEntryHint, takeSaveHint } from "@/lib/class-hint";
 
 /* 성능 눈금은 ?perf=1 일 때만 내려받는다 — 평상시엔 번들 평가 비용도 0(교차검증 지적) */
 const PerfHud = dynamic(() => import("./PerfHud").then((m) => m.PerfHud), { ssr: false });
+
+/* 글씨 팔레트는 한글 웹폰트 6종의 CSS 를 끌고 온다 — 글씨를 안 쓰는 아이가 대부분인데
+ * /draw 의 CSS 참조가 그 때문에 7개였다. 지연 로딩으로 2개로 줄인다.
+ * ⚠️ 짝: 무비 재생은 글씨 도구를 안 열어도 글씨를 다시 그린다 →
+ *    TextInsert.ensureTextFontsLoaded() 를 재생 직전에 부른다(MovieModal). */
+const TextPalette = dynamic(() => import("./TextPalette").then((m) => m.TextPalette), {
+  ssr: false,
+});
 
 export interface EditorProps {
   lineartSrc?: string;

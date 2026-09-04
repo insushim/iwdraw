@@ -71,10 +71,27 @@ export function drawTextOnCtx(
   ctx.restore();
 }
 
+/*
+ * 글씨 글꼴(@/lib/fonts)의 CSS 를 확실히 페이지에 올린다.
+ *
+ * TextPalette 를 지연 로딩으로 돌리면서 next/font 의 @font-face 규칙도 그 청크로 따라갔다.
+ * 그래서 **글씨 도구를 한 번도 안 연 세션**에서는 @font-face 자체가 없고, 그 상태로
+ * document.fonts.load 를 불러 봐야 아무것도 못 찾아 폴백(고딕)으로 그려진다.
+ * 실제로 그런 경로가 있다: 새로고침 복구 직후 바로 [무비] 재생 — 그림엔 글씨가 있는데
+ * 글씨 도구는 안 열린 상태다(2026-09-02 교차검증 Grok).
+ * 동적 import 는 캐시되므로 두 번째 호출부터는 공짜다.
+ */
+let fontsChunk: Promise<unknown> | null = null;
+export function ensureTextFontsLoaded(): Promise<unknown> {
+  fontsChunk ??= import("@/lib/fonts").catch(() => null);
+  return fontsChunk;
+}
+
 /** 글꼴이 실제로 로드된 뒤에 그려야 폴백(고딕)으로 굳는 사고가 없다 */
 export async function ensureFontReady(item: TextItem, size: number): Promise<void> {
   if (typeof document === "undefined" || !document.fonts) return;
   try {
+    await ensureTextFontsLoaded();
     await document.fonts.load(`${Math.round(size)}px ${item.family}`, item.value.slice(0, 40));
     await document.fonts.ready;
   } catch {
