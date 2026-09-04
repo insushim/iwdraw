@@ -30,6 +30,17 @@ export function MovieModal({ engine, onClose }: { engine: ArtEngine; onClose: ()
   const makeHandle = (): ReplayHandle | null => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
+    /* ⚠️ 크기를 여기서도 맞춘다(멱등). 아래 useEffect 가 페인트 뒤에 도는데, 그 전에
+     * [재생]이 눌리면 300×150 기본 캔버스에 그린 뒤 effect 가 width/height 를 바꾸며
+     * **캔버스를 통째로 지운다** = 무비가 빈 화면. 모달을 지연 로딩으로 돌리면서 실제로
+     * 그 순서가 뒤집혔다(2026-09-04 라이브 실측: 재생 후 세 획 모두 0). */
+    if (canvas.width !== engine.width || canvas.height !== engine.height) {
+      canvas.width = engine.width;
+      canvas.height = engine.height;
+      const c = canvas.getContext("2d")!;
+      c.fillStyle = "#ffffff";
+      c.fillRect(0, 0, canvas.width, canvas.height);
+    }
     const ctx = canvas.getContext("2d")!;
     return {
       displayCanvas: canvas,

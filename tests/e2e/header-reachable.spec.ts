@@ -37,6 +37,8 @@ for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/draw?mode=sketch&backend=gl");
     await page.getByLabel("그림 캔버스").waitFor();
+    // 글꼴이 늦게 오면 헤더가 한 번 더 접힌다 — 최종 상태에서 판정한다
+    await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
     expect(await covered(page), `가려진 컨트롤`).toEqual([]);
   });

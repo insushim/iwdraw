@@ -52,6 +52,9 @@ for (const width of [1024, 1280, 1366, 1920]) {
     );
     await page.goto("/draw?mode=sketch");
     await page.getByLabel("그림 캔버스").waitFor();
+    // 본문 글꼴은 비차단으로 늦게 온다(레이아웃의 media=print 트릭) — 도착하면 같은 글자의
+    // 폭이 변해 헤더가 다시 접힌다. 사용자가 보는 최종 상태를 재려면 그 뒤에 재야 한다.
+    await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(400);
 
     const r = await page.evaluate(() => {

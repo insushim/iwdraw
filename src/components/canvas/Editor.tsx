@@ -152,6 +152,7 @@ function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
    * (2026-09-02 교차검증 3계열 공통 지적). clientWidth 를 지문에 넣어도 헤더는 폭 100%
    * 블록이라 창이 줄면 같이 줄어 대개 잡히지만, 폰트 도착은 그마저도 안 변한다. */
   const lastRef = useRef<string>("");
+  const recheckRef = useRef<number | null>(null);
   const measureRef = useRef<(force?: boolean) => void>(() => {});
   measureRef.current = (force = false) => {
     const el = ref.current;
@@ -166,17 +167,38 @@ function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
     // 1757px가 필요해 못 맞추는데, 장식(로고)·부가정보(닉네임 칩)·긴 보조 라벨
     // ("우리 반 갤러리"·"내 기기에 저장" — 둘 다 아이콘과 aria-label로 뜻이 남는다)만
     // 버리면 아이에게 실제로 필요한 버튼 글자("스케치"·"새 그림"·"무비"…)는 살아남는다.
-    el.dataset.labels = "on";
-    if (!overflows()) return;
+    /* ⚠️ 웹폰트가 아직 오는 중이면 "전부 켬"을 건너뛴다.
+     * 본문 글꼴(Pretendard)은 비차단으로 늦게 오는데, 폴백 글꼴로 재면 "들어간다"고 나왔다가
+     * 진짜 글꼴이 도착하면 넘친다 — 그 사이 저장 버튼이 헤더 밖으로 밀린다(2026-09-04
+     * 라이브 실측, 1366px 웨일북). 폰트가 확정된 뒤 loadingdone 이 다시 재게 하고,
+     * 그때 들어가면 "on" 으로 올라간다. 잠깐 라벨이 덜 보이는 편이 버튼이 사라지는 것보다 낫다. */
+    const fontsSettling = typeof document !== "undefined" && document.fonts?.status === "loading";
+    if (!fontsSettling) {
+      el.dataset.labels = "on";
+      if (!overflows()) return;
+    }
     el.dataset.labels = "mid";
     if (!overflows()) return;
     el.dataset.labels = "off";
+  };
+
+  /* 한 프레임 뒤 한 번 더 확인한다.
+   * 웹폰트는 여러 묶음으로 도착하고, 그 사이에 fonts.status 가 잠깐 "loaded" 로 보인다 —
+   * 그 순간에 재면 "전부 켬"이 들어간다고 나왔다가 다음 묶음이 와서 넘친다. 다음 프레임에
+   * 다시 재면 그 틈이 닫힌다. 상태가 그대로면 지문 가드에 걸려 실제 측정은 안 일어난다. */
+  const scheduleRecheck = () => {
+    if (recheckRef.current !== null) return;
+    recheckRef.current = requestAnimationFrame(() => {
+      recheckRef.current = null;
+      measureRef.current(true);
+    });
   };
 
   // 렌더마다(=헤더 항목이 바뀔 때마다) 페인트 전에 다시 잰다 — 깜빡임 없음.
   // 실제 측정은 지문이 달라졌을 때만 일어난다.
   useLayoutEffect(() => {
     measureRef.current();
+    scheduleRecheck();
   });
 
   // 창 크기 변화는 리렌더 없이도 온다 — 관찰자는 한 번만 만든다
@@ -188,15 +210,30 @@ function useAutoHeaderLabels(ref: React.RefObject<HTMLElement | null>): void {
     return () => ro.disconnect();
   }, [ref]);
 
-  // 웹폰트가 늦게 도착하면 같은 글자의 폭이 달라진다 — 지문은 그대로라 강제로 다시 잰다
+  /* 웹폰트가 늦게 도착하면 같은 글자의 폭이 달라진다 — 지문은 그대로라 강제로 다시 잰다.
+   *
+   * ⚠️ `fonts.ready` 하나로는 부족하다. 본문 글꼴(Pretendard)은 CDN CSS 를 비차단으로
+   * 받아(레이아웃의 media=print 트릭) **나중에** @font-face 가 등록된다 — 그 전에 이미
+   * ready 가 resolve 돼 버려 재측정이 한 번도 안 일어난다. 실제로 라이브에서 1366px 헤더가
+   * 넘쳐 [저장하기]가 화면 밖으로 밀렸다(2026-09-04 배포 후 실측: scrollWidth 1425 >
+   * clientWidth 1366, labels 는 여전히 "on"). `loadingdone` 은 폰트가 한 묶음 로드될
+   * 때마다 오므로 늦게 온 글꼴도 잡는다. */
   useEffect(() => {
     let alive = true;
-    void document.fonts?.ready.then(() => {
-      if (alive) measureRef.current(true);
-    });
+    const remeasure = () => {
+      if (!alive) return;
+      measureRef.current(true);
+      scheduleRecheck();
+    };
+    void document.fonts?.ready.then(remeasure);
+    document.fonts?.addEventListener("loadingdone", remeasure);
     return () => {
       alive = false;
+      document.fonts?.removeEventListener("loadingdone", remeasure);
+      if (recheckRef.current !== null) cancelAnimationFrame(recheckRef.current);
     };
+    // scheduleRecheck 는 ref 만 만지는 안정 함수다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
 
@@ -483,7 +520,10 @@ export function Editor({ lineartSrc, baseSrc, navKey, initialMode, room, onSave,
             title="학급 코드로 들어오면 그림을 우리 반 갤러리에 전시할 수 있어요"
             data-testid="class-join-chip"
           >
-            🏫 <span className="hdr-label">학급 입장</span>
+            {/* 라벨은 hdr-extra — 헤더가 빠듯해지면(mid) 가장 먼저 버린다. 학급 입장은
+                있으면 좋은 안내지, 그리기 버튼보다 먼저 자리를 차지할 것은 아니다.
+                아이콘과 title 로 뜻은 남는다. */}
+            🏫 <span className="hdr-extra">학급 입장</span>
           </Link>
         )}
         {room ? (
