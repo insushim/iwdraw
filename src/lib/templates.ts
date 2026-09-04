@@ -3,7 +3,10 @@ export interface TemplateItem {
   id: string;
   title: string;
   grade: "low" | "mid" | "high";
+  /** 색칠 캔버스로 넘길 원본(고해상 라인아트). 인쇄도 이걸 쓴다. */
   image: string;
+  /** 격자용 320px 썸네일(scripts/gen-template-thumbs.mjs). 없으면 원본으로 폴백. */
+  thumb?: string;
 }
 export interface TemplateTheme {
   theme: string;
@@ -11,6 +14,8 @@ export interface TemplateTheme {
   category: string;
   count: number;
   cover: string | null;
+  /** 테마 격자(첫 화면)가 쓰는 커버 썸네일 — 없으면 cover 원본으로 폴백 */
+  coverThumb?: string | null;
   items: TemplateItem[];
 }
 export interface TemplateCategory {

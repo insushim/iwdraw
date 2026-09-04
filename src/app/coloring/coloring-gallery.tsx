@@ -15,10 +15,22 @@ import {
 
 type Grade = "all" | "low" | "mid" | "high";
 
+/* 한 화면에 실제로 마운트하는 카드 수의 상한.
+ *
+ * 예전엔 필터에 걸린 도안을 **전부** 걸었다 = 기본 화면에 1344장. 이미지 요소만 1344개라
+ * DOM 이 1만 노드를 넘고 콜드 전송이 6MB 였다(2026-09-02 실측). lazy 로딩이 있어도
+ * 요소·레이아웃 비용은 그대로 든다.
+ *
+ * "더 보기"로 늘리는 방식은 채택하지 않았다 — 늘기만 하고 줄지 않아 결국 1344 로 돌아간다.
+ * 대신 **테마를 먼저 고르게** 한다: 첫 화면은 테마 커버 41장, 테마를 누르면 그 안(≤122)만.
+ * 이 상한은 그중에서도 가장 큰 테마(명화 122장)에 대한 마지막 안전망이다. */
+const MAX_MOUNTED = 120;
+
 export function ColoringGallery() {
   const [manifest, setManifest] = useState<TemplateManifest | null>(null);
   const [cat, setCat] = useState<string>("all");
   const [grade, setGrade] = useState<Grade>("all");
+  const [openTheme, setOpenTheme] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const photoRef = useRef<PhotoImportHandle>(null);
 
@@ -33,15 +45,25 @@ export function ColoringGallery() {
     );
   }, [manifest, cat]);
 
+  // 열어 둔 테마가 카테고리 필터 밖으로 밀려나면 테마 격자로 되돌린다
+  const theme = openTheme ? themes.find((t) => t.theme === openTheme) ?? null : null;
+  useEffect(() => {
+    if (openTheme && !themes.some((t) => t.theme === openTheme)) setOpenTheme(null);
+  }, [openTheme, themes]);
+
   const items = useMemo(() => {
+    if (!theme) return [];
     const out: (TemplateItem & { theme: string })[] = [];
-    for (const t of themes) {
-      for (const it of t.items) {
-        if (grade === "all" || it.grade === grade) out.push({ ...it, theme: t.theme });
-      }
+    for (const it of theme.items) {
+      if (grade === "all" || it.grade === grade) out.push({ ...it, theme: theme.theme });
     }
     return out;
-  }, [themes, grade]);
+  }, [theme, grade]);
+  const shown = items.slice(0, MAX_MOUNTED);
+  const totalCount = useMemo(
+    () => themes.reduce((n, t) => n + t.items.length, 0),
+    [themes],
+  );
 
   // 붙여넣기(Ctrl+V)로 이미지 가져오기 — 구글 등에서 이미지 복사 후 바로 붙여넣는 흐름
   // (시작 방식 모달·변환·이동은 PhotoImport 공용 컴포넌트가 담당)
@@ -126,14 +148,16 @@ export function ColoringGallery() {
           ))}
         </div>
 
-        {/* 난이도 필터 */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(["all", "low", "mid", "high"] as Grade[]).map((g) => (
-            <FilterChip key={g} active={grade === g} onClick={() => setGrade(g)} small>
-              {g === "all" ? "모든 학년" : GRADE_LABEL[g]}
-            </FilterChip>
-          ))}
-        </div>
+        {/* 난이도 필터 — 테마를 연 뒤에만 쓸 일이 있다(테마 격자엔 학년 개념이 없다) */}
+        {theme && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["all", "low", "mid", "high"] as Grade[]).map((g) => (
+              <FilterChip key={g} active={grade === g} onClick={() => setGrade(g)} small>
+                {g === "all" ? "모든 학년" : GRADE_LABEL[g]}
+              </FilterChip>
+            ))}
+          </div>
+        )}
 
         {error && <p className="mt-8 text-danger">{error}</p>}
 
@@ -141,41 +165,95 @@ export function ColoringGallery() {
           <div className="mt-16 text-center text-ink-faint">도안을 불러오는 중…</div>
         )}
 
-        {manifest && (
+        {manifest && !theme && (
           <>
-            <p className="mt-5 text-sm text-ink-faint">{items.length}장 + 내 사진</p>
+            <p className="mt-5 text-sm text-ink-faint">
+              {themes.length}가지 주제 · 도안 {totalCount}장 — 주제를 고르면 그 안의 도안이 보여요
+            </p>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {/* 도안 카드와 같은 자리에서 "내 사진"도 고를 수 있게 — 헤더 버튼만 있으면
                   아이들이 못 찾는다(2026-08-25 사용자 요청). 누르면 헤더의 PhotoImport를 연다. */}
+              <PhotoCard onClick={() => photoRef.current?.openPicker()} />
+              {themes.map((t) => (
+                <button
+                  key={t.theme}
+                  type="button"
+                  onClick={() => {
+                    setOpenTheme(t.theme);
+                    setGrade("all");
+                    window.scrollTo({ top: 0 });
+                  }}
+                  data-testid="theme-card"
+                  className="pressable group flex flex-col overflow-hidden rounded-card bg-paper text-left shadow-soft"
+                >
+                  <div className="aspect-square overflow-hidden bg-white">
+                    {t.coverThumb || t.cover ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={t.coverThumb ?? t.cover ?? ""}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        width={320}
+                        height={320}
+                        className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="grid h-full place-items-center text-4xl">🖍️</div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-1 px-3 py-2">
+                    <span className="truncate font-display text-ink">{t.title}</span>
+                    <span className="shrink-0 text-sm text-ink-faint">{t.items.length}장</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {manifest && theme && (
+          <>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => photoRef.current?.openPicker()}
-                className="pressable group flex flex-col overflow-hidden rounded-card bg-sky-soft text-left shadow-soft ring-2 ring-sky/40"
+                onClick={() => setOpenTheme(null)}
+                data-testid="theme-back"
+                className="pressable rounded-full bg-paper px-4 py-2 font-semibold text-ink-soft shadow-soft hover:text-ink"
               >
-                <div className="grid aspect-square place-items-center">
-                  <span className="text-5xl transition-transform group-hover:scale-110">📷</span>
-                </div>
-                <div className="px-3 py-2">
-                  <span className="block truncate text-sm font-semibold text-sky-deep">
-                    내 사진·그림으로
-                  </span>
-                </div>
+                ← 주제 다시 고르기
               </button>
-              {items.map((it) => (
+              <h2 className="font-display text-2xl text-ink">{theme.title}</h2>
+              <span className="text-sm text-ink-faint">
+                {items.length}장{items.length > shown.length ? ` 중 ${shown.length}장` : ""}
+              </span>
+            </div>
+            {items.length > shown.length && (
+              <p className="mt-2 text-sm text-ink-faint">
+                한 번에 {MAX_MOUNTED}장까지 보여줘요 — 학년으로 좁히면 나머지도 볼 수 있어요.
+              </p>
+            )}
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              <PhotoCard onClick={() => photoRef.current?.openPicker()} />
+              {shown.map((it) => (
                 <div
                   key={`${it.theme}/${it.id}`}
                   className="group relative overflow-hidden rounded-card bg-paper shadow-soft"
                 >
                   <Link
+                    // 캔버스로는 **원본**을 넘긴다 — 썸네일은 격자용이다
                     href={`/draw?template=${encodeURIComponent(it.image)}&mode=coloring`}
                     className="pressable block"
                   >
                     <div className="aspect-square overflow-hidden bg-white">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={it.image}
+                        src={it.thumb ?? it.image}
                         alt={`${it.title} 색칠 도안`}
                         loading="lazy"
+                        decoding="async"
+                        width={320}
+                        height={320}
                         className="h-full w-full object-contain transition-transform group-hover:scale-105"
                       />
                     </div>
@@ -186,7 +264,7 @@ export function ColoringGallery() {
                       </Chip>
                     </div>
                   </Link>
-                  {/* 도안 바로 인쇄(빈 라인아트를 A4로) — 색칠 대신 종이에 인쇄해 크레파스로 칠할 때 */}
+                  {/* 도안 바로 인쇄(빈 라인아트를 A4로) — 인쇄도 원본을 쓴다 */}
                   <button
                     type="button"
                     onClick={() => printImageA4(it.image, it.title)}
@@ -227,6 +305,23 @@ function FilterChip({
       } ${active ? "bg-ink text-white" : "bg-paper text-ink-soft shadow-soft hover:text-ink"}`}
     >
       {children}
+    </button>
+  );
+}
+
+function PhotoCard({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="pressable group flex flex-col overflow-hidden rounded-card bg-sky-soft text-left shadow-soft ring-2 ring-sky/40"
+    >
+      <div className="grid aspect-square place-items-center">
+        <span className="text-5xl transition-transform group-hover:scale-110">📷</span>
+      </div>
+      <div className="px-3 py-2">
+        <span className="block truncate text-sm font-semibold text-sky-deep">내 사진·그림으로</span>
+      </div>
     </button>
   );
 }

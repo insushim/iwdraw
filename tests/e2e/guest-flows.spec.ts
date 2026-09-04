@@ -34,19 +34,23 @@ test("바로 그리기: 캔버스와 도구가 뜨고 실제로 획을 그을 �
   await expect(page.getByRole("button", { name: "되돌리기" })).toBeEnabled();
 });
 
-test("색칠 갤러리: 도안 목록이 로드되고 카테고리 필터가 동작한다", async ({ page }) => {
+/* 색칠 갤러리는 2단계다(2026-09-04): 첫 화면 = 주제 격자, 주제를 눌러야 그 안의 도안.
+ * 예전엔 1344장을 한꺼번에 걸어 DOM 1만 노드·콜드 6MB 였다. */
+test("색칠 갤러리: 주제 격자가 뜨고 카테고리 필터가 동작한다", async ({ page }) => {
   await page.goto("/coloring");
   await expect(page.getByRole("heading", { name: /색칠할 도안을 골라요/ })).toBeVisible();
-  // 도안 이미지가 하나 이상 로드
-  const firstImg = page.locator('img[alt$="색칠 도안"]').first();
-  await expect(firstImg).toBeVisible({ timeout: 15000 });
-  // 카테고리 필터
+  const themes = page.getByTestId("theme-card");
+  await expect(themes.first()).toBeVisible({ timeout: 15000 });
+  const all = await themes.count();
+  // 카테고리 필터를 걸면 주제 수가 줄어든다
   await page.getByRole("button", { name: /동물/ }).first().click();
-  await expect(firstImg).toBeVisible();
+  await expect(themes.first()).toBeVisible();
+  expect(await themes.count()).toBeLessThan(all);
 });
 
-test("색칠: 도안을 고르면 색칠 모드 캔버스가 열린다", async ({ page }) => {
+test("색칠: 주제 → 도안을 고르면 색칠 모드 캔버스가 열린다", async ({ page }) => {
   await page.goto("/coloring");
+  await page.getByTestId("theme-card").first().click({ timeout: 15000 });
   const firstCard = page.locator('a[href*="mode=coloring"]').first();
   await expect(firstCard).toBeVisible({ timeout: 15000 });
   await firstCard.click();
@@ -168,4 +172,27 @@ test("이어그리기: 두 번 연속 진입해도 매번 새 캔버스로 열�
   expect(v1).toBeTruthy();
   expect(v2).toBeTruthy();
   expect(v1).not.toBe(v2);
+});
+
+/*
+ * 색칠 갤러리가 한 화면에 거는 카드 수 상한(2026-09-04).
+ * 예전엔 필터에 걸린 도안을 전부 걸어 기본 화면이 1344장·DOM 1만 노드였다.
+ * "더 보기" 증분은 늘기만 하고 줄지 않아 결국 제자리로 돌아온다 — 주제를 먼저 고르게 했다.
+ */
+test("색칠 갤러리: 어떤 화면에서도 카드가 상한을 넘지 않는다", async ({ page }) => {
+  await page.goto("/coloring");
+  await expect(page.getByTestId("theme-card").first()).toBeVisible({ timeout: 15000 });
+
+  const count = async () => page.locator("img").count();
+  expect(await count(), "첫 화면(주제 격자)").toBeLessThanOrEqual(121);
+
+  // 가장 큰 주제(명화 122장)를 열어도 상한 안
+  await page.getByRole("button", { name: /명화|Masters/ }).first().click().catch(() => {});
+  const biggest = page.getByTestId("theme-card").first();
+  await biggest.click();
+  await expect(page.locator('a[href*="mode=coloring"]').first()).toBeVisible({ timeout: 15000 });
+  expect(await count(), "주제를 연 화면").toBeLessThanOrEqual(121);
+
+  const dom = await page.evaluate(() => document.querySelectorAll("*").length);
+  expect(dom, "DOM 요소 수").toBeLessThan(2000);
 });
