@@ -13,7 +13,7 @@ export const metadata: Metadata = {
  */
 const OPERATOR = {
   name: "아트온 ArtON (교사 개인이 운영하는 무료 서비스)",
-  contactEmail: "215253422+iw-lab@users.noreply.github.com",
+  contactEmail: "simssijjang@gmail.com",
   effectiveDate: "2026년 7월 10일",
 };
 
